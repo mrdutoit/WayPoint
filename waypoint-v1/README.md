@@ -1,4 +1,4 @@
-# Waypoint — Stage 3 Scaffold
+# WayPoint — Stage 3 Scaffold
 
 OKR tracking platform. This is the **scaffold** — the cross-cutting
 foundations every module depends on, plus the mandatory platform tables

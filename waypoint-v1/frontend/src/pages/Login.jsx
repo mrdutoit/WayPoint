@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi, setAuthToken } from '../services/api.js';
 import { useRole } from '../context/RoleContext.jsx';
+import { Logo } from '../components/Logo.jsx';
 import { s, colors } from '../styles/tokens.js';
 
 export default function Login() {
@@ -34,7 +35,9 @@ export default function Login() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', background: colors.ink50 }}>
       <form onSubmit={handleSubmit} style={{ ...s.card, width: 360 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, color: colors.ink900 }}>Waypoint</h1>
+        <div style={{ marginBottom: 20 }}>
+          <Logo size={32} withWordmark />
+        </div>
         <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 20 }}>Sign in to your organisation</p>
 
         <label style={s.label} htmlFor="email">Email</label>

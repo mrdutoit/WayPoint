@@ -5,6 +5,7 @@ import { useWindowSize } from './hooks/useWindowSize.js';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import FeatureFlags from './pages/FeatureFlags.jsx';
+import { Logo } from './components/Logo.jsx';
 import { s, colors } from './styles/tokens.js';
 
 function Shell({ children }) {
@@ -16,7 +17,7 @@ function Shell({ children }) {
     <div>
       <nav style={s.navBar}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <span style={{ fontWeight: 700, color: colors.brand600 }}>Waypoint</span>
+          <Logo size={22} />
           {!isMobile && (
             <>
               <Link to="/" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>Dashboard</Link>
