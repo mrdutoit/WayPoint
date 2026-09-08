@@ -1,9 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { flagsApi } from '../services/api.js';
 
-// Defaults mirror api/seed.js — used when the API call returns null
-// (preview mode) so the UI still renders something sensible without a
-// live backend. See FR-002 for what each flag controls.
 const DEFAULT_FLAGS = {
   'billing.mode': 'manual',
   'auth.sso.enabled': false,
@@ -19,24 +16,19 @@ export function FlagProvider({ children }) {
 
   useEffect(() => {
     let cancelled = false;
-    flagsApi.list().then((result) => {
-      if (cancelled) return;
-      setFlags(result?.flags ?? DEFAULT_FLAGS);
-      setLoading(false);
-    });
+    flagsApi.list()
+      .then((result) => { if (!cancelled) setFlags(result?.flags ?? DEFAULT_FLAGS); })
+      .catch(() => { if (!cancelled) setFlags(DEFAULT_FLAGS); }) // not signed in yet, or flags not reachable
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
-  // Boolean coercion handled server-side (flagService.js) already returns
-  // real booleans/strings over JSON, so flag() here is mostly a safe
-  // accessor with a documented fallback — kept for parity with the
-  // app-builder convention and to absorb any legacy '0'/'1' string values.
   function flag(key, fallback = false) {
     const value = flags[key];
     if (value === undefined) return fallback;
     if (value === '0' || value === 'false') return false;
     if (value === '1' || value === 'true') return true;
-    return value; // enum value — passes through as-is
+    return value;
   }
 
   return (

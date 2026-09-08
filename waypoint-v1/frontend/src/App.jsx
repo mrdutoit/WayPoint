@@ -10,10 +10,6 @@ import { s, colors } from './styles/tokens.js';
 function Shell({ children }) {
   const { user, setUser, role, isPlatformAdmin } = useRole();
   const { isMobile } = useWindowSize();
-
-  // Preview-mode role switcher — stands in for login when no auth backend
-  // is configured (see services/api.js PREVIEW_MODE). Never rendered once
-  // a real token is present.
   const previewMode = !user;
 
   return (
@@ -52,9 +48,6 @@ function Shell({ children }) {
 
 function RequireAuth({ children }) {
   const { user } = useRole();
-  // In preview mode there is no real session — the role switcher above
-  // sets a stand-in user, which is enough to explore the shell. In
-  // production, an absent user always redirects to /login.
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }

@@ -30,10 +30,11 @@
 <body>
   <div class="card">
     <h1>Waypoint — Bootstrap Admin</h1>
-    <p class="sub">Runs the same migration + seed logic as the automatic build step, on demand — no redeploy needed.</p>
+    <p class="sub">Seeds the platform feature flags and the first Platform Administrator. Apply
+      <code>db/schema.sql</code> via your Postgres console first — this doesn't create tables, only rows.</p>
 
-    <label for="apiUrl">API base URL</label>
-    <input id="apiUrl" placeholder="https://your-api-project.vercel.app" />
+    <label for="siteUrl">Site URL</label>
+    <input id="siteUrl" placeholder="https://your-project.vercel.app" />
 
     <label for="secret">Bootstrap secret</label>
     <input id="secret" type="password" placeholder="BOOTSTRAP_SECRET value" />
@@ -43,41 +44,37 @@
     <div id="result" class="result"></div>
 
     <p class="hint">
-      Reads the API URL from where you left it last time. The secret is never saved —
-      set <code>BOOTSTRAP_SECRET</code> in the api project's Vercel environment variables
-      first, or this will fail with 503. This file makes no network request anywhere except
-      the URL you enter above.
+      Remembers the site URL between uses. The secret is never saved — set
+      <code>BOOTSTRAP_SECRET</code> in Vercel's environment variables first, or this fails with 503.
     </p>
   </div>
 
 <script>
-  const apiUrlInput = document.getElementById('apiUrl');
+  const siteUrlInput = document.getElementById('siteUrl');
   const secretInput = document.getElementById('secret');
   const runBtn = document.getElementById('runBtn');
   const resultEl = document.getElementById('result');
 
-  // Convenience only — the API URL isn't sensitive. The secret is never
-  // persisted here, deliberately.
-  apiUrlInput.value = localStorage.getItem('waypoint_api_url') || '';
+  siteUrlInput.value = localStorage.getItem('waypoint_site_url') || '';
 
   runBtn.addEventListener('click', async () => {
-    const apiUrl = apiUrlInput.value.trim().replace(/\/$/, '');
+    const siteUrl = siteUrlInput.value.trim().replace(/\/$/, '');
     const secret = secretInput.value.trim();
     resultEl.className = 'result';
     resultEl.textContent = '';
 
-    if (!apiUrl || !secret) {
+    if (!siteUrl || !secret) {
       resultEl.className = 'result err';
-      resultEl.textContent = 'Enter both the API base URL and the bootstrap secret.';
+      resultEl.textContent = 'Enter both the site URL and the bootstrap secret.';
       return;
     }
 
-    localStorage.setItem('waypoint_api_url', apiUrl);
+    localStorage.setItem('waypoint_site_url', siteUrl);
     runBtn.disabled = true;
     runBtn.textContent = 'Running…';
 
     try {
-      const res = await fetch(`${apiUrl}/api/admin/bootstrap`, {
+      const res = await fetch(`${siteUrl}/api/admin/bootstrap`, {
         headers: { 'x-bootstrap-secret': secret },
       });
       const body = await res.json();
@@ -85,7 +82,7 @@
       resultEl.textContent = JSON.stringify(body, null, 2);
     } catch (err) {
       resultEl.className = 'result err';
-      resultEl.textContent = `Network error: ${err.message}\n\nCheck the API URL is correct and the deployment is live.`;
+      resultEl.textContent = `Network error: ${err.message}\n\nCheck the site URL is correct and the deployment is live.`;
     } finally {
       runBtn.disabled = false;
       runBtn.textContent = 'Run Bootstrap';

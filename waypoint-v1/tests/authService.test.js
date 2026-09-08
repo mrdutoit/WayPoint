@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   hashPassword, verifyPassword, issueToken, verifyToken,
   isLockedOut, computeLockout, LOCKOUT_THRESHOLD,
-} from '../api/src/services/authService.js';
+} from '../frontend/api-lib/services/authService.js';
 
 describe('password hashing', () => {
   it('verifies a password against its own hash', async () => {

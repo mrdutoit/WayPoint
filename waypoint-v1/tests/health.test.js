@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../api/src/db.js', () => ({
+vi.mock('../frontend/api-lib/services/db.js', () => ({
   pool: { query: vi.fn() },
 }));
 
-const { pool } = await import('../api/src/db.js');
-const { healthHandler } = await import('../api/src/functions/health.js');
+const { pool } = await import('../frontend/api-lib/services/db.js');
+const healthHandler = (await import('../frontend/api/health.js')).default;
 
 function mockRes() {
   const res = {};
@@ -14,7 +14,7 @@ function mockRes() {
   return res;
 }
 
-describe('healthHandler', () => {
+describe('health endpoint', () => {
   beforeEach(() => {
     pool.query.mockReset();
   });
@@ -22,7 +22,7 @@ describe('healthHandler', () => {
   it('returns 200 when the database is reachable', async () => {
     pool.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] });
     const res = mockRes();
-    await healthHandler({ log: { error: vi.fn() } }, res);
+    await healthHandler({}, res);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ status: 'ok', database: 'reachable' });
   });
@@ -30,7 +30,7 @@ describe('healthHandler', () => {
   it('returns 503 when the database is unreachable', async () => {
     pool.query.mockRejectedValueOnce(new Error('connection refused'));
     const res = mockRes();
-    await healthHandler({ log: { error: vi.fn() } }, res);
+    await healthHandler({}, res);
     expect(res.status).toHaveBeenCalledWith(503);
     expect(res.json).toHaveBeenCalledWith({ status: 'error', database: 'unreachable' });
   });

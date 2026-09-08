@@ -1,1 +1,12 @@
-{ "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/api/auth/:slug*", "destination": "/api/auth-router?slug=:slug*" },
+    { "source": "/api/flags/:slug*", "destination": "/api/flags-router?slug=:slug*" },
+    { "source": "/api/admin/:slug*", "destination": "/api/admin-router?slug=:slug*" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}

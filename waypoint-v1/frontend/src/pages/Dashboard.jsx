@@ -8,7 +8,7 @@ export default function Dashboard() {
   const [health, setHealth] = useState(null);
 
   useEffect(() => {
-    healthApi.check().then(setHealth);
+    healthApi.check().then(setHealth).catch(() => setHealth(null));
   }, []);
 
   return (
@@ -28,7 +28,7 @@ export default function Dashboard() {
             {health.status} — database {health.database}
           </span>
         ) : (
-          <span style={s.chip(colors.ink500, colors.ink100)}>Checking… (or preview mode)</span>
+          <span style={s.chip(colors.ink500, colors.ink100)}>Checking…</span>
         )}
       </div>
     </div>

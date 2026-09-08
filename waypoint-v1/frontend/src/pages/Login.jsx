@@ -18,19 +18,12 @@ export default function Login() {
     setSubmitting(true);
     try {
       const result = await authApi.login(email, password);
-      if (result?.token) {
-        setAuthToken(result.token);
-        // Decode just the payload for role/tenant — a real implementation
-        // verifies this server-side on every request regardless; this is
-        // only used to drive the nav, never trusted for access control.
-        const payload = JSON.parse(atob(result.token.split('.')[1]));
-        setUser({ id: payload.sub, tenantId: payload.tenantId, role: payload.role });
-        navigate('/');
-      } else {
-        // Preview mode (no backend configured) — let the role switcher in
-        // App.jsx stand in for login instead.
-        setError('Sign-in is not configured in this preview. Use the role switcher above.');
-      }
+      setAuthToken(result.token);
+      // Decoded client-side only to drive the nav — every request is
+      // still verified server-side regardless of what this shows.
+      const payload = JSON.parse(atob(result.token.split('.')[1]));
+      setUser({ id: payload.sub, tenantId: payload.tenantId, role: payload.role, email });
+      navigate('/');
     } catch (err) {
       setError(err.message ?? 'Invalid email or password');
     } finally {
@@ -65,7 +58,7 @@ export default function Login() {
         )}
 
         <button type="submit" disabled={submitting} style={{ ...s.btnPrimary, width: '100%' }}>
-          {submitting ? 'Signing in…' : 'Sign in'}
+          {submitting ? 'Signing in\u2026' : 'Sign in'}
         </button>
       </form>
     </div>

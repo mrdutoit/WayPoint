@@ -32,10 +32,10 @@
 <body>
   <div class="card">
     <h1>Waypoint — Login Test</h1>
-    <p class="sub">Confirms sign-in works end to end against the deployed API, before wiring up anything else.</p>
+    <p class="sub">Confirms sign-in works end to end against the deployed site, before wiring up anything else.</p>
 
-    <label for="apiUrl">API base URL</label>
-    <input id="apiUrl" placeholder="https://your-api-project.vercel.app" />
+    <label for="siteUrl">Site URL</label>
+    <input id="siteUrl" placeholder="https://your-project.vercel.app" />
 
     <label for="email">Email</label>
     <input id="email" type="email" />
@@ -49,19 +49,18 @@
 
     <p class="hint">
       Decodes the returned token locally to show its contents — this page never sends the
-      token anywhere else. This is a verification tool, not the real sign-in flow (that's
-      the frontend app).
+      token anywhere else.
     </p>
   </div>
 
 <script>
-  const apiUrlInput = document.getElementById('apiUrl');
+  const siteUrlInput = document.getElementById('siteUrl');
   const emailInput = document.getElementById('email');
   const passwordInput = document.getElementById('password');
   const runBtn = document.getElementById('runBtn');
   const resultEl = document.getElementById('result');
 
-  apiUrlInput.value = localStorage.getItem('waypoint_api_url') || '';
+  siteUrlInput.value = localStorage.getItem('waypoint_site_url') || '';
 
   function decodeJwtPayload(token) {
     const payload = token.split('.')[1];
@@ -70,24 +69,24 @@
   }
 
   runBtn.addEventListener('click', async () => {
-    const apiUrl = apiUrlInput.value.trim().replace(/\/$/, '');
+    const siteUrl = siteUrlInput.value.trim().replace(/\/$/, '');
     const email = emailInput.value.trim();
     const password = passwordInput.value;
     resultEl.className = 'result';
     resultEl.textContent = '';
 
-    if (!apiUrl || !email || !password) {
+    if (!siteUrl || !email || !password) {
       resultEl.className = 'result err';
-      resultEl.textContent = 'Fill in the API URL, email, and password.';
+      resultEl.textContent = 'Fill in the site URL, email, and password.';
       return;
     }
 
-    localStorage.setItem('waypoint_api_url', apiUrl);
+    localStorage.setItem('waypoint_site_url', siteUrl);
     runBtn.disabled = true;
     runBtn.textContent = 'Signing in…';
 
     try {
-      const res = await fetch(`${apiUrl}/api/auth/login`, {
+      const res = await fetch(`${siteUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -105,12 +104,12 @@
       resultEl.innerHTML =
         `<div class="field"><b>Signed in.</b></div>` +
         `<div class="field">Role: <b>${claims.role}</b></div>` +
-        `<div class="field">Tenant: <b>${claims.tenantId ?? '(none \u2014 PlatformAdmin)'}</b></div>` +
+        `<div class="field">Tenant: <b>${claims.tenantId ?? '(none — PlatformAdmin)'}</b></div>` +
         `<div class="field">User id: <b>${claims.sub}</b></div>` +
         `<div class="field">Expires: <b>${new Date(claims.exp * 1000).toLocaleString()}</b></div>`;
     } catch (err) {
       resultEl.className = 'result err';
-      resultEl.textContent = `Network error: ${err.message}\n\nCheck the API URL is correct and the deployment is live.`;
+      resultEl.textContent = `Network error: ${err.message}\n\nCheck the site URL is correct and the deployment is live.`;
     } finally {
       runBtn.disabled = false;
       runBtn.textContent = 'Test Login';

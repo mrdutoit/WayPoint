@@ -1,8 +1,5 @@
 import { createContext, useContext, useState } from 'react';
 
-// PlatformAdmin is always first and is internal staff only — never
-// assigned to a customer organisation (FR-003). See Requirements
-// document, section 3.1 for the full role descriptions.
 export const ROLES = ['PlatformAdmin', 'TenantAdmin', 'Manager', 'Employee'];
 
 const RoleContext = createContext(null);
@@ -18,9 +15,6 @@ export function RoleProvider({ children, initialUser = null }) {
     isTenantAdmin: user?.role === 'TenantAdmin',
     isManager: user?.role === 'Manager',
     isEmployee: user?.role === 'Employee',
-    // TenantAdmin and above (FR-013 terminology customisation, cascade
-    // configuration) — matches "Administrator and above" throughout the
-    // Requirements document.
     isAdminOrAbove: user?.role === 'PlatformAdmin' || user?.role === 'TenantAdmin',
   };
 

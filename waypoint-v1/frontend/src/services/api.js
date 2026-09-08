@@ -1,9 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
-// Preview mode: no auth backend configured (e.g. a Vercel preview build
-// with no environment variables set). Every call returns null so pages
-// fall back to inline mock data rather than the app crashing on a missing
-// credential — see the preview-safe pattern in code-nodejs.
-const PREVIEW_MODE = !import.meta.env.VITE_AUTH_CONFIGURED;
+// Same-origin now that frontend and API are one Vercel project — no
+// VITE_API_BASE_URL, no cross-origin request, no CORS needed for any
+// call the deployed frontend itself makes. Relative paths only.
 
 let _token = null;
 
@@ -23,9 +20,7 @@ export class ApiError extends Error {
 }
 
 async function request(path, options = {}) {
-  if (PREVIEW_MODE) return null; // pages fall back to mock data
-
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`/api${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',

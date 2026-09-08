@@ -4,28 +4,17 @@ import { useRole } from '../context/RoleContext.jsx';
 import { flagsApi } from '../services/api.js';
 import { s, colors } from '../styles/tokens.js';
 
-// Mirrors api/seed.js DEFAULT_FLAGS — kept in sync manually for now; once
-// Stage 4 builds tenant provisioning, this list can be read from the API
-// instead of duplicated here.
 const FLAG_DEFINITIONS = [
   { key: 'billing.mode', label: 'Billing mode', valueType: 'enum', options: ['manual', 'gateway'], note: 'FR-021' },
   { key: 'auth.sso.enabled', label: 'Single sign-on', valueType: 'boolean', note: 'FR-029' },
   { key: 'security.fieldEncryption.enabled', label: 'Field-level encryption', valueType: 'boolean', note: 'FR-028' },
-  { key: 'ai.settingsMenu.enabled', label: 'AI Settings menu', valueType: 'boolean', note: 'FR-022 — scaffolded, not yet active' },
+  { key: 'ai.settingsMenu.enabled', label: 'AI Settings menu', valueType: 'boolean', note: 'FR-022 \u2014 scaffolded, not yet active' },
 ];
-
-const MOCK_FLAGS = {
-  'billing.mode': 'manual',
-  'auth.sso.enabled': false,
-  'security.fieldEncryption.enabled': false,
-  'ai.settingsMenu.enabled': false,
-};
 
 export default function FeatureFlags() {
   const { isPlatformAdmin } = useRole();
-  const { flags: liveFlags, flag } = useFlags();
+  const { flags, flag } = useFlags();
   const [saving, setSaving] = useState(null);
-  const flags = Object.keys(liveFlags).length ? liveFlags : MOCK_FLAGS;
 
   if (!isPlatformAdmin) {
     return (
@@ -39,7 +28,7 @@ export default function FeatureFlags() {
     setSaving(def.key);
     const next = !flag(def.key);
     try {
-      await flagsApi.update(def.key, next, def.valueType, null); // platform-wide, no tenantId
+      await flagsApi.update(def.key, next, def.valueType, null);
     } finally {
       setSaving(null);
     }
