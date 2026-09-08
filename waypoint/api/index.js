@@ -7,10 +7,10 @@ import { requireAuth, requireRole } from './src/middleware/auth.js';
 import { healthHandler } from './src/functions/health.js';
 import { loginHandler, requestPasswordResetHandler, confirmPasswordResetHandler } from './src/functions/auth.js';
 import { listFlagsHandler, updateFlagHandler } from './src/functions/flags.js';
+import { bootstrapHandler } from './src/functions/admin.js';
 
 const app = express();
 
-app.use(cors({ origin: config.frontendOrigin }));
 app.use(express.json());
 
 // Correlation id per request (FR-006) — attached before anything else logs.
@@ -21,9 +21,27 @@ app.use((req, res, next) => {
   next();
 });
 
+// Registered BEFORE the blanket CORS policy below, so these two routes are
+// never touched by it — Express stops at the first handler that sends a
+// response. Both are meant to be called from the standalone local tools in
+// tools/ (bootstrap-admin.html, login-test.html), opened via file:// with
+// no origin a browser recognises, so a frontend-origin CORS check would
+// silently block them.
+//
+// This is a safe exception, not a general loosening: bootstrap is already
+// gated by BOOTSTRAP_SECRET regardless of caller; login is already
+// protected by its own rate limiting and lockout (FR-005) and issues a
+// bearer token rather than relying on cookies, so it carries none of the
+// session-riding risk CORS exists to prevent. Every other route below
+// keeps the frontend-only restriction.
+const openCors = cors();
+app.get('/api/admin/bootstrap', openCors, bootstrapHandler);
+app.post('/api/auth/login', openCors, loginHandler);
+
+app.use(cors({ origin: config.frontendOrigin }));
+
 // Public
 app.get('/api/health', healthHandler);
-app.post('/api/auth/login', loginHandler);
 app.post('/api/auth/reset-password/request', requestPasswordResetHandler);
 app.post('/api/auth/reset-password/confirm', confirmPasswordResetHandler);
 

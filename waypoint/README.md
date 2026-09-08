@@ -53,7 +53,66 @@ npm test
 | `PORT` | No | Defaults to 3001 |
 | `LOG_LEVEL` | No | Defaults to `info` |
 | `AWS_KMS_KEY_ID` | No | Only needed once `security.fieldEncryption.enabled` is turned on for a tenant |
-| `PLATFORM_ADMIN_EMAIL` / `PLATFORM_ADMIN_PASSWORD` | Seed only | Never commit these — pass as one-off environment variables when running `npm run seed` |
+| `PLATFORM_ADMIN_EMAIL` / `PLATFORM_ADMIN_PASSWORD` | Vercel only | Read automatically at build time — see "Creating the Platform Administrator" below. Never commit these. |
+| `BOOTSTRAP_SECRET` | No | Only needed for the optional manual re-trigger endpoint — see below |
+
+## Creating the Platform Administrator
+
+This runs automatically on every deployment — there's no separate script
+to remember to run.
+
+1. In the **api** Vercel project → Settings → Environment Variables, add
+   `PLATFORM_ADMIN_EMAIL` and `PLATFORM_ADMIN_PASSWORD` (12+ characters),
+   alongside `DATABASE_URL`, `JWT_SECRET`, and `FRONTEND_ORIGIN`.
+2. Deploy (or redeploy). `api/vercel.json` sets `buildCommand: npm run
+   build`, which runs `api/scripts/deploy-bootstrap.js` as part of every
+   deployment: it applies any pending migration, then seeds the platform
+   feature flags and your Platform Administrator account from those two
+   variables. Check the deployment's Build Logs for lines prefixed
+   `[bootstrap]` to confirm it ran.
+3. Sign in at your frontend URL with that email and password.
+
+Safe on every subsequent deploy too — both steps are idempotent
+(`api/src/services/bootstrapService.js`), so a redeploy after the admin
+already exists just confirms nothing needs to change and moves on. If
+`PLATFORM_ADMIN_EMAIL`/`PASSWORD` aren't set yet (e.g. your very first
+deploy, before you've configured them), the build logs a line saying so
+and continues — it does not fail the deployment, so you're never locked
+out of shipping other changes while you sort out credentials.
+
+**Alternative, without a redeploy:** `GET /api/admin/bootstrap` runs the
+exact same logic on demand, protected by a `BOOTSTRAP_SECRET` header —
+useful if you want to re-trigger it (e.g. after changing
+`PLATFORM_ADMIN_PASSWORD`) without waiting for the next deploy. The
+easiest way to call it is `tools/bootstrap-admin.html` — see below.
+
+## Local tools (no build, no server, just open in a browser)
+
+Two standalone pages in `tools/` — double-click to open, no npm install,
+no dev server. Each is a single self-contained HTML file with its own
+inline styling and script; neither depends on anything else in this repo
+at runtime.
+
+- **`bootstrap-admin.html`** — a form for the API URL and
+  `BOOTSTRAP_SECRET`, with a button that calls `/api/admin/bootstrap` and
+  shows the result. The friendlier alternative to the DevTools console
+  snippet above.
+- **`login-test.html`** — a form for the API URL, email, and password,
+  with a button that calls `/api/auth/login` and decodes the returned
+  token locally to show the role, tenant, and expiry it carries. Useful
+  for confirming sign-in works end to end before the real frontend is
+  wired up to anything, or after adding a new user.
+
+Both remember the API URL you last used (via `localStorage`, entirely
+local to your browser) but never save the secret or password. Both are
+plain files — safe to commit, safe to keep around, nothing sensitive
+lives inside them.
+
+Because these are opened as local files rather than served from the
+configured frontend origin, `/api/admin/bootstrap` and `/api/auth/login`
+carry an open CORS policy rather than the frontend-restricted one every
+other route uses — see the comment in `api/index.js` for why that's a
+deliberate, narrow exception rather than a general loosening.
 
 ## Deploying to Vercel
 
@@ -66,9 +125,9 @@ own **Root Directory** setting (Project Settings → General → Root Directory)
    unset for a preview deployment — the app falls back to mock data, per
    the preview-safe pattern in `frontend/src/services/api.js`).
 2. **API project** — Root Directory: `api`. Add the environment variables
-   from the table above. Run `npm run migrate` against the production
-   database before the first deploy (Vercel does not run this
-   automatically).
+   from the table above. Migrations and admin seeding run automatically on
+   every deployment (see "Creating the Platform Administrator" below) —
+   no manual step required, even for the first deploy.
 
 Both projects deploy from the same `main` branch. A pull request creates
 a preview deployment of each independently.
