@@ -43,7 +43,7 @@ export function Logo({ size = 30, withWordmark = false, dark = false }) {
       }}>
         <span style={{ color: dark ? '#fff' : colors.ink900 }}>Way</span>
         <span style={{
-          background: 'linear-gradient(90deg, #6FE8FF 0%, #2E8CF0 100%)',
+          background: 'linear-gradient(90deg, #6FE8FF 0%, #1A5FD0 100%)',
           WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
         }}>Point</span>
       </div>

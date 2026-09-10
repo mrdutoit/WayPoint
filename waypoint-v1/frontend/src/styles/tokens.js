@@ -1,7 +1,7 @@
 // Named exports only — no default export.
 
 export const colors = {
-  brand50: '#eef2ff', brand100: '#e0e7ff', brand500: '#4f46e5', brand600: '#4338ca', brand700: '#3730a3',
+  brand50: '#eaf4fe', brand100: '#d3e9fd', brand500: '#2e8cf0', brand600: '#1a5fd0', brand700: '#123f9e',
   ink50: '#f8fafc', ink100: '#f1f5f9', ink200: '#e2e8f0', ink300: '#cbd5e1',
   ink400: '#94a3b8', ink500: '#64748b', ink600: '#475569', ink700: '#334155', ink800: '#1e293b', ink900: '#0f172a',
   success: '#16a34a', successBg: '#f0fdf4',
@@ -17,7 +17,7 @@ export const shadow = {
   sm: '0 1px 3px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04)',
   md: '0 4px 12px rgba(15,23,42,0.08)',
   lg: '0 12px 32px rgba(15,23,42,0.12)',
-  focus: '0 0 0 3px rgba(79,70,229,0.30)',
+  focus: '0 0 0 3px rgba(46,140,240,0.30)',
 };
 
 export const type = {
