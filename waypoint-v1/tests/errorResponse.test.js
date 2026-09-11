@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { respondToServiceError } from '../frontend/api-lib/middleware/errorResponse.js';
 import { ValidationError, ForbiddenError, NotFoundError } from '../frontend/api-lib/services/objectiveService.js';
 import { CascadeLevelInUseError } from '../frontend/api-lib/services/cascadeLevelService.js';
-import { CycleNotFoundError } from '../frontend/api-lib/services/cycleService.js';
+import { CadenceInUseError } from '../frontend/api-lib/services/cadenceService.js';
+import { OverlappingCycleError } from '../frontend/api-lib/services/cycleService.js';
 
 function mockRes() {
   const res = {};
@@ -16,8 +17,9 @@ describe('respondToServiceError', () => {
     [new ValidationError('bad input'), 400],
     [new ForbiddenError('nope'), 403],
     [new NotFoundError('gone'), 404],
-    [new CycleNotFoundError(), 404],
     [new CascadeLevelInUseError(2), 409],
+    [new CadenceInUseError(), 409],
+    [new OverlappingCycleError(), 409],
   ])('maps %o to status %i', (err, expectedStatus) => {
     const res = mockRes();
     respondToServiceError(res, err);

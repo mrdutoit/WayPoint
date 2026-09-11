@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createCycle, activateCycle, CycleNotFoundError } from '../frontend/api-lib/services/cycleService.js';
+import { createCycle, OverlappingCycleError } from '../frontend/api-lib/services/cycleService.js';
+import { ValidationError } from '../frontend/api-lib/services/errors.js';
 
 function mockClient() {
   return { query: vi.fn() };
@@ -7,48 +8,72 @@ function mockClient() {
 
 describe('createCycle — validation', () => {
   it('rejects a missing name', async () => {
-    await expect(createCycle(mockClient(), 't1', { cadence: 'Quarterly', startDate: '2026-01-01', endDate: '2026-03-31' }))
-      .rejects.toThrow(/name/);
+    await expect(createCycle(mockClient(), 't1', { cadenceId: 'cad-1', startDate: '2026-01-01' }))
+      .rejects.toBeInstanceOf(ValidationError);
   });
 
-  it('rejects a missing cadence', async () => {
-    await expect(createCycle(mockClient(), 't1', { name: 'Q1', startDate: '2026-01-01', endDate: '2026-03-31' }))
-      .rejects.toThrow(/cadence/);
+  it('rejects a missing cadenceId', async () => {
+    await expect(createCycle(mockClient(), 't1', { name: 'Q1', startDate: '2026-01-01' }))
+      .rejects.toBeInstanceOf(ValidationError);
   });
 
-  it('rejects an end date on or before the start date', async () => {
-    await expect(createCycle(mockClient(), 't1', { name: 'Q1', cadence: 'Quarterly', startDate: '2026-03-31', endDate: '2026-01-01' }))
-      .rejects.toThrow(/endDate/);
+  it('rejects a missing startDate', async () => {
+    await expect(createCycle(mockClient(), 't1', { name: 'Q1', cadenceId: 'cad-1' }))
+      .rejects.toBeInstanceOf(ValidationError);
   });
 
-  it('creates a cycle with is_active false by default', async () => {
+  it('rejects a cadenceId that does not exist in the tenant', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce({ rows: [{ id: 'cycle-1', is_active: false }] });
-    const cycle = await createCycle(client, 't1', { name: 'Q1 2026', cadence: 'Quarterly', startDate: '2026-01-01', endDate: '2026-03-31' });
-    expect(cycle.is_active).toBe(false);
-    expect(client.query.mock.calls[0][0]).toContain('false');
+    client.query.mockResolvedValueOnce({ rows: [] }); // cadence lookup — not found
+    await expect(createCycle(client, 't1', { name: 'Q1', cadenceId: 'missing', startDate: '2026-01-01' }))
+      .rejects.toBeInstanceOf(ValidationError);
   });
 });
 
-describe('activateCycle', () => {
-  it('throws CycleNotFoundError when the cycle does not belong to the tenant', async () => {
-    const client = mockClient();
-    client.query.mockResolvedValueOnce({ rows: [] }); // target lookup — not found
-    await expect(activateCycle(client, 't1', 'missing-cycle')).rejects.toBeInstanceOf(CycleNotFoundError);
-  });
-
-  it('deactivates the previously active cycle before activating the new one, as two separate statements', async () => {
+describe('createCycle — end_date is always server-computed, never accepted from the caller', () => {
+  it("computes end_date from startDate + the Cadence's months (Quarterly = 3)", async () => {
     const client = mockClient();
     client.query
-      .mockResolvedValueOnce({ rows: [{ id: 'cycle-2' }] }) // target lookup — found
-      .mockResolvedValueOnce({}) // deactivate previous
-      .mockResolvedValueOnce({ rows: [{ id: 'cycle-2', is_active: true }] }); // activate target
+      .mockResolvedValueOnce({ rows: [{ months: 3 }] }) // cadence lookup
+      .mockResolvedValueOnce({ rows: [{ id: 'cycle-1', name: 'Q3 2026', startDate: '2026-07-01', endDate: '2026-09-30' }] }); // insert
 
-    const cycle = await activateCycle(client, 't1', 'cycle-2');
+    const cycle = await createCycle(client, 't1', { name: 'Q3 2026', cadenceId: 'cad-quarterly', startDate: '2026-07-01' });
 
-    expect(cycle.is_active).toBe(true);
-    expect(client.query).toHaveBeenCalledTimes(3);
-    expect(client.query.mock.calls[1][0]).toMatch(/is_active = false/);
-    expect(client.query.mock.calls[2][0]).toMatch(/is_active = true/);
+    expect(cycle.endDate).toBe('2026-09-30');
+    const insertCall = client.query.mock.calls[1];
+    expect(insertCall[1]).toEqual(['t1', 'Q3 2026', 'cad-quarterly', '2026-07-01', '2026-09-30']);
+  });
+
+  it('ignores an endDate passed in the input even if present', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ months: 1 }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'cycle-1' }] });
+
+    await createCycle(client, 't1', { name: 'Jan', cadenceId: 'cad-monthly', startDate: '2026-01-01', endDate: '2099-01-01' });
+    const insertCall = client.query.mock.calls[1];
+    expect(insertCall[1][4]).toBe('2026-01-31'); // computed, not the bogus 2099 value
+  });
+});
+
+describe('createCycle — overlap handling', () => {
+  it('maps a Postgres exclusion-constraint violation (23P01) to OverlappingCycleError', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ months: 3 }] }) // cadence lookup succeeds
+      .mockRejectedValueOnce(Object.assign(new Error('conflicting key value'), { code: '23P01' })); // insert violates EXCLUDE constraint
+
+    await expect(createCycle(client, 't1', { name: 'Overlaps', cadenceId: 'cad-1', startDate: '2026-07-15' }))
+      .rejects.toBeInstanceOf(OverlappingCycleError);
+  });
+
+  it('rethrows an unrelated database error unchanged', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ months: 3 }] })
+      .mockRejectedValueOnce(new Error('connection reset'));
+
+    await expect(createCycle(client, 't1', { name: 'X', cadenceId: 'cad-1', startDate: '2026-07-15' }))
+      .rejects.toThrow('connection reset');
   });
 });

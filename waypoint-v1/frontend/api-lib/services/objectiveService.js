@@ -117,13 +117,20 @@ async function assertParentIsOneLevelAbove(client, tenantId, parentObjectiveId, 
   }
 }
 
+/**
+ * "Active" Cycle is now computed from today's date, not a manually
+ * toggled flag — see cycleService.js's module comment for why. The
+ * database's EXCLUDE constraint on okr.cycle guarantees at most one row
+ * can ever match this, so no ORDER BY/LIMIT tie-break is needed beyond
+ * LIMIT 1 as a defensive floor.
+ */
 async function resolveActiveCycle(client, tenantId) {
   const { rows } = await client.query(
-    `SELECT id FROM okr.cycle WHERE tenant_id = $1 AND is_active = true LIMIT 1`,
+    `SELECT id FROM okr.cycle WHERE tenant_id = $1 AND CURRENT_DATE BETWEEN start_date AND end_date LIMIT 1`,
     [tenantId]
   );
   if (rows.length === 0) {
-    throw new ValidationError('No active Cycle for this tenant — activate a Cycle before creating Objectives (FR-014/FR-015)');
+    throw new ValidationError('No Cycle covers today\'s date for this tenant — create one that does before creating Objectives (FR-014/FR-015)');
   }
   return rows[0].id;
 }

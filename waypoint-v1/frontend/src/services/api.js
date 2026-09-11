@@ -66,9 +66,25 @@ export const rubricApi = {
 
 export const cyclesApi = {
   list: () => request('/cycles'),
-  create: ({ name, cadence, startDate, endDate }) =>
-    request('/cycles', { method: 'POST', body: JSON.stringify({ name, cadence, startDate, endDate }) }),
-  activate: (id) => request(`/cycles/${id}/activate`, { method: 'POST' }),
+  create: ({ name, cadenceId, startDate }) =>
+    request('/cycles', { method: 'POST', body: JSON.stringify({ name, cadenceId, startDate }) }),
+};
+
+export const cadencesApi = {
+  list: () => request('/settings/cadences'),
+  create: ({ label, months }) => request('/settings/cadences', { method: 'POST', body: JSON.stringify({ label, months }) }),
+  update: (id, { label, months }) => request(`/settings/cadences/${id}`, { method: 'PATCH', body: JSON.stringify({ label, months }) }),
+  remove: (id) => request(`/settings/cadences/${id}`, { method: 'DELETE' }),
+};
+
+export const okrElementsApi = {
+  list: () => request('/settings/okr-elements'),
+  update: (elementKey, isEnabled) => request(`/settings/okr-elements/${elementKey}`, { method: 'PATCH', body: JSON.stringify({ isEnabled }) }),
+};
+
+export const terminologyApi = {
+  get: () => request('/settings/terminology'),
+  update: (overrides) => request('/settings/terminology', { method: 'PUT', body: JSON.stringify(overrides) }),
 };
 
 export const objectivesApi = {

@@ -26,11 +26,20 @@ describe('createTenantWithFirstAdmin — validation', () => {
 });
 
 describe('createTenantWithFirstAdmin — happy path', () => {
-  it('creates the tenant and its first TenantAdmin, forcing a password change', async () => {
+  it('creates the tenant, its first TenantAdmin, seeds default cadences and OKR element config', async () => {
     const client = mockClient();
     client.query
       .mockResolvedValueOnce({ rows: [{ id: 'tenant-1', name: 'Acme', region: 'europe', cascadeLevelCount: 4 }] }) // insert tenant
-      .mockResolvedValueOnce({ rows: [{ id: 'user-1', role: 'TenantAdmin', email: 'admin@acme.test', firstName: 'Ada', lastName: 'Lovelace' }] }); // insert user
+      .mockResolvedValueOnce({ rows: [{ id: 'user-1', role: 'TenantAdmin', email: 'admin@acme.test', firstName: 'Ada', lastName: 'Lovelace' }] }) // insert user
+      .mockResolvedValueOnce({}) // seed cadence: Monthly
+      .mockResolvedValueOnce({}) // seed cadence: Quarterly
+      .mockResolvedValueOnce({}) // seed cadence: Bi-Annually
+      .mockResolvedValueOnce({}) // seed cadence: Annually
+      .mockResolvedValueOnce({}) // seed element: Objective
+      .mockResolvedValueOnce({}) // seed element: KeyResult
+      .mockResolvedValueOnce({}) // seed element: Initiative
+      .mockResolvedValueOnce({}) // seed element: CheckIn
+      .mockResolvedValueOnce({}); // seed element: Reflection
 
     const result = await createTenantWithFirstAdmin(client, { name: 'Acme', region: 'europe' }, VALID_ADMIN);
 
@@ -39,13 +48,20 @@ describe('createTenantWithFirstAdmin — happy path', () => {
     const userInsertCall = client.query.mock.calls[1];
     expect(userInsertCall[0]).toMatch(/password_must_change/);
     expect(userInsertCall[0]).toContain('true'); // password_must_change set true on creation
+    expect(client.query).toHaveBeenCalledTimes(11);
+    const cadenceLabels = client.query.mock.calls.slice(2, 6).map((call) => call[1][1]);
+    expect(cadenceLabels).toEqual(['Monthly', 'Quarterly', 'Bi-Annually', 'Annually']);
+    const elementKeys = client.query.mock.calls.slice(6).map((call) => call[1][1]);
+    expect(elementKeys).toEqual(['Objective', 'KeyResult', 'Initiative', 'CheckIn', 'Reflection']);
   });
 
   it('defaults region to europe when not supplied', async () => {
     const client = mockClient();
     client.query
       .mockResolvedValueOnce({ rows: [{ id: 'tenant-1' }] })
-      .mockResolvedValueOnce({ rows: [{ id: 'user-1' }] });
+      .mockResolvedValueOnce({ rows: [{ id: 'user-1' }] })
+      .mockResolvedValueOnce({}).mockResolvedValueOnce({}).mockResolvedValueOnce({}).mockResolvedValueOnce({})
+      .mockResolvedValueOnce({}).mockResolvedValueOnce({}).mockResolvedValueOnce({}).mockResolvedValueOnce({}).mockResolvedValueOnce({});
 
     await createTenantWithFirstAdmin(client, { name: 'Acme' }, VALID_ADMIN);
 

@@ -3,6 +3,7 @@ import { respondToServiceError } from '../api-lib/middleware/errorResponse.js';
 import { withPlatformContext } from '../api-lib/context/tenant.js';
 import { listTenants, getTenant, createTenantWithFirstAdmin } from '../api-lib/services/tenantService.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
+import { parseSlug } from '../api-lib/http/helpers.js';
 
 // No CORS opening — same-origin frontend calls only.
 
@@ -11,7 +12,7 @@ export default async function handler(req, res) {
   if (!user) return res.status(401).json({ error: 'Missing or invalid authorization token' });
   if (!requireRole(user, 'PlatformAdmin')) return res.status(403).json({ error: 'Tenants are managed by Platform Administrator only' });
 
-  const slugParts = Array.isArray(req.query.slug) ? req.query.slug : [req.query.slug].filter(Boolean);
+  const slugParts = parseSlug(req.query.slug);
   const [tenantId] = slugParts;
 
   try {

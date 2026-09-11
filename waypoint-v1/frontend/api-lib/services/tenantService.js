@@ -1,5 +1,7 @@
 import { hashPassword, checkPasswordComplexity } from './authService.js';
 import { ValidationError, NotFoundError } from './errors.js';
+import { DEFAULT_CADENCES } from './cadenceService.js';
+import { ALL_ELEMENTS } from './okrElementConfigService.js';
 
 /**
  * Tenant provisioning (FR-011): "A Platform Administrator can create a
@@ -58,6 +60,29 @@ export async function createTenantWithFirstAdmin(client, { name, region }, { ema
      RETURNING id, role, email, first_name AS "firstName", last_name AS "lastName"`,
     [tenant.id, email.toLowerCase().trim(), firstName.trim(), lastName.trim(), passwordHash]
   );
+
+  // Seeded so a TenantAdmin can create a Cycle immediately without first
+  // having to set up Cadences from nothing — still fully editable/
+  // deletable afterward via /api/settings/cadences, same as everything
+  // else seeded at this stage (cf. no cascade levels or rubric seeded —
+  // those have no sensible universal default the way Monthly/Quarterly/
+  // Bi-Annually/Annually do).
+  for (const { label, months } of DEFAULT_CADENCES) {
+    await client.query(
+      `INSERT INTO okr.cadence (id, tenant_id, label, months) VALUES (gen_random_uuid(), $1, $2, $3)`,
+      [tenant.id, label, months]
+    );
+  }
+
+  // All five OKR elements enabled by default (FR-025) — Initiative/
+  // CheckIn/Reflection have no functional effect yet (Module 3), same
+  // "scaffolded ahead of use" reasoning as FR-022's AI Settings menu.
+  for (const elementKey of ALL_ELEMENTS) {
+    await client.query(
+      `INSERT INTO okr.okr_element_config (id, tenant_id, element_key, is_enabled) VALUES (gen_random_uuid(), $1, $2, true)`,
+      [tenant.id, elementKey]
+    );
+  }
 
   return { tenant, tenantAdmin: userRows[0] };
 }

@@ -1,5 +1,6 @@
 import { config } from '../api-lib/config.js';
 import { seedPlatformDefaults } from '../api-lib/services/bootstrapService.js';
+import { parseSlug } from '../api-lib/http/helpers.js';
 
 // CORS open — needed for tools/bootstrap-admin.html, opened via file://.
 // Safe here specifically because this route is already protected by
@@ -29,7 +30,7 @@ export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  const slugParts = Array.isArray(req.query.slug) ? req.query.slug : [req.query.slug].filter(Boolean);
+  const slugParts = parseSlug(req.query.slug);
   const action = slugParts.join('/');
 
   if (req.method !== 'GET' || action !== 'bootstrap') {

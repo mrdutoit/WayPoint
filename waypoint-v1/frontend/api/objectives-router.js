@@ -6,6 +6,7 @@ import {
 } from '../api-lib/services/objectiveService.js';
 import { listKeyResultsForObjective, createKeyResult } from '../api-lib/services/keyResultService.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
+import { parseSlug } from '../api-lib/http/helpers.js';
 
 // No CORS opening — same-origin frontend calls only.
 
@@ -14,7 +15,7 @@ export default async function handler(req, res) {
   if (!user) return res.status(401).json({ error: 'Missing or invalid authorization token' });
   if (!user.tenantId) return res.status(403).json({ error: 'Objectives are tenant-scoped — not available to Platform Administrator' });
 
-  const slugParts = Array.isArray(req.query.slug) ? req.query.slug : [req.query.slug].filter(Boolean);
+  const slugParts = parseSlug(req.query.slug);
   const [objectiveId, subResource] = slugParts;
 
   try {

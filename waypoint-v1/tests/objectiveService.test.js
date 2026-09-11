@@ -86,7 +86,7 @@ describe('createObjective — validation and authorisation', () => {
 
     const caller = { id: 'u1', role: 'Employee' };
     await expect(createObjective(client, 't1', caller, { title: 'X', cascadeLevelId: 'cl1' }))
-      .rejects.toThrow(/active Cycle/);
+      .rejects.toThrow(/Cycle covers today/);
   });
 });
 

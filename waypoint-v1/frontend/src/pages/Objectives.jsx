@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useRole } from '../context/RoleContext.jsx';
+import { useTerms } from '../context/TerminologyContext.jsx';
 import { useWindowSize } from '../hooks/useWindowSize.js';
 import { objectivesApi, cascadeLevelsApi } from '../services/api.js';
 import { s, colors, STATUS_META } from '../styles/tokens.js';
@@ -12,6 +13,7 @@ function StatusChip({ status }) {
 
 export default function Objectives() {
   const { role } = useRole();
+  const { t, tPlural } = useTerms();
   const { isMobile } = useWindowSize();
   const [objectives, setObjectives] = useState(null);
   const [cascadeLevels, setCascadeLevels] = useState([]);
@@ -39,20 +41,20 @@ export default function Objectives() {
   return (
     <div style={isMobile ? s.pageMobile : s.page}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: colors.ink900 }}>Objectives</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: colors.ink900 }}>{tPlural('Objective')}</h1>
         {canCreate && cascadeLevels.length > 0 && (
           <button type="button" onClick={() => setShowCreate((v) => !v)} style={s.btnPrimary}>
-            {showCreate ? 'Cancel' : 'New Objective'}
+            {showCreate ? 'Cancel' : `New ${t('Objective')}`}
           </button>
         )}
       </div>
       <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 20 }}>
-        Objectives you own, and Objectives owned by your direct reports (FR-020).
+        {tPlural('Objective')} you own, and {tPlural('Objective').toLowerCase()} owned by your direct reports (FR-020).
       </p>
 
       {canCreate && cascadeLevels.length === 0 && objectives !== null && (
         <div style={{ ...s.chip(colors.warn, colors.warnBg), marginBottom: 16 }}>
-          No Cascade Levels are configured yet — ask a Tenant Administrator to set them up under OKR Settings before creating an Objective.
+          No Cascade Levels are configured yet — ask a Tenant Administrator to set them up under OKR Settings before creating {t('Objective').match(/^[aeiou]/i) ? 'an' : 'a'} {t('Objective').toLowerCase()}.
         </div>
       )}
 
@@ -61,13 +63,14 @@ export default function Objectives() {
           cascadeLevels={cascadeLevels}
           objectives={objectives ?? []}
           onCreated={() => { setShowCreate(false); load(); }}
+          t={t}
         />
       )}
 
       {error && <div style={{ ...s.chip(colors.danger, colors.dangerBg), marginBottom: 16 }}>{error}</div>}
       {objectives === null && !error && <div style={{ fontSize: 13, color: colors.ink500 }}>Loading…</div>}
       {objectives && objectives.length === 0 && (
-        <div style={{ fontSize: 13, color: colors.ink500 }}>No Objectives yet.</div>
+        <div style={{ fontSize: 13, color: colors.ink500 }}>No {tPlural('Objective').toLowerCase()} yet.</div>
       )}
 
       {objectives && objectives.length > 0 && (
@@ -100,7 +103,7 @@ export default function Objectives() {
   );
 }
 
-function CreateObjectiveForm({ cascadeLevels, objectives, onCreated }) {
+function CreateObjectiveForm({ cascadeLevels, objectives, onCreated, t }) {
   const sortedLevels = useMemo(() => [...cascadeLevels].sort((a, b) => a.level_index - b.level_index), [cascadeLevels]);
   const [title, setTitle] = useState('');
   const [cascadeLevelId, setCascadeLevelId] = useState(sortedLevels[0]?.id ?? '');
@@ -151,7 +154,7 @@ function CreateObjectiveForm({ cascadeLevels, objectives, onCreated }) {
 
       {validParents.length > 0 && (
         <>
-          <label style={s.label} htmlFor="objective-parent">Parent Objective (optional)</label>
+          <label style={s.label} htmlFor="objective-parent">Parent {t('Objective')} (optional)</label>
           <select
             id="objective-parent" style={{ ...s.select, marginBottom: 14 }}
             value={parentObjectiveId} onChange={(e) => setParentObjectiveId(e.target.value)}
@@ -165,7 +168,7 @@ function CreateObjectiveForm({ cascadeLevels, objectives, onCreated }) {
       {error && <div style={{ ...s.chip(colors.danger, colors.dangerBg), marginBottom: 14 }}>{error}</div>}
 
       <button type="submit" disabled={submitting} style={s.btnPrimary}>
-        {submitting ? 'Creating…' : 'Create Objective'}
+        {submitting ? 'Creating…' : `Create ${t('Objective')}`}
       </button>
     </form>
   );

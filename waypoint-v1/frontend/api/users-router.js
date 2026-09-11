@@ -3,6 +3,7 @@ import { respondToServiceError } from '../api-lib/middleware/errorResponse.js';
 import { withTenantContext } from '../api-lib/context/tenant.js';
 import { listUsersForTenant, inviteUser, updateUserRole, forcePasswordResetForUser } from '../api-lib/services/userService.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
+import { parseSlug } from '../api-lib/http/helpers.js';
 
 // No CORS opening — same-origin frontend calls only.
 
@@ -12,7 +13,7 @@ export default async function handler(req, res) {
   if (!user.tenantId) return res.status(403).json({ error: 'User management is tenant-scoped — not available to Platform Administrator' });
   if (!requireRole(user, 'TenantAdmin')) return res.status(403).json({ error: 'Forbidden for this role' });
 
-  const slugParts = Array.isArray(req.query.slug) ? req.query.slug : [req.query.slug].filter(Boolean);
+  const slugParts = parseSlug(req.query.slug);
   const [first, second, third] = slugParts;
 
   try {

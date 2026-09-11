@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useWindowSize } from '../hooks/useWindowSize.js';
+import { useTerms } from '../context/TerminologyContext.jsx';
 import { objectivesApi, keyResultsApi } from '../services/api.js';
 import { s, colors, STATUS_META } from '../styles/tokens.js';
 
@@ -12,6 +13,7 @@ function StatusChip({ status }) {
 export default function ObjectiveDetail() {
   const { id } = useParams();
   const { isMobile } = useWindowSize();
+  const { t, tPlural } = useTerms();
   const pageStyle = isMobile ? s.pageMobile : s.page;
   const [objective, setObjective] = useState(null);
   const [keyResults, setKeyResults] = useState([]);
@@ -34,10 +36,10 @@ export default function ObjectiveDetail() {
   useEffect(() => { load(); }, [id]);
 
   if (notFound) {
-    return <div style={pageStyle}><p style={{ color: colors.ink500 }}>Objective not found.</p></div>;
+    return <div style={pageStyle}><p style={{ color: colors.ink500 }}>{t('Objective')} not found.</p></div>;
   }
   if (forbidden) {
-    return <div style={pageStyle}><p style={{ color: colors.ink500 }}>You don't have access to this Objective (FR-020: visible to its owner and their direct Manager only).</p></div>;
+    return <div style={pageStyle}><p style={{ color: colors.ink500 }}>You don't have access to this {t('Objective').toLowerCase()} (FR-020: visible to its owner and their direct Manager only).</p></div>;
   }
   if (error) {
     return <div style={pageStyle}><div style={s.chip(colors.danger, colors.dangerBg)}>{error}</div></div>;
@@ -48,23 +50,23 @@ export default function ObjectiveDetail() {
 
   return (
     <div style={pageStyle}>
-      <Link to="/objectives" style={{ fontSize: 13, color: colors.brand600, textDecoration: 'none' }}>&larr; Objectives</Link>
+      <Link to="/objectives" style={{ fontSize: 13, color: colors.brand600, textDecoration: 'none' }}>&larr; {tPlural('Objective')}</Link>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, marginBottom: 4, flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: colors.ink900 }}>{objective.title}</h1>
         <StatusChip status={objective.status} />
       </div>
       <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 24 }}>
-        Status is computed automatically from Key Result Check-ins (FR-004) — it can't be set directly.
+        Status is computed automatically from {t('KeyResult')} {t('CheckIn')}s (FR-004) — it can't be set directly.
       </p>
 
-      <EditTitleForm objective={objective} onSaved={(updated) => setObjective((prev) => ({ ...prev, ...updated }))} />
+      <EditTitleForm objective={objective} onSaved={(updated) => setObjective((prev) => ({ ...prev, ...updated }))} label={t('Objective')} />
 
       <div style={{ ...s.card, marginTop: 20 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: colors.ink900 }}>Key Results</div>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: colors.ink900 }}>{tPlural('KeyResult')}</div>
 
         {keyResults.length === 0 && (
-          <div style={{ fontSize: 13, color: colors.ink500, marginBottom: 16 }}>No Key Results yet.</div>
+          <div style={{ fontSize: 13, color: colors.ink500, marginBottom: 16 }}>No {tPlural('KeyResult').toLowerCase()} yet.</div>
         )}
 
         {keyResults.length > 0 && (
@@ -88,13 +90,13 @@ export default function ObjectiveDetail() {
           </div>
         )}
 
-        <AddKeyResultForm objectiveId={objective.id} onCreated={(kr) => setKeyResults((prev) => [...prev, kr])} />
+        <AddKeyResultForm objectiveId={objective.id} onCreated={(kr) => setKeyResults((prev) => [...prev, kr])} label={t('KeyResult')} />
       </div>
     </div>
   );
 }
 
-function EditTitleForm({ objective, onSaved }) {
+function EditTitleForm({ objective, onSaved, label }) {
   const [title, setTitle] = useState(objective.title);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -116,7 +118,7 @@ function EditTitleForm({ objective, onSaved }) {
       onSaved(result.objective);
       setEditing(false);
     } catch (err) {
-      setError(err.message ?? 'Failed to rename Objective');
+      setError(err.message ?? `Failed to rename ${label}`);
     } finally {
       setSaving(false);
     }
@@ -183,7 +185,7 @@ function KeyResultRow({ keyResult, onSaved }) {
   );
 }
 
-function AddKeyResultForm({ objectiveId, onCreated }) {
+function AddKeyResultForm({ objectiveId, onCreated, label }) {
   const [title, setTitle] = useState('');
   const [weighting, setWeighting] = useState('1');
   const [submitting, setSubmitting] = useState(false);
@@ -199,7 +201,7 @@ function AddKeyResultForm({ objectiveId, onCreated }) {
       setTitle('');
       setWeighting('1');
     } catch (err) {
-      setError(err.message ?? 'Failed to add Key Result');
+      setError(err.message ?? `Failed to add ${label}`);
     } finally {
       setSubmitting(false);
     }
@@ -208,7 +210,7 @@ function AddKeyResultForm({ objectiveId, onCreated }) {
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
       <div style={{ flex: '1 1 260px' }}>
-        <label style={s.label}>New Key Result</label>
+        <label style={s.label}>New {label}</label>
         <input required style={s.formInput} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Sign 10 new enterprise clients" />
       </div>
       <div style={{ width: 100 }}>

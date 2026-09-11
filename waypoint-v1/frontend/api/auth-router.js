@@ -6,6 +6,7 @@ import {
 import { withPlatformContext, withTenantContext } from '../api-lib/context/tenant.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
 import { getAuthenticatedUser } from '../api-lib/middleware/auth.js';
+import { parseSlug } from '../api-lib/http/helpers.js';
 
 // A dummy hash to compare against when no user is found, so a login
 // attempt against a non-existent email takes the same time as one
@@ -28,7 +29,7 @@ export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  const slugParts = Array.isArray(req.query.slug) ? req.query.slug : [req.query.slug].filter(Boolean);
+  const slugParts = parseSlug(req.query.slug);
   const action = slugParts.join('/');
 
   if (req.method === 'POST' && action === 'login') return loginAction(req, res);

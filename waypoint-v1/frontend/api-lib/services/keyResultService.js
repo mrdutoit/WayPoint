@@ -1,4 +1,5 @@
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
+import { isElementEnabled } from './okrElementConfigService.js';
 
 /**
  * Key Results — FR-004 (status never client-writable), FR-016 (belongs
@@ -41,6 +42,10 @@ function assertCanEditObjective(objectiveRow, caller) {
 }
 
 export async function createKeyResult(client, tenantId, caller, objectiveId, { title, weighting, rubricId }) {
+  if (!(await isElementEnabled(client, tenantId, 'KeyResult'))) {
+    throw new ValidationError('Key Results are disabled for this tenant (FR-025) — enable them under OKR Settings first');
+  }
+
   const objective = await fetchObjectiveWithOwner(client, tenantId, objectiveId);
   if (!objective) throw new NotFoundError('Objective not found');
   assertCanEditObjective(objective, caller);

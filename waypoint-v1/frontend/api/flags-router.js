@@ -2,6 +2,7 @@ import { getAuthenticatedUser, requireRole } from '../api-lib/middleware/auth.js
 import { withTenantContext, withPlatformContext } from '../api-lib/context/tenant.js';
 import { getFlagsForTenant, setTenantFlag } from '../api-lib/services/flagService.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
+import { parseSlug } from '../api-lib/http/helpers.js';
 
 // No CORS opening on this file — called only by the real frontend, same
 // origin as this function (both deployed from the same Vercel project).
@@ -10,7 +11,7 @@ export default async function handler(req, res) {
   const user = getAuthenticatedUser(req);
   if (!user) return res.status(401).json({ error: 'Missing or invalid authorization token' });
 
-  const slugParts = Array.isArray(req.query.slug) ? req.query.slug : [req.query.slug].filter(Boolean);
+  const slugParts = parseSlug(req.query.slug);
   const flagKey = slugParts[0]; // present only for PATCH /api/flags/:key
 
   if (req.method === 'GET' && !flagKey) return listFlags(req, res, user);

@@ -10,7 +10,7 @@ function mockRes() {
 }
 
 function mockReq(overrides = {}) {
-  return { method: 'GET', headers: {}, query: { slug: ['bootstrap'] }, ...overrides };
+  return { method: 'GET', headers: {}, query: { slug: 'bootstrap' }, ...overrides };
 }
 
 describe('admin-router bootstrap auth guard', () => {

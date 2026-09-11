@@ -19,9 +19,10 @@ export function respondToServiceError(res, err) {
     case 'ForbiddenError':
       return res.status(403).json({ error: err.message });
     case 'NotFoundError':
-    case 'CycleNotFoundError':
       return res.status(404).json({ error: err.message });
     case 'CascadeLevelInUseError':
+    case 'CadenceInUseError':
+    case 'OverlappingCycleError':
       return res.status(409).json({ error: err.message });
     default:
       logger.error({ err }, 'Unhandled error in a Module 2 route');

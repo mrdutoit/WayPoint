@@ -45,31 +45,38 @@ waypoint-v1/
 │   │   ├── admin-router.js    (on-demand bootstrap)
 │   │   ├── tenants-router.js  (create/list tenants — FR-011)
 │   │   ├── users-router.js    (invite, role, force-password-reset)
-│   │   ├── settings-router.js (cascade-levels, rubric — Module 2)
-│   │   ├── cycles-router.js   (Module 2)
-│   │   ├── objectives-router.js (Module 2)
-│   │   └── key-results-router.js (Module 2)
+│   │   ├── settings-router.js (cascade-levels, rubric, cadences, okr-elements, terminology)
+│   │   ├── cycles-router.js   (date-driven — no activate action)
+│   │   ├── objectives-router.js
+│   │   └── key-results-router.js
 │   ├── api-lib/                <- the real logic, never deployed directly
 │   │   ├── config.js
 │   │   ├── context/tenant.js   (Row-Level Security chokepoint)
+│   │   ├── http/helpers.js     (parseSlug — every router's multi-segment path parsing)
 │   │   ├── middleware/
 │   │   │   ├── auth.js
-│   │   │   └── errorResponse.js (Module 2 — typed service errors → HTTP status)
+│   │   │   └── errorResponse.js (typed service errors → HTTP status)
 │   │   └── services/
 │   │       (db.js, authService.js, auditService.js, flagService.js,
-│   │        bootstrapService.js, logger.js, errors.js, userService.js,
-│   │        tenantService.js, cascadeLevelService.js, cycleService.js,
-│   │        scoringRubricService.js, objectiveService.js,
-│   │        keyResultService.js — last five are Module 2, userService.js
-│   │        and tenantService.js are the user-management follow-up)
+│   │        bootstrapService.js, logger.js, errors.js, dateMath.js,
+│   │        userService.js, tenantService.js, cascadeLevelService.js,
+│   │        cycleService.js, cadenceService.js, scoringRubricService.js,
+│   │        objectiveService.js, keyResultService.js,
+│   │        okrElementConfigService.js, terminologyService.js)
 │   ├── db/
 │   │   ├── schema.sql          <- plain SQL, applied manually via Neon's console
-│   │   ├── 02-okr-core.sql     <- Module 2: cascade_level, cycle, scoring_rubric,
+│   │   ├── 02-okr-core.sql     <- cascade_level, cycle, scoring_rubric,
 │   │   │                          rubric_level, objective, key_result
-│   │   └── 03-user-management.sql <- adds password_must_change to user_account
+│   │   ├── 03-user-management.sql <- adds password_must_change to user_account
+│   │   ├── 04-cadence-and-cycle-rework.sql <- Cadence entity; Cycle: cadence_id
+│   │   │                          replaces free-text cadence, is_active removed,
+│   │   │                          EXCLUDE constraint on overlapping dates
+│   │   └── 05-terminology-and-element-config.sql <- okr_element_config, terminology_setting
 │   ├── src/                    <- the React app
-│   │   ├── components/Logo.jsx
-│   │   ├── context/ (RoleContext, FlagContext)
+│   │   ├── components/ (Logo.jsx, DatePicker.jsx — internal/staff-facing
+│   │   │                calendar popover, ported from MedBroker's component
+│   │   │                of the same name)
+│   │   ├── context/ (RoleContext, FlagContext, TerminologyContext — useTerms())
 │   │   ├── pages/ (Login, ChangePassword, Dashboard, FeatureFlags,
 │   │   │           Objectives, ObjectiveDetail, OkrSettings, TenantsAdmin,
 │   │   │           UsersAdmin)
@@ -158,6 +165,68 @@ waypoint-v1/
   Stage 3 scaffold gaps, surfaced while building this, not introduced by
   it — worth a decision before either matters for anything higher-stakes
   than OKR content.
+
+- **WayPoint's session is a client-held Bearer JWT with no server-side
+  revocation** (unlike MedBroker's httpOnly-cookie session, which can be
+  reissued/invalidated). `change-password` issues a fresh token so the
+  frontend doesn't need to force a re-login, but the previous token
+  remains technically valid until it naturally expires — a known gap,
+  not a decision anyone's actually made yet. Also: `api.js`'s auth token
+  lives in a module-level JS variable only, not persisted to storage —
+  a page refresh currently logs everyone out. Both are pre-existing
+  Stage 3 scaffold gaps, surfaced while building this, not introduced by
+  it — worth a decision before either matters for anything higher-stakes
+  than OKR content.
+- **Every multi-segment router path goes through `parseSlug`
+  (`api-lib/http/helpers.js`), never `Array.isArray(req.query.slug) ? …`
+  inline.** A `vercel.json` rewrite's `?slug=:slug*` does not reliably
+  deliver a multi-segment path as an array — it can arrive as a single
+  slash-joined string — so positional destructuring
+  (`[id, subResource] = slugParts`) silently breaks for any two-segment
+  route if the raw value isn't parsed defensively first. This was a real
+  production bug (cycle activation 404'd) before this fix; MedBroker had
+  already hit and solved the identical problem, and this ports that
+  fix rather than re-solving it. Every router test's `mockReq` simulates
+  the real joined-string shape, not a pre-split array, specifically so a
+  regression here fails a test again rather than shipping unnoticed.
+- **A Cycle's "active" status is computed from today's date, not a
+  manually-toggled flag** — no `POST /api/cycles/:id/activate` any more.
+  No two Cycles in a tenant may cover the same day, enforced at the
+  database layer via a Postgres EXCLUDE constraint (needs the
+  `btree_gist` extension for the `tenant_id` equality term). `end_date`
+  is always server-computed from `start_date` + the chosen Cadence's
+  `months` (`dateMath.js`), never accepted from the caller.
+- **A Cadence (or Cascade Level) already referenced by a Cycle (or
+  Objective) is locked, not deleted-and-cascaded or silently
+  overwritable** — `CadenceInUseError`/`CascadeLevelInUseError`, both
+  409s. The underlying data isn't actually at risk either way (an
+  end_date, once computed, is stored on the Cycle row, never re-derived
+  live from the Cadence) — the lock exists so a term like "Quarterly"
+  can't quietly mean something different for records created before an
+  edit than the ones created after it, not because editing would
+  corrupt anything already stored.
+- **Internal/staff-facing date fields use the custom `DatePicker`
+  component, not native `<input type="date">`** — matches MedBroker's
+  exact precedent and reasoning (`components/DatePicker.jsx`'s own
+  header comment has the full case). WayPoint has no public-facing forms
+  yet, so every current date field qualifies; revisit if that changes.
+  Deliberately simpler than MedBroker's version — no typed free-text
+  entry, since that's tied to an app-wide day-first date-*format*
+  standard MedBroker established that WayPoint hasn't adopted.
+- **Terminology customisation (FR-013) is applied to primary UI
+  surfaces only** — nav, page titles, section headers, main create/add
+  buttons — not to every string in the app. Backend validation-error
+  text is never substituted. Pluralisation
+  (`TerminologyContext.jsx`'s `pluralise()`) is a plain heuristic, not a
+  full inflection library.
+- **FR-025's disable rule is implemented as reject, not cascade** — the
+  Stage 2 doc's section 3.1 table phrasing ("switching Key Result off
+  automatically switches off Initiative and Check-in") and FR-025's own
+  text ("rejected server-side... naming the dependent element(s)")
+  describe two different behaviours for the same case; the literal,
+  fully-specified FR-025 text was implemented. Flag if auto-cascade was
+  actually intended — `okrElementConfigService.js`'s module comment has
+  the full reasoning.
 
 ## Roles
 

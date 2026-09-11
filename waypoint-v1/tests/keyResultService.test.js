@@ -6,6 +6,12 @@ function mockClient() {
   return { query: vi.fn() };
 }
 
+// Every createKeyResult test needs this as its FIRST mocked query now —
+// isElementEnabled('KeyResult') is checked before anything else. Empty
+// rows means "not yet seeded", which defaults to enabled.
+const ELEMENT_ENABLED = { rows: [] };
+const ELEMENT_DISABLED = { rows: [{ elementKey: 'KeyResult', isEnabled: false }] };
+
 // ---------- FR-024: Key Result with no Check-ins ----------
 describe('computeKeyResultStatus (FR-024)', () => {
   it('returns "Not Started" when there are no Check-ins', () => {
@@ -17,31 +23,40 @@ describe('computeKeyResultStatus (FR-024)', () => {
   });
 });
 
+describe('createKeyResult — FR-025 gate', () => {
+  it('rejects creation when KeyResult is disabled for the tenant', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce(ELEMENT_DISABLED);
+    await expect(createKeyResult(client, 't1', { id: 'u1' }, 'obj-1', { title: 'X' }))
+      .rejects.toThrow(/disabled for this tenant/);
+  });
+});
+
 describe('createKeyResult — authorisation and validation (FR-016)', () => {
   it('throws NotFoundError when the parent Objective does not exist', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce({ rows: [] });
+    client.query.mockResolvedValueOnce(ELEMENT_ENABLED).mockResolvedValueOnce({ rows: [] });
     await expect(createKeyResult(client, 't1', { id: 'u1' }, 'obj-missing', { title: 'X' }))
       .rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('rejects a caller who is neither the Objective owner nor their Manager', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: 'mgr-1' }] });
+    client.query.mockResolvedValueOnce(ELEMENT_ENABLED).mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: 'mgr-1' }] });
     await expect(createKeyResult(client, 't1', { id: 'stranger' }, 'obj-1', { title: 'X' }))
       .rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it('rejects a missing title', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: null }] });
+    client.query.mockResolvedValueOnce(ELEMENT_ENABLED).mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: null }] });
     await expect(createKeyResult(client, 't1', { id: 'u1' }, 'obj-1', {}))
       .rejects.toBeInstanceOf(ValidationError);
   });
 
   it('rejects a non-positive weighting', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: null }] });
+    client.query.mockResolvedValueOnce(ELEMENT_ENABLED).mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: null }] });
     await expect(createKeyResult(client, 't1', { id: 'u1' }, 'obj-1', { title: 'X', weighting: 0 }))
       .rejects.toBeInstanceOf(ValidationError);
   });
@@ -49,22 +64,24 @@ describe('createKeyResult — authorisation and validation (FR-016)', () => {
   it('rejects creating a Key Result when the tenant has no Scoring Rubric configured yet (FR-017)', async () => {
     const client = mockClient();
     client.query
+      .mockResolvedValueOnce(ELEMENT_ENABLED)
       .mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: null }] }) // objective lookup
       .mockResolvedValueOnce({ rows: [] }); // no rubric configured
     await expect(createKeyResult(client, 't1', { id: 'u1' }, 'obj-1', { title: 'X' }))
       .rejects.toThrow(/Scoring Rubric/);
   });
 
-  it('resolves the tenant\'s rubric automatically when rubricId is not supplied, defaults weighting to 1, status to "Not Started"', async () => {
+  it("resolves the tenant's rubric automatically when rubricId is not supplied, defaults weighting to 1, status to \"Not Started\"", async () => {
     const client = mockClient();
     client.query
+      .mockResolvedValueOnce(ELEMENT_ENABLED)
       .mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: null }] }) // objective lookup
       .mockResolvedValueOnce({ rows: [{ id: 'rubric-1' }] }) // tenant's rubric
       .mockResolvedValueOnce({ rows: [{ id: 'kr-1', weighting: '1.00', status: 'Not Started' }] }); // insert
 
     const kr = await createKeyResult(client, 't1', { id: 'u1' }, 'obj-1', { title: 'Sign 10 new clients' });
     expect(kr.status).toBe('Not Started');
-    const insertCall = client.query.mock.calls[2];
+    const insertCall = client.query.mock.calls[3];
     expect(insertCall[1]).toEqual(['t1', 'obj-1', 'rubric-1', 'Sign 10 new clients', 1]);
   });
 });

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { RoleProvider, useRole, ROLES } from './context/RoleContext.jsx';
 import { FlagProvider } from './context/FlagContext.jsx';
+import { TerminologyProvider, useTerms } from './context/TerminologyContext.jsx';
 import { useWindowSize } from './hooks/useWindowSize.js';
 import Login from './pages/Login.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
@@ -17,6 +18,7 @@ import { s, colors } from './styles/tokens.js';
 function Shell({ children }) {
   const { user, setUser, role, isPlatformAdmin, isTenantAdmin } = useRole();
   const { isMobile } = useWindowSize();
+  const { tPlural } = useTerms();
   const previewMode = !user;
 
   return (
@@ -27,7 +29,7 @@ function Shell({ children }) {
           {!isMobile && (
             <>
               <Link to="/" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>Dashboard</Link>
-              <Link to="/objectives" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>Objectives</Link>
+              <Link to="/objectives" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>{tPlural('Objective')}</Link>
               {isTenantAdmin && (
                 <>
                   <Link to="/okr-settings" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
@@ -93,8 +95,9 @@ function RequireRole({ roles, children }) {
 export default function App() {
   return (
     <RoleProvider>
-      <FlagProvider>
-        <BrowserRouter>
+      <TerminologyProvider>
+        <FlagProvider>
+          <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route
@@ -158,8 +161,9 @@ export default function App() {
               }
             />
           </Routes>
-        </BrowserRouter>
-      </FlagProvider>
+          </BrowserRouter>
+        </FlagProvider>
+      </TerminologyProvider>
     </RoleProvider>
   );
 }

@@ -3,6 +3,7 @@ import { respondToServiceError } from '../api-lib/middleware/errorResponse.js';
 import { withTenantContext } from '../api-lib/context/tenant.js';
 import { updateKeyResult } from '../api-lib/services/keyResultService.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
+import { parseSlug } from '../api-lib/http/helpers.js';
 
 // No CORS opening — same-origin frontend calls only.
 
@@ -11,7 +12,7 @@ export default async function handler(req, res) {
   if (!user) return res.status(401).json({ error: 'Missing or invalid authorization token' });
   if (!user.tenantId) return res.status(403).json({ error: 'Key Results are tenant-scoped — not available to Platform Administrator' });
 
-  const slugParts = Array.isArray(req.query.slug) ? req.query.slug : [req.query.slug].filter(Boolean);
+  const slugParts = parseSlug(req.query.slug);
   const [keyResultId] = slugParts;
 
   try {
