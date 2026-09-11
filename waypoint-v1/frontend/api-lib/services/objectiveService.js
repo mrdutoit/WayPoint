@@ -174,7 +174,7 @@ export async function createObjective(client, tenantId, caller, { title, cascade
   const cycleId = await resolveActiveCycle(client, tenantId);
 
   const { rows } = await client.query(
-    `INSERT INTO okr.objective (id, tenant_id, cycle_id, cascade_level_id, parent_objective_id, owner_id, title, status)
+    `INSERT INTO okr.objective AS o (id, tenant_id, cycle_id, cascade_level_id, parent_objective_id, owner_id, title, status)
      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'Not Started')
      RETURNING ${OBJECTIVE_FIELDS}`,
     [tenantId, cycleId, cascadeLevelId, parentObjectiveId ?? null, targetOwnerId, title.trim()]
@@ -201,7 +201,7 @@ export async function updateObjective(client, tenantId, caller, objectiveId, { t
   }
 
   const { rows } = await client.query(
-    `UPDATE okr.objective SET title = $3, parent_objective_id = $4
+    `UPDATE okr.objective AS o SET title = $3, parent_objective_id = $4
      WHERE tenant_id = $1 AND id = $2
      RETURNING ${OBJECTIVE_FIELDS}`,
     [tenantId, objectiveId, nextTitle.trim(), nextParentId ?? null]

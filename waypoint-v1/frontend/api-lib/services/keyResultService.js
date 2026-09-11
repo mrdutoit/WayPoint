@@ -69,7 +69,7 @@ export async function createKeyResult(client, tenantId, caller, objectiveId, { t
   }
 
   const { rows } = await client.query(
-    `INSERT INTO okr.key_result (id, tenant_id, objective_id, rubric_id, title, weighting, status)
+    `INSERT INTO okr.key_result AS kr (id, tenant_id, objective_id, rubric_id, title, weighting, status)
      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'Not Started')
      RETURNING ${KEY_RESULT_FIELDS}`,
     [tenantId, objectiveId, resolvedRubricId, title.trim(), resolvedWeighting]
@@ -100,7 +100,7 @@ export async function updateKeyResult(client, tenantId, caller, keyResultId, { t
   }
 
   const { rows } = await client.query(
-    `UPDATE okr.key_result SET title = $3, weighting = $4
+    `UPDATE okr.key_result AS kr SET title = $3, weighting = $4
      WHERE tenant_id = $1 AND id = $2
      RETURNING ${KEY_RESULT_FIELDS}`,
     [tenantId, keyResultId, nextTitle.trim(), nextWeighting]

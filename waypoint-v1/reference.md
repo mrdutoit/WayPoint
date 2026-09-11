@@ -89,6 +89,8 @@ waypoint-v1/
 │   ├── bootstrap-admin.html    (seeds flags + PlatformAdmin, on demand)
 │   └── login-test.html         (verifies sign-in end to end)
 ├── tests/                      <- vitest, run from repo root
+│   └── integration/            <- real-Postgres tests, gated behind
+│                                  TEST_DATABASE_URL, skip cleanly without one
 └── README.md                   <- setup, deployment, env vars
 ```
 
@@ -234,6 +236,40 @@ waypoint-v1/
   fully-specified FR-025 text was implemented. Flag if auto-cascade was
   actually intended — `okrElementConfigService.js`'s module comment has
   the full reasoning.
+
+- **A shared field-list constant (`OBJECTIVE_FIELDS`, `KEY_RESULT_FIELDS`)
+  used across a SELECT-with-JOIN and an INSERT/UPDATE must alias the
+  target table in the INSERT/UPDATE itself** (`INSERT INTO okr.objective
+  AS o (...)`, `UPDATE okr.key_result AS kr SET ...`) — Postgres supports
+  aliasing an INSERT/UPDATE target exactly like a SELECT's FROM clause,
+  and the constant's `o.`/`kr.`-prefixed columns need that alias to
+  exist wherever they're reused. Missing it produces `missing
+  FROM-clause entry for table "o"` — a real bug that shipped and passed
+  209 tests, because every test in this suite mocks `client.query`
+  entirely and can't validate SQL syntax against anything real. Verify
+  any new shared field-list constant's INSERT/UPDATE usage against
+  `tests/integration/` before trusting mocked tests alone.
+- **`db.js` configures `pg`'s DATE type parser to return plain strings**
+  (`types.setTypeParser(1082, (val) => val)`) rather than `pg`'s default
+  JS `Date` objects — every date-handling function in this app
+  (`dateMath.js`, the Cycles table display) assumes a plain
+  `'YYYY-MM-DD'` string, and without this the API serialises a Date
+  object as a full ISO datetime instead (`"2026-09-30T00:00:00.000Z"`).
+  Any future connection pool or raw script touching `okr.cycle.start_date`/
+  `end_date` needs the same configuration, or should import `db.js`'s
+  `pool` directly rather than creating its own client — see
+  `tests/integration/writes.integration.test.js` for why this matters
+  enough to test for directly.
+- **`tests/integration/` exercises every create/update path against a
+  real Postgres instance**, gated behind `TEST_DATABASE_URL` so it skips
+  cleanly without one. Mocked unit tests (everything else in `tests/`)
+  verify logic; this verifies the SQL itself is valid — a distinction
+  that matters because the two bugs above both shipped past 209 passing
+  mocked tests. Same principle MedBroker already established ("A local
+  Postgres instance is required for any queries mixing differently-typed
+  columns") — applied here as a standing practice, not a one-off fix.
+  Worth running before any delivery that touches a RETURNING clause, a
+  JOIN, or a type this suite's mocks can't actually validate.
 
 ## Roles
 

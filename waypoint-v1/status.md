@@ -155,24 +155,59 @@ more deliberate), not fixed here.
    `03-user-management.sql`, `04-cadence-and-cycle-rework.sql`,
    `05-terminology-and-element-config.sql`.
 2. Push this delta to GitHub and let Vercel redeploy.
-3. **Diagnose the "Internal server error" on Objective creation.**
-   Static review of `objectiveService.js`'s full create path, the real
-   (never-mocked-in-tests) `withTenantContext`, and `auditService.js`
-   didn't surface an obvious bug — which means either a genuine
-   production-only issue (a SQL typo my mocked tests can't catch, since
-   they never validate real SQL against a real schema) or a missing
-   prerequisite (no Cycle yet covering today's date, though that should
-   surface as a specific 400, not this generic 500). The real error is
-   sitting in Vercel's function logs — `errorResponse.js` was built
-   specifically to log unrecognised exceptions there
-   (`logger.error(..., 'Unhandled error in a Module 2 route')`) rather
-   than lose them. Pull that log text before guessing further.
-4. Once that's fixed, re-verify end to end: cycle creation with a
-   Cadence dropdown and no manual end date, that no "activate" control
-   remains, that renaming a term under OKR Settings actually changes the
-   nav/page titles, and that disabling Key Result actually blocks
-   creating one.
-5. Then continue Stage 4 at Module 3 (secondary entities: Initiative,
+3. **Fixed:** the "Internal server error" on Objective creation.
+   Root cause, from Mark's Vercel log: `missing FROM-clause entry for
+   table "o"` — `INSERT INTO okr.objective (...) ... RETURNING
+   o.id, ...` referenced an alias (`o`) that was never established
+   anywhere in the INSERT statement. `OBJECTIVE_FIELDS` (a shared
+   constant reused across a SELECT-with-JOIN, an INSERT, and an UPDATE)
+   was written assuming the `o`/`kr` alias would always be in scope —
+   true for the SELECT usages, false for INSERT/UPDATE. Same bug, same
+   cause, in both `objectiveService.js` (create + update) and
+   `keyResultService.js` (create + update) — every other service's
+   RETURNING clause already used unqualified column names correctly, so
+   this was isolated to exactly those four lines. Fixed by aliasing the
+   target table in the INSERT/UPDATE itself (`INSERT INTO okr.objective
+   AS o (...)`, `UPDATE okr.key_result AS kr SET ...`), which Postgres
+   supports directly.
+   **Why 209 passing tests never caught it:** every test in this suite
+   mocks `client.query` entirely — the mock returns whatever it's told
+   to return regardless of what SQL string was actually sent, so SQL
+   *syntax* was never validated against anything real. Verified the fix
+   against an actual local Postgres 16 instance (schema applied fresh,
+   all four previously-broken paths + every other write across the
+   whole schema exercised for real) — see below.
+4. Also found and fixed while verifying against real Postgres: `db.js`
+   never configured `pg`'s DATE type parser, so `okr.cycle.start_date`/
+   `end_date` came back as JS `Date` objects rather than plain
+   `'YYYY-MM-DD'` strings, serialising through the API as full ISO
+   datetimes. This is exactly what the very first screenshot in this
+   whole testing round showed
+   (`"2026-07-01T00:00:00.000Z – 2026-09-30T00:00:00.000Z"`) — a
+   pre-existing cosmetic bug since Module 2 shipped, not something this
+   round introduced, just finally traced to its actual cause. Fixed with
+   one line in `db.js`.
+5. **New standing safeguard:** `tests/integration/writes.integration.test.js`
+   — exercises every create/update path in the schema against a real
+   Postgres instance, gated behind `TEST_DATABASE_URL` so it skips
+   cleanly without one (confirmed: 209 mocked tests still pass, 14
+   integration tests skip). This is the same lesson MedBroker already
+   learned ("A local Postgres instance is required for any queries
+   mixing differently-typed columns — a real instance catches type
+   mismatches that manual code reading misses") — applied to WayPoint
+   now, not just patched reactively this once. To run it: a local
+   Postgres 14+ with `btree_gist` available, `createdb waypoint_test`,
+   then `TEST_DATABASE_URL=postgresql://user:pass@localhost:5432/waypoint_test
+   npx vitest run tests/integration`. Worth running before any future
+   delivery that touches a RETURNING clause, a JOIN, or any SQL this
+   suite's mocks can't actually validate.
+6. Re-verify end to end: cycle creation with a Cadence dropdown and no
+   manual end date, that no "activate" control remains, that renaming a
+   term under OKR Settings actually changes the nav/page titles, that
+   disabling Key Result actually blocks creating one, and — the thing
+   that was actually broken — that creating and editing an Objective and
+   a Key Result now works.
+7. Then continue Stage 4 at Module 3 (secondary entities: Initiative,
    Check-in, Reflection) against the same Stage 2 data model — this is
    also when the OKR Elements toggles for those three actually start
    having a visible effect.
