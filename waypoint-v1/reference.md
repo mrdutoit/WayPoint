@@ -42,20 +42,32 @@ waypoint-v1/
 │   │   ├── health.js
 │   │   ├── auth-router.js     (login, password reset)
 │   │   ├── flags-router.js    (list/update feature flags)
-│   │   └── admin-router.js    (on-demand bootstrap)
+│   │   ├── admin-router.js    (on-demand bootstrap)
+│   │   ├── settings-router.js (cascade-levels, rubric — Module 2)
+│   │   ├── cycles-router.js   (Module 2)
+│   │   ├── objectives-router.js (Module 2)
+│   │   └── key-results-router.js (Module 2)
 │   ├── api-lib/                <- the real logic, never deployed directly
 │   │   ├── config.js
 │   │   ├── context/tenant.js   (Row-Level Security chokepoint)
-│   │   ├── middleware/auth.js
+│   │   ├── middleware/
+│   │   │   ├── auth.js
+│   │   │   └── errorResponse.js (Module 2 — typed service errors → HTTP status)
 │   │   └── services/
 │   │       (db.js, authService.js, auditService.js, flagService.js,
-│   │        bootstrapService.js, logger.js)
+│   │        bootstrapService.js, logger.js, errors.js,
+│   │        cascadeLevelService.js, cycleService.js,
+│   │        scoringRubricService.js, objectiveService.js,
+│   │        keyResultService.js — the last five are Module 2)
 │   ├── db/
-│   │   └── schema.sql          <- plain SQL, applied manually via Neon's console
+│   │   ├── schema.sql          <- plain SQL, applied manually via Neon's console
+│   │   └── 02-okr-core.sql     <- Module 2: cascade_level, cycle, scoring_rubric,
+│   │                              rubric_level, objective, key_result
 │   ├── src/                    <- the React app
 │   │   ├── components/Logo.jsx
 │   │   ├── context/ (RoleContext, FlagContext)
-│   │   ├── pages/ (Login, Dashboard, FeatureFlags)
+│   │   ├── pages/ (Login, Dashboard, FeatureFlags, Objectives,
+│   │   │           ObjectiveDetail, OkrSettings — last three are Module 2)
 │   │   ├── styles/tokens.js    <- design tokens, incl. brand colours
 │   │   └── App.jsx
 │   ├── public/                 <- favicon.png, apple-touch-icon.png, waypoint-icon.png
@@ -101,6 +113,23 @@ waypoint-v1/
   already protected by their own mechanism (lockout, or the bootstrap
   secret) independent of caller origin, which is what makes the
   exception safe rather than a general loosening.
+- **Every table carries `tenant_id` directly, even when it's also
+  derivable via a join (FR-010).** `okr.key_result` and
+  `okr.rubric_level` both get their own `tenant_id` column even though
+  the Stage 2 ERD's slimmed diagram view omits it there — the ERD text
+  itself says fields shown are only "relevant to that view," and FR-010
+  says "every table" without qualification. Applied to
+  `okr.audit_log` in the Stage 3 scaffold too, for the same reason.
+- **Typed service errors, not plain `Error`.** Every validation/
+  authorisation/not-found throw in the service layer uses
+  `ValidationError`/`ForbiddenError`/`NotFoundError` from
+  `api-lib/services/errors.js` (or a domain-specific subclass with its
+  own `name`, like `CascadeLevelInUseError`). `errorResponse.js` maps
+  by `err.name` — a plain `Error` falls through to a generic 500 instead
+  of the correct 400/403/404. This was a real bug the first time Module
+  2 was built (three of five new services used plain `Error`) — caught
+  by the router-level tests, not by inspection, which is the argument
+  for writing them rather than skipping straight to "looks right."
 
 ## Roles
 

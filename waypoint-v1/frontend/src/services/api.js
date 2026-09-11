@@ -49,3 +49,38 @@ export const flagsApi = {
 export const healthApi = {
   check: () => request('/health'),
 };
+
+// ---------- Module 2: core OKR entities ----------
+
+export const cascadeLevelsApi = {
+  list: () => request('/settings/cascade-levels'),
+  update: (labels) => request('/settings/cascade-levels', { method: 'PUT', body: JSON.stringify({ labels }) }),
+};
+
+export const rubricApi = {
+  get: () => request('/settings/rubric'),
+  update: (name, levels) => request('/settings/rubric', { method: 'PUT', body: JSON.stringify({ name, levels }) }),
+};
+
+export const cyclesApi = {
+  list: () => request('/cycles'),
+  create: ({ name, cadence, startDate, endDate }) =>
+    request('/cycles', { method: 'POST', body: JSON.stringify({ name, cadence, startDate, endDate }) }),
+  activate: (id) => request(`/cycles/${id}/activate`, { method: 'POST' }),
+};
+
+export const objectivesApi = {
+  list: () => request('/objectives'),
+  get: (id) => request(`/objectives/${id}`),
+  create: ({ title, cascadeLevelId, parentObjectiveId, ownerId }) =>
+    request('/objectives', { method: 'POST', body: JSON.stringify({ title, cascadeLevelId, parentObjectiveId, ownerId }) }),
+  update: (id, { title, parentObjectiveId }) =>
+    request(`/objectives/${id}`, { method: 'PATCH', body: JSON.stringify({ title, parentObjectiveId }) }),
+  createKeyResult: (id, { title, weighting, rubricId }) =>
+    request(`/objectives/${id}/key-results`, { method: 'POST', body: JSON.stringify({ title, weighting, rubricId }) }),
+};
+
+export const keyResultsApi = {
+  update: (id, { title, weighting }) =>
+    request(`/key-results/${id}`, { method: 'PATCH', body: JSON.stringify({ title, weighting }) }),
+};

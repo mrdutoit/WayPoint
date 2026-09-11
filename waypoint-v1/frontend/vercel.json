@@ -7,6 +7,10 @@
     { "source": "/api/auth/:slug*", "destination": "/api/auth-router?slug=:slug*" },
     { "source": "/api/flags/:slug*", "destination": "/api/flags-router?slug=:slug*" },
     { "source": "/api/admin/:slug*", "destination": "/api/admin-router?slug=:slug*" },
+    { "source": "/api/settings/:slug*", "destination": "/api/settings-router?slug=:slug*" },
+    { "source": "/api/cycles/:slug*", "destination": "/api/cycles-router?slug=:slug*" },
+    { "source": "/api/objectives/:slug*", "destination": "/api/objectives-router?slug=:slug*" },
+    { "source": "/api/key-results/:slug*", "destination": "/api/key-results-router?slug=:slug*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

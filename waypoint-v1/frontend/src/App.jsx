@@ -5,11 +5,14 @@ import { useWindowSize } from './hooks/useWindowSize.js';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import FeatureFlags from './pages/FeatureFlags.jsx';
+import Objectives from './pages/Objectives.jsx';
+import ObjectiveDetail from './pages/ObjectiveDetail.jsx';
+import OkrSettings from './pages/OkrSettings.jsx';
 import { Logo } from './components/Logo.jsx';
 import { s, colors } from './styles/tokens.js';
 
 function Shell({ children }) {
-  const { user, setUser, role, isPlatformAdmin } = useRole();
+  const { user, setUser, role, isPlatformAdmin, isTenantAdmin } = useRole();
   const { isMobile } = useWindowSize();
   const previewMode = !user;
 
@@ -21,6 +24,12 @@ function Shell({ children }) {
           {!isMobile && (
             <>
               <Link to="/" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>Dashboard</Link>
+              <Link to="/objectives" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>Objectives</Link>
+              {isTenantAdmin && (
+                <Link to="/okr-settings" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
+                  OKR Settings
+                </Link>
+              )}
               {isPlatformAdmin && (
                 <Link to="/admin/flags" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
                   Feature Flags
@@ -80,6 +89,24 @@ export default function App() {
                 <RequireAuth>
                   <RequireRole roles={['PlatformAdmin']}>
                     <Shell><FeatureFlags /></Shell>
+                  </RequireRole>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/objectives"
+              element={<RequireAuth><Shell><Objectives /></Shell></RequireAuth>}
+            />
+            <Route
+              path="/objectives/:id"
+              element={<RequireAuth><Shell><ObjectiveDetail /></Shell></RequireAuth>}
+            />
+            <Route
+              path="/okr-settings"
+              element={
+                <RequireAuth>
+                  <RequireRole roles={['TenantAdmin']}>
+                    <Shell><OkrSettings /></Shell>
                   </RequireRole>
                 </RequireAuth>
               }
