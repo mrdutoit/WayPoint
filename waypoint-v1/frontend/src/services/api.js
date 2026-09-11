@@ -38,6 +38,8 @@ export const authApi = {
   login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   requestPasswordReset: (email) => request('/auth/reset-password/request', { method: 'POST', body: JSON.stringify({ email }) }),
   confirmPasswordReset: (token, newPassword) => request('/auth/reset-password/confirm', { method: 'POST', body: JSON.stringify({ token, newPassword }) }),
+  changePassword: (currentPassword, newPassword) =>
+    request('/auth/change-password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) }),
 };
 
 export const flagsApi = {
@@ -83,4 +85,21 @@ export const objectivesApi = {
 export const keyResultsApi = {
   update: (id, { title, weighting }) =>
     request(`/key-results/${id}`, { method: 'PATCH', body: JSON.stringify({ title, weighting }) }),
+};
+
+// ---------- User management (PlatformAdmin/TenantAdmin) ----------
+
+export const tenantsApi = {
+  list: () => request('/tenants'),
+  get: (id) => request(`/tenants/${id}`),
+  create: ({ name, region, adminEmail, adminFirstName, adminLastName, adminPassword }) =>
+    request('/tenants', { method: 'POST', body: JSON.stringify({ name, region, adminEmail, adminFirstName, adminLastName, adminPassword }) }),
+};
+
+export const usersApi = {
+  list: () => request('/users'),
+  invite: ({ role, email, firstName, lastName, password, managerId }) =>
+    request('/users/invite', { method: 'POST', body: JSON.stringify({ role, email, firstName, lastName, password, managerId }) }),
+  updateRole: (id, role) => request(`/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+  forcePasswordReset: (id, password) => request(`/users/${id}/force-password-reset`, { method: 'PUT', body: JSON.stringify({ password }) }),
 };

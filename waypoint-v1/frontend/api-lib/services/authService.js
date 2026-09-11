@@ -23,6 +23,23 @@ export function issueToken(user) {
   );
 }
 
+/**
+ * Same policy for every path that sets a password — self-service reset,
+ * change-password, admin-created account, admin force-reset — so there
+ * is exactly one password policy in the app, not one per endpoint that
+ * happened to remember to check it. Matches MedBroker's
+ * checkPasswordComplexity (authService.js) rule for rule.
+ */
+export function checkPasswordComplexity(plaintext) {
+  const problems = [];
+  if (!plaintext || plaintext.length < 12) problems.push('Must be at least 12 characters');
+  if (!/[a-z]/.test(plaintext)) problems.push('Must include a lowercase letter');
+  if (!/[A-Z]/.test(plaintext)) problems.push('Must include an uppercase letter');
+  if (!/[0-9]/.test(plaintext)) problems.push('Must include a digit');
+  if (!/[^A-Za-z0-9]/.test(plaintext)) problems.push('Must include a symbol');
+  return problems;
+}
+
 export function verifyToken(token) {
   return jwt.verify(token, config.jwtSecret); // throws on invalid/expired
 }

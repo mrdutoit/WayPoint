@@ -3,11 +3,14 @@ import { RoleProvider, useRole, ROLES } from './context/RoleContext.jsx';
 import { FlagProvider } from './context/FlagContext.jsx';
 import { useWindowSize } from './hooks/useWindowSize.js';
 import Login from './pages/Login.jsx';
+import ChangePassword from './pages/ChangePassword.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import FeatureFlags from './pages/FeatureFlags.jsx';
 import Objectives from './pages/Objectives.jsx';
 import ObjectiveDetail from './pages/ObjectiveDetail.jsx';
 import OkrSettings from './pages/OkrSettings.jsx';
+import TenantsAdmin from './pages/TenantsAdmin.jsx';
+import UsersAdmin from './pages/UsersAdmin.jsx';
 import { Logo } from './components/Logo.jsx';
 import { s, colors } from './styles/tokens.js';
 
@@ -26,14 +29,24 @@ function Shell({ children }) {
               <Link to="/" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>Dashboard</Link>
               <Link to="/objectives" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>Objectives</Link>
               {isTenantAdmin && (
-                <Link to="/okr-settings" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
-                  OKR Settings
-                </Link>
+                <>
+                  <Link to="/okr-settings" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
+                    OKR Settings
+                  </Link>
+                  <Link to="/users" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
+                    Users
+                  </Link>
+                </>
               )}
               {isPlatformAdmin && (
-                <Link to="/admin/flags" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
-                  Feature Flags
-                </Link>
+                <>
+                  <Link to="/tenants" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
+                    Tenants
+                  </Link>
+                  <Link to="/admin/flags" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
+                    Feature Flags
+                  </Link>
+                </>
               )}
             </>
           )}
@@ -48,7 +61,12 @@ function Shell({ children }) {
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         ) : (
-          <button onClick={() => setUser(null)} style={s.btnSecondary}>Sign out</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <Link to="/change-password" style={{ color: colors.ink500, textDecoration: 'none', fontSize: 13 }}>
+              Change password
+            </Link>
+            <button onClick={() => setUser(null)} style={s.btnSecondary}>Sign out</button>
+          </div>
         )}
       </nav>
       {children}
@@ -59,6 +77,10 @@ function Shell({ children }) {
 function RequireAuth({ children }) {
   const { user } = useRole();
   if (!user) return <Navigate to="/login" replace />;
+  // An admin-set password (invite or force-reset) always forces a change
+  // before anything else in the app is reachable — see ChangePassword.jsx
+  // and auth-router.js's change-password handler.
+  if (user.passwordMustChange) return <ChangePassword forced />;
   return children;
 }
 
@@ -75,6 +97,10 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route
+              path="/change-password"
+              element={<RequireAuth><Shell><ChangePassword /></Shell></RequireAuth>}
+            />
             <Route
               path="/"
               element={
@@ -107,6 +133,26 @@ export default function App() {
                 <RequireAuth>
                   <RequireRole roles={['TenantAdmin']}>
                     <Shell><OkrSettings /></Shell>
+                  </RequireRole>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <RequireAuth>
+                  <RequireRole roles={['TenantAdmin']}>
+                    <Shell><UsersAdmin /></Shell>
+                  </RequireRole>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/tenants"
+              element={
+                <RequireAuth>
+                  <RequireRole roles={['PlatformAdmin']}>
+                    <Shell><TenantsAdmin /></Shell>
                   </RequireRole>
                 </RequireAuth>
               }

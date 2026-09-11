@@ -23,7 +23,7 @@ export default function Login() {
       // Decoded client-side only to drive the nav — every request is
       // still verified server-side regardless of what this shows.
       const payload = JSON.parse(atob(result.token.split('.')[1]));
-      setUser({ id: payload.sub, tenantId: payload.tenantId, role: payload.role, email });
+      setUser({ id: payload.sub, tenantId: payload.tenantId, role: payload.role, email, passwordMustChange: result.passwordMustChange });
       navigate('/');
     } catch (err) {
       setError(err.message ?? 'Invalid email or password');

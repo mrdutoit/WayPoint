@@ -40,9 +40,11 @@ waypoint-v1/
 ├── frontend/                  <- the one Vercel project
 │   ├── api/                   <- thin router files, each its own Vercel Function
 │   │   ├── health.js
-│   │   ├── auth-router.js     (login, password reset)
+│   │   ├── auth-router.js     (login, password reset, change-password)
 │   │   ├── flags-router.js    (list/update feature flags)
 │   │   ├── admin-router.js    (on-demand bootstrap)
+│   │   ├── tenants-router.js  (create/list tenants — FR-011)
+│   │   ├── users-router.js    (invite, role, force-password-reset)
 │   │   ├── settings-router.js (cascade-levels, rubric — Module 2)
 │   │   ├── cycles-router.js   (Module 2)
 │   │   ├── objectives-router.js (Module 2)
@@ -55,19 +57,22 @@ waypoint-v1/
 │   │   │   └── errorResponse.js (Module 2 — typed service errors → HTTP status)
 │   │   └── services/
 │   │       (db.js, authService.js, auditService.js, flagService.js,
-│   │        bootstrapService.js, logger.js, errors.js,
-│   │        cascadeLevelService.js, cycleService.js,
+│   │        bootstrapService.js, logger.js, errors.js, userService.js,
+│   │        tenantService.js, cascadeLevelService.js, cycleService.js,
 │   │        scoringRubricService.js, objectiveService.js,
-│   │        keyResultService.js — the last five are Module 2)
+│   │        keyResultService.js — last five are Module 2, userService.js
+│   │        and tenantService.js are the user-management follow-up)
 │   ├── db/
 │   │   ├── schema.sql          <- plain SQL, applied manually via Neon's console
-│   │   └── 02-okr-core.sql     <- Module 2: cascade_level, cycle, scoring_rubric,
-│   │                              rubric_level, objective, key_result
+│   │   ├── 02-okr-core.sql     <- Module 2: cascade_level, cycle, scoring_rubric,
+│   │   │                          rubric_level, objective, key_result
+│   │   └── 03-user-management.sql <- adds password_must_change to user_account
 │   ├── src/                    <- the React app
 │   │   ├── components/Logo.jsx
 │   │   ├── context/ (RoleContext, FlagContext)
-│   │   ├── pages/ (Login, Dashboard, FeatureFlags, Objectives,
-│   │   │           ObjectiveDetail, OkrSettings — last three are Module 2)
+│   │   ├── pages/ (Login, ChangePassword, Dashboard, FeatureFlags,
+│   │   │           Objectives, ObjectiveDetail, OkrSettings, TenantsAdmin,
+│   │   │           UsersAdmin)
 │   │   ├── styles/tokens.js    <- design tokens, incl. brand colours
 │   │   └── App.jsx
 │   ├── public/                 <- favicon.png, apple-touch-icon.png, waypoint-icon.png
@@ -130,6 +135,29 @@ waypoint-v1/
   2 was built (three of five new services used plain `Error`) — caught
   by the router-level tests, not by inspection, which is the argument
   for writing them rather than skipping straight to "looks right."
+- **Admin-created users always force a password change (`password_must_change`).**
+  There is no transactional email provider wired up yet (see the TODO in
+  `auth-router.js`), so tenant provisioning (FR-011) and user invite both
+  have the Platform/Tenant Administrator type a temporary password
+  directly. Every such password sets `password_must_change = true`
+  (`db/03-user-management.sql`); the frontend blocks the entire app
+  behind `ChangePassword forced` (`App.jsx`'s `RequireAuth`) until it's
+  cleared via `PUT /api/auth/change-password`. This is what keeps an
+  admin-typed password from ever persisting as a shared secret. Pattern
+  and password-complexity rule (12+ chars, upper/lower/digit/symbol)
+  both carried over from MedBroker's equivalent (`checkPasswordComplexity`,
+  §72/§118) rather than invented fresh — see `authService.js`.
+- **WayPoint's session is a client-held Bearer JWT with no server-side
+  revocation** (unlike MedBroker's httpOnly-cookie session, which can be
+  reissued/invalidated). `change-password` issues a fresh token so the
+  frontend doesn't need to force a re-login, but the previous token
+  remains technically valid until it naturally expires — a known gap,
+  not a decision anyone's actually made yet. Also: `api.js`'s auth token
+  lives in a module-level JS variable only, not persisted to storage —
+  a page refresh currently logs everyone out. Both are pre-existing
+  Stage 3 scaffold gaps, surfaced while building this, not introduced by
+  it — worth a decision before either matters for anything higher-stakes
+  than OKR content.
 
 ## Roles
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   hashPassword, verifyPassword, issueToken, verifyToken,
-  isLockedOut, computeLockout, LOCKOUT_THRESHOLD,
+  isLockedOut, computeLockout, LOCKOUT_THRESHOLD, checkPasswordComplexity,
 } from '../frontend/api-lib/services/authService.js';
 
 describe('password hashing', () => {
@@ -59,5 +59,33 @@ describe('account lockout', () => {
 
   it('treats no lockedUntil as not locked out', () => {
     expect(isLockedOut({ lockedUntil: null })).toBe(false);
+  });
+});
+
+describe('checkPasswordComplexity', () => {
+  it('accepts a password meeting every rule', () => {
+    expect(checkPasswordComplexity('Correct-Horse-9')).toEqual([]);
+  });
+
+  it('flags every missing rule at once, not just the first', () => {
+    const problems = checkPasswordComplexity('short');
+    expect(problems).toContain('Must be at least 12 characters');
+    expect(problems).toContain('Must include an uppercase letter');
+    expect(problems).toContain('Must include a digit');
+    expect(problems).toContain('Must include a symbol');
+  });
+
+  it('rejects an empty or missing password without throwing', () => {
+    expect(checkPasswordComplexity('')).toContain('Must be at least 12 characters');
+    expect(checkPasswordComplexity(undefined)).toContain('Must be at least 12 characters');
+  });
+
+  it.each([
+    ['nouppercaseletter9!', 'Must include an uppercase letter'],
+    ['NOLOWERCASELETTER9!', 'Must include a lowercase letter'],
+    ['NoDigitsHereAtAll!!', 'Must include a digit'],
+    ['NoSymbolsHere12345', 'Must include a symbol'],
+  ])('flags %s for the missing rule', (password, expectedProblem) => {
+    expect(checkPasswordComplexity(password)).toContain(expectedProblem);
   });
 });

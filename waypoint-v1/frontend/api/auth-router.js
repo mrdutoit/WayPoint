@@ -1,10 +1,11 @@
 import { randomBytes, createHash } from 'crypto';
 import {
   hashPassword, verifyPassword, issueToken,
-  isLockedOut, computeLockout, LOCKOUT_THRESHOLD,
+  isLockedOut, computeLockout, LOCKOUT_THRESHOLD, checkPasswordComplexity,
 } from '../api-lib/services/authService.js';
 import { withPlatformContext, withTenantContext } from '../api-lib/context/tenant.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
+import { getAuthenticatedUser } from '../api-lib/middleware/auth.js';
 
 // A dummy hash to compare against when no user is found, so a login
 // attempt against a non-existent email takes the same time as one
@@ -19,8 +20,8 @@ const DUMMY_HASH = '$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQ$YQ8f0K3v123456789
 // reveals whether an account exists either way.
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
 export default async function handler(req, res) {
@@ -33,6 +34,7 @@ export default async function handler(req, res) {
   if (req.method === 'POST' && action === 'login') return loginAction(req, res);
   if (req.method === 'POST' && action === 'reset-password/request') return requestResetAction(req, res);
   if (req.method === 'POST' && action === 'reset-password/confirm') return confirmResetAction(req, res);
+  if (req.method === 'PUT' && action === 'change-password') return changePasswordAction(req, res);
 
   return res.status(404).json({ error: 'Not found' });
 }
@@ -50,7 +52,7 @@ async function loginAction(req, res) {
   // user is found.
   const user = await withPlatformContext((client) =>
     client.query(
-      `SELECT id, tenant_id, role, password_hash, failed_attempts, locked_until
+      `SELECT id, tenant_id, role, password_hash, failed_attempts, locked_until, password_must_change
        FROM okr.user_account WHERE email = $1`,
       [email.toLowerCase().trim()]
     ).then((r) => r.rows[0] ?? null)
@@ -99,7 +101,7 @@ async function loginAction(req, res) {
     });
   });
 
-  res.status(200).json({ token });
+  res.status(200).json({ token, passwordMustChange: user.password_must_change });
 }
 
 async function requestResetAction(req, res) {
@@ -140,8 +142,9 @@ async function confirmResetAction(req, res) {
   if (!token || !newPassword || typeof token !== 'string' || typeof newPassword !== 'string') {
     return res.status(400).json({ error: 'token and newPassword are required' });
   }
-  if (newPassword.length < 12) {
-    return res.status(400).json({ error: 'Password must be at least 12 characters' });
+  const passwordProblems = checkPasswordComplexity(newPassword);
+  if (passwordProblems.length > 0) {
+    return res.status(400).json({ error: passwordProblems.join('; ') });
   }
 
   const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -165,7 +168,7 @@ async function confirmResetAction(req, res) {
     await client.query(
       `UPDATE okr.user_account
        SET password_hash = $1, reset_token_hash = NULL, reset_token_expiry = NULL,
-           failed_attempts = 0, locked_until = NULL
+           failed_attempts = 0, locked_until = NULL, password_must_change = false
        WHERE id = $2`,
       [passwordHash, user.id]
     );
@@ -176,4 +179,67 @@ async function confirmResetAction(req, res) {
   });
 
   res.status(200).json({ message: 'Password updated. You can now sign in.' });
+}
+
+/**
+ * PUT /api/auth/change-password — any authenticated role, self-service
+ * only (always operates on the caller's own id from the verified token,
+ * never one taken from the request body). Requires currentPassword even
+ * on a forced first-login change: the user just used it to sign in, so
+ * they still know it, and re-entering it here is what stops a
+ * still-valid but stale token (e.g. left open in another tab) from being
+ * enough on its own to take over the account. Always clears
+ * password_must_change, whether this was a forced first-login change or
+ * a voluntary one — same as MedBroker's equivalent endpoint.
+ *
+ * WayPoint holds its session as a client-side Bearer JWT with no
+ * server-side revocation list (unlike MedBroker's httpOnly-cookie
+ * session, which reissues on change) — the previous token remains
+ * technically valid until it naturally expires. A fresh token is issued
+ * here purely so the frontend doesn't need to force a re-login; it is
+ * not a security boundary. Worth a decision before this matters for
+ * anything higher-stakes than OKR content.
+ */
+async function changePasswordAction(req, res) {
+  const user = getAuthenticatedUser(req);
+  if (!user) return res.status(401).json({ error: 'Missing or invalid authorization token' });
+
+  const { currentPassword, newPassword } = req.body ?? {};
+  if (!currentPassword || !newPassword || typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+    return res.status(400).json({ error: 'currentPassword and newPassword are required' });
+  }
+  const passwordProblems = checkPasswordComplexity(newPassword);
+  if (passwordProblems.length > 0) {
+    return res.status(400).json({ error: passwordProblems.join('; ') });
+  }
+
+  const runInContext = user.tenantId
+    ? (fn) => withTenantContext(user.tenantId, fn)
+    : (fn) => withPlatformContext(fn);
+
+  const currentHash = await runInContext((client) =>
+    client.query(`SELECT password_hash FROM okr.user_account WHERE id = $1`, [user.id])
+      .then((r) => r.rows[0]?.password_hash ?? null)
+  );
+  if (!currentHash) return res.status(404).json({ error: 'Account not found' });
+
+  const valid = await verifyPassword(currentHash, currentPassword);
+  if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
+
+  const newHash = await hashPassword(newPassword);
+  await runInContext(async (client) => {
+    await client.query(
+      `UPDATE okr.user_account
+       SET password_hash = $1, password_must_change = false, failed_attempts = 0, locked_until = NULL
+       WHERE id = $2`,
+      [newHash, user.id]
+    );
+    await recordAuditEvent(client, {
+      tenantId: user.tenantId, actorId: user.id,
+      action: 'user.password_changed', entityType: 'UserAccount', entityId: user.id,
+    });
+  });
+
+  const token = issueToken({ id: user.id, tenantId: user.tenantId, role: user.role });
+  res.status(200).json({ token });
 }
