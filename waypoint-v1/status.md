@@ -5,15 +5,16 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** as of a testing-feedback round following Module 2 and
-the user-management delivery — a real production bug fix (router 404s),
-a Cadence entity + Cycle rework, a custom DatePicker, and FR-013/FR-025
-pulled forward from Module 7. 209/209 tests, clean `npm run build`.
-**None of this round's work has been applied or deployed yet** — that's
-the next action, see below. Module 2 and user-management's own code
-were confirmed deployed in earlier sessions (see git history / prior
-delivery notes); whether every migration up to this point has actually
-been applied to Neon is not independently re-verified here.
+**Last updated:** all four migrations from the previous round
+(`02-okr-core.sql` through `05-terminology-and-element-config.sql`)
+confirmed applied to Neon by Mark. `db/schema.sql` has been rewritten to
+reflect that as a single current-state file, and the four migration
+files deleted from the repo — back to the MedBroker convention (apply →
+fold into `schema.sql` → delete the migration file), which had drifted
+this round without a deliberate decision to change it. An
+"Internal server error" hit while creating an Objective as Manager/
+Employee is still open — see below, genuinely unresolved as of this
+note, not something guessed at and silently marked fixed.
 
 ## Where things actually stand
 
@@ -146,18 +147,32 @@ more deliberate), not fixed here.
 
 ## Next immediate step
 
-1. Apply, in order, via the Neon SQL console (re-verify which of these
-   are already applied before starting — see the caveat at the top of
-   this file): `02-okr-core.sql`, `03-user-management.sql`,
-   `04-cadence-and-cycle-rework.sql` (read its header first — it has a
-   manual verification step for existing test data),
+1. In GitHub, delete the four migration files this round folded into
+   `schema.sql` — they're already gone from this delivery's zip, but
+   deleting them from the actual repo is a manual step on your side
+   (dragging a folder onto github.dev merges/adds, it doesn't delete
+   files absent from the zip): `02-okr-core.sql`,
+   `03-user-management.sql`, `04-cadence-and-cycle-rework.sql`,
    `05-terminology-and-element-config.sql`.
 2. Push this delta to GitHub and let Vercel redeploy.
-3. Re-verify end to end, in particular: cycle creation with a Cadence
-   dropdown and no manual end date, that no "activate" control remains,
-   that renaming a term under OKR Settings actually changes the nav/page
-   titles, and that disabling Key Result actually blocks creating one.
-4. Then continue Stage 4 at Module 3 (secondary entities: Initiative,
+3. **Diagnose the "Internal server error" on Objective creation.**
+   Static review of `objectiveService.js`'s full create path, the real
+   (never-mocked-in-tests) `withTenantContext`, and `auditService.js`
+   didn't surface an obvious bug — which means either a genuine
+   production-only issue (a SQL typo my mocked tests can't catch, since
+   they never validate real SQL against a real schema) or a missing
+   prerequisite (no Cycle yet covering today's date, though that should
+   surface as a specific 400, not this generic 500). The real error is
+   sitting in Vercel's function logs — `errorResponse.js` was built
+   specifically to log unrecognised exceptions there
+   (`logger.error(..., 'Unhandled error in a Module 2 route')`) rather
+   than lose them. Pull that log text before guessing further.
+4. Once that's fixed, re-verify end to end: cycle creation with a
+   Cadence dropdown and no manual end date, that no "activate" control
+   remains, that renaming a term under OKR Settings actually changes the
+   nav/page titles, and that disabling Key Result actually blocks
+   creating one.
+5. Then continue Stage 4 at Module 3 (secondary entities: Initiative,
    Check-in, Reflection) against the same Stage 2 data model — this is
    also when the OKR Elements toggles for those three actually start
    having a visible effect.

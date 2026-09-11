@@ -106,7 +106,14 @@ waypoint-v1/
   (`auth.sso.enabled`) for later.
 - **Schema:** One plain SQL file (`db/schema.sql`), applied by hand via
   Neon's SQL console — deliberately not a migration library at this
-  scale.
+  scale. `schema.sql` always describes what's *actually* live, never a
+  running history: a schema change ships as a short-lived migration
+  file, Mark applies it against Neon, `schema.sql` is then rewritten to
+  include the change directly, and the migration file is deleted from
+  the repo — same convention as MedBroker's `schema.postgres.sql`. If a
+  numbered migration file is ever sitting in `db/` alongside
+  `schema.sql`, that specifically means it hasn't been confirmed applied
+  and folded in yet — never assume otherwise, ask.
 
 ## Key design decisions worth knowing before changing anything
 

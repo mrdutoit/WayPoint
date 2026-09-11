@@ -10,7 +10,8 @@ import { ValidationError, ForbiddenError, NotFoundError } from './errors.js';
  * equivalent (§118) — flagged in the router file too.
  *
  * Every admin-set password (invite or force-reset) sets
- * password_must_change = true — see db/03-user-management.sql. There is
+ * password_must_change = true — see db/schema.sql's user_account table.
+ * There is
  * no email delivery wired up yet (auth-router.js's own TODO), so an
  * admin-typed temporary password is the only bootstrap mechanism
  * available; forcing an immediate change is what keeps that from being a
