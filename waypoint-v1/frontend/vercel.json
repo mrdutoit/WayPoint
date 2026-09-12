@@ -9,6 +9,7 @@
     { "source": "/api/admin/:slug*", "destination": "/api/admin-router?slug=:slug*" },
     { "source": "/api/tenants/:slug*", "destination": "/api/tenants-router?slug=:slug*" },
     { "source": "/api/users/:slug*", "destination": "/api/users-router?slug=:slug*" },
+    { "source": "/api/me/:slug*", "destination": "/api/me-router?slug=:slug*" },
     { "source": "/api/settings/:slug*", "destination": "/api/settings-router?slug=:slug*" },
     { "source": "/api/cycles/:slug*", "destination": "/api/cycles-router?slug=:slug*" },
     { "source": "/api/objectives/:slug*", "destination": "/api/objectives-router?slug=:slug*" },

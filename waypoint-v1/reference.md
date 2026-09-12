@@ -45,6 +45,7 @@ waypoint-v1/
 │   │   ├── admin-router.js    (on-demand bootstrap)
 │   │   ├── tenants-router.js  (create/list tenants — FR-011)
 │   │   ├── users-router.js    (invite, role, force-password-reset)
+│   │   ├── me-router.js       (self-service profile — theme, avatar)
 │   │   ├── settings-router.js (cascade-levels, rubric, cadences, okr-elements, terminology)
 │   │   ├── cycles-router.js   (date-driven — no activate action)
 │   │   ├── objectives-router.js
@@ -62,25 +63,30 @@ waypoint-v1/
 │   │        userService.js, tenantService.js, cascadeLevelService.js,
 │   │        cycleService.js, cadenceService.js, scoringRubricService.js,
 │   │        objectiveService.js, keyResultService.js,
-│   │        okrElementConfigService.js, terminologyService.js)
+│   │        okrElementConfigService.js, terminologyService.js,
+│   │        profileService.js)
 │   ├── db/
-│   │   ├── schema.sql          <- plain SQL, applied manually via Neon's console
-│   │   ├── 02-okr-core.sql     <- cascade_level, cycle, scoring_rubric,
-│   │   │                          rubric_level, objective, key_result
-│   │   ├── 03-user-management.sql <- adds password_must_change to user_account
-│   │   ├── 04-cadence-and-cycle-rework.sql <- Cadence entity; Cycle: cadence_id
-│   │   │                          replaces free-text cadence, is_active removed,
-│   │   │                          EXCLUDE constraint on overlapping dates
-│   │   └── 05-terminology-and-element-config.sql <- okr_element_config, terminology_setting
+│   │   ├── schema.sql          <- plain SQL, current-state reference —
+│   │   │                          applied manually via Neon's console
+│   │   └── 06-user-profile.sql <- pending: theme/avatar_option on
+│   │                                user_account, not yet confirmed
+│   │                                applied or folded into schema.sql
 │   ├── src/                    <- the React app
 │   │   ├── components/ (Logo.jsx, DatePicker.jsx — internal/staff-facing
 │   │   │                calendar popover, ported from MedBroker's component
-│   │   │                of the same name)
-│   │   ├── context/ (RoleContext, FlagContext, TerminologyContext — useTerms())
+│   │   │                of the same name — Avatar.jsx — coloured initials
+│   │   │                bubble, not a photo)
+│   │   ├── constants/avatarOptions.js <- avatar colour/gradient ids
+│   │   ├── context/ (RoleContext — also does the one post-login profile-
+│   │   │             enrichment fetch — FlagContext, TerminologyContext —
+│   │   │             useTerms() — ThemeContext — useTheme())
 │   │   ├── pages/ (Login, ChangePassword, Dashboard, FeatureFlags,
 │   │   │           Objectives, ObjectiveDetail, OkrSettings, TenantsAdmin,
-│   │   │           UsersAdmin)
-│   │   ├── styles/tokens.js    <- design tokens, incl. brand colours
+│   │   │           UsersAdmin, Settings — theme + avatar)
+│   │   ├── styles/tokens.js    <- design tokens; colours are var()
+│   │   │                          references, not hex — themes.css is
+│   │   │                          the actual source of truth per theme
+│   │   ├── themes.css          <- [data-theme="light"|"dark"] variable blocks
 │   │   └── App.jsx
 │   ├── public/                 <- favicon.png, apple-touch-icon.png, waypoint-icon.png
 │   ├── vercel.json             <- routes friendly paths to the router files
@@ -270,6 +276,34 @@ waypoint-v1/
   columns") — applied here as a standing practice, not a one-off fix.
   Worth running before any delivery that touches a RETURNING clause, a
   JOIN, or a type this suite's mocks can't actually validate.
+
+- **Theme is a CSS-variable contract (`themes.css`), not per-component
+  styling.** `tokens.js`'s `colors` export holds `var(--x)` references,
+  never hex literals — `themes.css` is the only place an actual colour
+  value lives, in `[data-theme="light"|"dark"]` blocks. This is what
+  makes every existing page theme-aware without being touched
+  individually: they already go through `colors.*`/`s.*` from
+  `tokens.js`, so switching `ThemeContext`'s active theme reskins the
+  whole app for free. Two themes, not MedBroker's four — deliberate:
+  MedBroker's four palettes (custom fonts, mesh/grain textures) are its
+  own art direction; WayPoint's two both carry WayPoint's own brand
+  blue instead of porting MedBroker's. Adding a third theme later is
+  just another `[data-theme="..."]` block plus an entry in
+  `ThemeContext.jsx`'s `THEMES` — the pattern doesn't need to change.
+- **Avatar is a colour/gradient pick, not a photo upload** — matches
+  MedBroker's `User.avatarColour` exactly (`constants/avatarOptions.js`
+  stores a stable id, not a file). WayPoint has no blob storage
+  configured and this avoids needing one for what's a cosmetic
+  preference, not a product requirement.
+- **`RoleContext.jsx` does the one post-login profile-enrichment fetch**
+  (`GET /api/me`) — `firstName`/`lastName`/`theme`/`avatarOption` are
+  not in the JWT (`issueToken` only signs `sub`/`tenantId`/`role`), so
+  something has to fetch them once after login. Doing it in
+  `RoleContext` rather than in each consumer (`ThemeContext`, the nav's
+  `Avatar`, `Settings.jsx`) means login triggers exactly one
+  `GET /api/me`, not several independent ones racing each other.
+  `ThemeContext` reads `user.theme` from this rather than fetching
+  independently.
 
 ## Roles
 

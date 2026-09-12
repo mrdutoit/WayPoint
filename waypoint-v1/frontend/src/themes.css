@@ -1,0 +1,68 @@
+/**
+ * themes.css — WayPoint theme contract.
+ *
+ * Every theme defines the same CSS variables on [data-theme="..."] (set
+ * on <html> by ThemeContext.jsx). tokens.js's `colors` export references
+ * only these variables, so every existing page/component that already
+ * imports `colors` from tokens.js becomes theme-aware automatically —
+ * no component file needs to change for this to work.
+ *
+ * Two themes, not MedBroker's four: "a theme like MedBroker" is read
+ * here as the *capability* (pick a theme, it reskins the whole app,
+ * persisted per-user), not a request to port MedBroker's own art
+ * direction — those four palettes, custom fonts, and mesh/grain
+ * textures are MedBroker's brand, not WayPoint's. WayPoint's own brand
+ * blue (reference.md's Brand section — brand500 #2E8CF0 family) carries
+ * through both themes here; Dark is a genuine repaint for contrast on a
+ * dark background, not just light values dimmed down, but it has not
+ * been visually verified in a real browser — sanity-check contrast
+ * before relying on it. Flag if more themes are wanted; the pattern
+ * (add a [data-theme="..."] block with the same variable set, add its
+ * id to ThemeContext.jsx's THEMES) is now in place either way.
+ *
+ * Contract: --brand50 --brand100 --brand500 --brand600 --brand700
+ *           --ink50 --ink100 --ink200 --ink300 --ink400 --ink500
+ *           --ink600 --ink700 --ink800 --ink900
+ *           --success --success-bg --warn --warn-bg --danger --danger-bg
+ *           --panel --line
+ */
+
+[data-theme="light"] {
+  color-scheme: light;
+  --brand50: #eaf4fe; --brand100: #d3e9fd; --brand500: #2e8cf0; --brand600: #1a5fd0; --brand700: #123f9e;
+  --ink50: #f8fafc; --ink100: #f1f5f9; --ink200: #e2e8f0; --ink300: #cbd5e1;
+  --ink400: #94a3b8; --ink500: #64748b; --ink600: #475569; --ink700: #334155; --ink800: #1e293b; --ink900: #0f172a;
+  --success: #16a34a; --success-bg: #f0fdf4;
+  --warn: #d97706; --warn-bg: #fffbeb;
+  --danger: #dc2626; --danger-bg: #fef2f2;
+  --panel: #ffffff; --line: #e2e8f0;
+  --app-bg: #f8fafc;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  /* Brand blue lightened across the board for legibility on a dark
+     surface — on a white background, darker means "stronger emphasis";
+     on a dark background that relationship inverts, so brand700 (the
+     strongest-emphasis role) is now the lightest of the three, not the
+     darkest. */
+  --brand50: #12213a; --brand100: #1a2f52; --brand500: #4f9eff; --brand600: #6badff; --brand700: #93c5ff;
+  /* The ink scale is the light theme's, reversed end to end (ink50 was
+     "near-white background", now "near-black background"; ink900 was
+     "near-black text", now "near-white text") — the standard, testable
+     way to invert a neutral scale rather than inventing new values by
+     eye. */
+  --ink50: #0b1220; --ink100: #141b2e; --ink200: #1e293b; --ink300: #334155;
+  --ink400: #64748b; --ink500: #94a3b8; --ink600: #cbd5e1; --ink700: #e2e8f0; --ink800: #f1f5f9; --ink900: #f8fafc;
+  --success: #4ade80; --success-bg: #0f2a1a;
+  --warn: #fbbf24; --warn-bg: #2a1f0a;
+  --danger: #f87171; --danger-bg: #2a1212;
+  --panel: #111827; --line: #1e293b;
+  --app-bg: #0b1220;
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--ink900);
+  transition: background-color .2s ease, color .2s ease;
+}

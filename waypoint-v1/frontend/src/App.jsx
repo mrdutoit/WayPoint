@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { RoleProvider, useRole, ROLES } from './context/RoleContext.jsx';
 import { FlagProvider } from './context/FlagContext.jsx';
 import { TerminologyProvider, useTerms } from './context/TerminologyContext.jsx';
+import { ThemeProvider } from './context/ThemeContext.jsx';
 import { useWindowSize } from './hooks/useWindowSize.js';
 import Login from './pages/Login.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
@@ -12,7 +13,9 @@ import ObjectiveDetail from './pages/ObjectiveDetail.jsx';
 import OkrSettings from './pages/OkrSettings.jsx';
 import TenantsAdmin from './pages/TenantsAdmin.jsx';
 import UsersAdmin from './pages/UsersAdmin.jsx';
+import Settings from './pages/Settings.jsx';
 import { Logo } from './components/Logo.jsx';
+import { Avatar } from './components/Avatar.jsx';
 import { s, colors } from './styles/tokens.js';
 
 function Shell({ children }) {
@@ -67,6 +70,10 @@ function Shell({ children }) {
             <Link to="/change-password" style={{ color: colors.ink500, textDecoration: 'none', fontSize: 13 }}>
               Change password
             </Link>
+            <Link to="/settings" style={{ display: 'flex', alignItems: 'center', gap: 8, color: colors.ink700, textDecoration: 'none', fontSize: 13 }}>
+              <Avatar firstName={user?.firstName} lastName={user?.lastName} avatarOption={user?.avatarOption} size={28} />
+              {!isMobile && 'Settings'}
+            </Link>
             <button onClick={() => setUser(null)} style={s.btnSecondary}>Sign out</button>
           </div>
         )}
@@ -95,6 +102,7 @@ function RequireRole({ roles, children }) {
 export default function App() {
   return (
     <RoleProvider>
+      <ThemeProvider>
       <TerminologyProvider>
         <FlagProvider>
           <BrowserRouter>
@@ -103,6 +111,10 @@ export default function App() {
             <Route
               path="/change-password"
               element={<RequireAuth><Shell><ChangePassword /></Shell></RequireAuth>}
+            />
+            <Route
+              path="/settings"
+              element={<RequireAuth><Shell><Settings /></Shell></RequireAuth>}
             />
             <Route
               path="/"
@@ -164,6 +176,7 @@ export default function App() {
           </BrowserRouter>
         </FlagProvider>
       </TerminologyProvider>
+      </ThemeProvider>
     </RoleProvider>
   );
 }

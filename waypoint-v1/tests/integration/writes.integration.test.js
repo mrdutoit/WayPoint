@@ -34,6 +34,11 @@ const describeIfDb = hasRealDb ? describe : describe.skip;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const schemaPath = join(__dirname, '../../frontend/db/schema.sql');
+// Not yet folded into schema.sql (not confirmed applied to Neon yet) —
+// applied here too so this suite tests against the full intended
+// current-state schema, not a stale snapshot. Remove this once it's
+// folded in for real.
+const pendingMigrationPath = join(__dirname, '../../frontend/db/06-user-profile.sql');
 
 let client, pool;
 
@@ -54,6 +59,7 @@ describeIfDb('write paths against real Postgres', () => {
     await client.query('DROP SCHEMA IF EXISTS okr CASCADE');
     const schemaSql = readFileSync(schemaPath, 'utf8');
     await client.query(schemaSql);
+    await client.query(readFileSync(pendingMigrationPath, 'utf8'));
   });
 
   afterAll(async () => {
@@ -204,5 +210,24 @@ describeIfDb('write paths against real Postgres', () => {
     expect(withOverride.Objective).toBe('Goal');
     const reset = await inTenantContext(() => setTerminologyForTenant(client, tenantId, { Objective: '' }));
     expect(reset.Objective).toBe('Objective');
+  });
+
+  it('profileService.updateOwnProfile — real update, works for a tenant user', async () => {
+    const { updateOwnProfile } = await import('../../frontend/api-lib/services/profileService.js');
+    const profile = await inTenantContext(() => updateOwnProfile(client, employeeId, { theme: 'dark', avatarOption: 'teal' }));
+    expect(profile.theme).toBe('dark');
+    expect(profile.avatarOption).toBe('teal');
+  });
+
+  it('profileService.updateOwnProfile — real update, works for PlatformAdmin (no tenant)', async () => {
+    const { updateOwnProfile } = await import('../../frontend/api-lib/services/profileService.js');
+    await client.query('BEGIN');
+    await client.query(`SELECT set_config('app.is_platform_admin', 'true', true)`);
+    const admin = (await client.query(
+      `INSERT INTO okr.user_account (role, email, first_name, last_name, password_hash) VALUES ('PlatformAdmin','admin@waypoint.internal','A','B',' ') RETURNING id`
+    )).rows[0];
+    const profile = await updateOwnProfile(client, admin.id, { theme: 'light' });
+    await client.query('COMMIT');
+    expect(profile.theme).toBe('light');
   });
 });

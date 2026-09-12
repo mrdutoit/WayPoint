@@ -119,3 +119,8 @@ export const usersApi = {
   updateRole: (id, role) => request(`/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
   forcePasswordReset: (id, password) => request(`/users/${id}/force-password-reset`, { method: 'PUT', body: JSON.stringify({ password }) }),
 };
+
+export const meApi = {
+  get: () => request('/me'),
+  update: ({ theme, avatarOption }) => request('/me', { method: 'PATCH', body: JSON.stringify({ theme, avatarOption }) }),
+};

@@ -5,16 +5,14 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** all four migrations from the previous round
-(`02-okr-core.sql` through `05-terminology-and-element-config.sql`)
-confirmed applied to Neon by Mark. `db/schema.sql` has been rewritten to
-reflect that as a single current-state file, and the four migration
-files deleted from the repo — back to the MedBroker convention (apply →
-fold into `schema.sql` → delete the migration file), which had drifted
-this round without a deliberate decision to change it. An
-"Internal server error" hit while creating an Objective as Manager/
-Employee is still open — see below, genuinely unresolved as of this
-note, not something guessed at and silently marked fixed.
+**Last updated:** self-service Settings page added (theme + avatar
+preference), at Mark's request while confirming build scope. All
+backend work this round verified against real Postgres before delivery
+(16/16 integration tests), not just mocks — following directly from the
+`RETURNING o.id` lesson two rounds ago. The Objective-creation bug from
+the previous round is confirmed fixed and stays fixed; no regressions
+found. `db/06-user-profile.sql` is a new pending migration — not yet
+confirmed applied, not yet folded into `schema.sql`.
 
 ## Where things actually stand
 
@@ -37,6 +35,19 @@ note, not something guessed at and silently marked fixed.
     reporting, remaining administration) — not started.
 - **Pre-Handover Review:** Correctly not yet run — belongs after Stage 4
   completes, before Stage 5.
+
+**Hierarchy depth, confirmed directly (Mark asked while testing):**
+Objective → Key Result is as deep as it currently goes. Initiative and
+Check-in — which would nest *under* a Key Result — are Module 3, not
+started, which is also why every Objective/Key Result shows
+"Not Started" permanently right now: FR-019's actual score computation
+is driven entirely by Check-in submissions, and none can exist yet.
+That's expected, not a gap in what's already built.
+
+**Cross-cutting, not tied to a Module number:** a self-service Settings
+page (theme + avatar preference) — personal account settings apply to
+every role regardless of which OKR modules exist yet, so this was built
+as its own thing rather than folded into a specific Module.
 
 ## This round — a real production bug, plus direct testing feedback
 
@@ -145,72 +156,61 @@ that tab's session only. Session persistence itself (surfaced after
 Module 2) remains open — a real decision (localStorage vs. something
 more deliberate), not fixed here.
 
+## Settings page — theme + avatar (this round)
+
+Backend verified against real Postgres before delivery (see the
+integration-test lesson from the previous round) — `GET`/`PATCH /api/me`
+works for a tenant user and for PlatformAdmin alike (personal
+preferences, not tenant-scoped, unlike everything in `users-router.js`).
+
+- `db/06-user-profile.sql` — `theme`/`avatar_option` on `user_account`,
+  not yet confirmed applied or folded into `schema.sql`.
+- Avatar is a colour/gradient pick (`constants/avatarOptions.js`), not a
+  photo upload — matches MedBroker's exact pattern
+  (`User.avatarColour`); WayPoint has no blob storage set up and this
+  avoids needing one.
+- Two themes (Light default, Dark), not MedBroker's four — deliberate
+  scope call, not an oversight. MedBroker's four palettes (custom
+  fonts, mesh/grain textures) are MedBroker's own art direction;
+  WayPoint's two themes both carry its own brand blue
+  (`reference.md`'s Brand section) instead. The Dark palette is a
+  genuine repaint for contrast, not light values dimmed — but it has
+  **not been visually verified in a real browser**, only that the CSS
+  compiles and the variables resolve. Sanity-check contrast once
+  deployed. Flag if more themes are wanted; the pattern (add a
+  `[data-theme="..."]` block, add its id to `ThemeContext.jsx`) is in
+  place either way.
+- `tokens.js`'s `colors` export now holds `var(--x)` references instead
+  of hex literals — this is what makes every existing page
+  theme-aware without needing to touch each one individually.
+  `themes.css` is the actual source of truth for values per theme.
+- Adjacent bug fixed while in `index.css`: the global focus-ring colour
+  was `rgba(79, 70, 229, ...)` — indigo, not WayPoint's brand blue —
+  doesn't match `tokens.js`'s own `shadow.focus`. Now consistent.
+- `RoleContext.jsx` now does one profile-enrichment fetch
+  (`GET /api/me`) right after login, merging `firstName`/`lastName`/
+  `theme`/`avatarOption` into `user` — none of those are in the JWT
+  (`issueToken` only signs `sub`/`tenantId`/`role`). `ThemeContext`
+  reads `user.theme` from this rather than fetching independently, so
+  login doesn't race two separate `GET /api/me` calls.
+
 ## Next immediate step
 
-1. In GitHub, delete the four migration files this round folded into
-   `schema.sql` — they're already gone from this delivery's zip, but
-   deleting them from the actual repo is a manual step on your side
-   (dragging a folder onto github.dev merges/adds, it doesn't delete
-   files absent from the zip): `02-okr-core.sql`,
-   `03-user-management.sql`, `04-cadence-and-cycle-rework.sql`,
-   `05-terminology-and-element-config.sql`.
+1. Apply `db/06-user-profile.sql` via the Neon SQL console, then delete
+   it from GitHub yourself and confirm so it can be folded into
+   `schema.sql` next round — same convention as every migration so far.
 2. Push this delta to GitHub and let Vercel redeploy.
-3. **Fixed:** the "Internal server error" on Objective creation.
-   Root cause, from Mark's Vercel log: `missing FROM-clause entry for
-   table "o"` — `INSERT INTO okr.objective (...) ... RETURNING
-   o.id, ...` referenced an alias (`o`) that was never established
-   anywhere in the INSERT statement. `OBJECTIVE_FIELDS` (a shared
-   constant reused across a SELECT-with-JOIN, an INSERT, and an UPDATE)
-   was written assuming the `o`/`kr` alias would always be in scope —
-   true for the SELECT usages, false for INSERT/UPDATE. Same bug, same
-   cause, in both `objectiveService.js` (create + update) and
-   `keyResultService.js` (create + update) — every other service's
-   RETURNING clause already used unqualified column names correctly, so
-   this was isolated to exactly those four lines. Fixed by aliasing the
-   target table in the INSERT/UPDATE itself (`INSERT INTO okr.objective
-   AS o (...)`, `UPDATE okr.key_result AS kr SET ...`), which Postgres
-   supports directly.
-   **Why 209 passing tests never caught it:** every test in this suite
-   mocks `client.query` entirely — the mock returns whatever it's told
-   to return regardless of what SQL string was actually sent, so SQL
-   *syntax* was never validated against anything real. Verified the fix
-   against an actual local Postgres 16 instance (schema applied fresh,
-   all four previously-broken paths + every other write across the
-   whole schema exercised for real) — see below.
-4. Also found and fixed while verifying against real Postgres: `db.js`
-   never configured `pg`'s DATE type parser, so `okr.cycle.start_date`/
-   `end_date` came back as JS `Date` objects rather than plain
-   `'YYYY-MM-DD'` strings, serialising through the API as full ISO
-   datetimes. This is exactly what the very first screenshot in this
-   whole testing round showed
-   (`"2026-07-01T00:00:00.000Z – 2026-09-30T00:00:00.000Z"`) — a
-   pre-existing cosmetic bug since Module 2 shipped, not something this
-   round introduced, just finally traced to its actual cause. Fixed with
-   one line in `db.js`.
-5. **New standing safeguard:** `tests/integration/writes.integration.test.js`
-   — exercises every create/update path in the schema against a real
-   Postgres instance, gated behind `TEST_DATABASE_URL` so it skips
-   cleanly without one (confirmed: 209 mocked tests still pass, 14
-   integration tests skip). This is the same lesson MedBroker already
-   learned ("A local Postgres instance is required for any queries
-   mixing differently-typed columns — a real instance catches type
-   mismatches that manual code reading misses") — applied to WayPoint
-   now, not just patched reactively this once. To run it: a local
-   Postgres 14+ with `btree_gist` available, `createdb waypoint_test`,
-   then `TEST_DATABASE_URL=postgresql://user:pass@localhost:5432/waypoint_test
-   npx vitest run tests/integration`. Worth running before any future
-   delivery that touches a RETURNING clause, a JOIN, or any SQL this
-   suite's mocks can't actually validate.
-6. Re-verify end to end: cycle creation with a Cadence dropdown and no
-   manual end date, that no "activate" control remains, that renaming a
-   term under OKR Settings actually changes the nav/page titles, that
-   disabling Key Result actually blocks creating one, and — the thing
-   that was actually broken — that creating and editing an Objective and
-   a Key Result now works.
-7. Then continue Stage 4 at Module 3 (secondary entities: Initiative,
+3. Re-verify end to end: the Settings page (pick a theme, pick an
+   avatar colour, confirm both persist across a refresh and show up in
+   the nav), and — since it's been a few rounds since this was last
+   actually confirmed rather than assumed — that creating and editing
+   an Objective and a Key Result still works cleanly in production, not
+   just in the sandbox.
+4. Then continue Stage 4 at Module 3 (secondary entities: Initiative,
    Check-in, Reflection) against the same Stage 2 data model — this is
    also when the OKR Elements toggles for those three actually start
-   having a visible effect.
+   having a visible effect, and when every Objective/Key Result stops
+   being permanently "Not Started."
 
 ## Open items, not yet resolved
 

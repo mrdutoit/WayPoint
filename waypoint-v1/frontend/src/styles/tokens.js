@@ -1,13 +1,21 @@
 // Named exports only — no default export.
 
+// Every value here is a CSS var() reference, not a literal hex code —
+// the actual values live in themes.css's [data-theme="..."] blocks.
+// This is what makes every existing page/component theme-aware for
+// free: they already import `colors` from here and never touch a hex
+// value directly, so switching ThemeContext's active theme reskins the
+// whole app without any component file changing.
 export const colors = {
-  brand50: '#eaf4fe', brand100: '#d3e9fd', brand500: '#2e8cf0', brand600: '#1a5fd0', brand700: '#123f9e',
-  ink50: '#f8fafc', ink100: '#f1f5f9', ink200: '#e2e8f0', ink300: '#cbd5e1',
-  ink400: '#94a3b8', ink500: '#64748b', ink600: '#475569', ink700: '#334155', ink800: '#1e293b', ink900: '#0f172a',
-  success: '#16a34a', successBg: '#f0fdf4',
-  warn: '#d97706', warnBg: '#fffbeb',
-  danger: '#dc2626', dangerBg: '#fef2f2',
-  panel: '#ffffff', line: '#e2e8f0',
+  brand50: 'var(--brand50)', brand100: 'var(--brand100)', brand500: 'var(--brand500)',
+  brand600: 'var(--brand600)', brand700: 'var(--brand700)',
+  ink50: 'var(--ink50)', ink100: 'var(--ink100)', ink200: 'var(--ink200)', ink300: 'var(--ink300)',
+  ink400: 'var(--ink400)', ink500: 'var(--ink500)', ink600: 'var(--ink600)', ink700: 'var(--ink700)',
+  ink800: 'var(--ink800)', ink900: 'var(--ink900)',
+  success: 'var(--success)', successBg: 'var(--success-bg)',
+  warn: 'var(--warn)', warnBg: 'var(--warn-bg)',
+  danger: 'var(--danger)', dangerBg: 'var(--danger-bg)',
+  panel: 'var(--panel)', line: 'var(--line)',
 };
 
 export const radius = { sm: 8, md: 12, lg: 16, pill: 999 };
