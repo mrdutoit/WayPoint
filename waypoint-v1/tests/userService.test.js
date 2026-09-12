@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { listUsersForTenant, inviteUser, updateUserRole, forcePasswordResetForUser } from '../frontend/api-lib/services/userService.js';
+import { listUsersForTenant, inviteUser, updateUserRole, forcePasswordResetForUser, unlockUser } from '../frontend/api-lib/services/userService.js';
 import { ValidationError, ForbiddenError, NotFoundError } from '../frontend/api-lib/services/errors.js';
 
 function mockClient() {
@@ -116,5 +116,33 @@ describe('listUsersForTenant', () => {
     const client = mockClient();
     client.query.mockResolvedValueOnce({ rows: [{ id: 'user-1' }] });
     expect(await listUsersForTenant(client, 't1')).toEqual([{ id: 'user-1' }]);
+  });
+});
+
+describe('unlockUser', () => {
+  it('throws NotFoundError when the user does not exist', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({ rows: [] });
+    await expect(unlockUser(client, 't1', 'missing')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('refuses to unlock a TenantAdmin', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({ rows: [{ id: 'admin-1', role: 'TenantAdmin' }] });
+    await expect(unlockUser(client, 't1', 'admin-1')).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('clears the lockout without touching the password', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 'user-1', role: 'Employee' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'user-1', email: 'a@b.com' }] });
+
+    await unlockUser(client, 't1', 'user-1');
+    const updateCall = client.query.mock.calls[1];
+    expect(updateCall[0]).toMatch(/failed_attempts = 0/);
+    expect(updateCall[0]).toMatch(/locked_until = NULL/);
+    expect(updateCall[0]).not.toMatch(/password_hash/);
+    expect(updateCall[0]).not.toMatch(/password_must_change/);
   });
 });

@@ -38,7 +38,7 @@ const schemaPath = join(__dirname, '../../frontend/db/schema.sql');
 // applied here too so this suite tests against the full intended
 // current-state schema, not a stale snapshot. Remove this once it's
 // folded in for real.
-const pendingMigrationPath = join(__dirname, '../../frontend/db/06-user-profile.sql');
+const pendingMigrationPath = join(__dirname, '../../frontend/db/migrations/06-user-profile.sql');
 
 let client, pool;
 
@@ -214,9 +214,20 @@ describeIfDb('write paths against real Postgres', () => {
 
   it('profileService.updateOwnProfile — real update, works for a tenant user', async () => {
     const { updateOwnProfile } = await import('../../frontend/api-lib/services/profileService.js');
-    const profile = await inTenantContext(() => updateOwnProfile(client, employeeId, { theme: 'dark', avatarOption: 'teal' }));
+    const profile = await inTenantContext(() => updateOwnProfile(client, employeeId, { theme: 'dark', avatarOption: 'teal', timezone: 'Europe/London' }));
     expect(profile.theme).toBe('dark');
     expect(profile.avatarOption).toBe('teal');
+    expect(profile.timezone).toBe('Europe/London');
+  });
+
+  it('userService.unlockUser — real update, clears lockout without touching password', async () => {
+    const { unlockUser } = await import('../../frontend/api-lib/services/userService.js');
+    // simulate a lockout directly, then confirm unlockUser actually clears it
+    await client.query(`UPDATE okr.user_account SET failed_attempts = 5, locked_until = now() + interval '15 minutes' WHERE id = $1`, [employeeId]);
+    await inTenantContext(() => unlockUser(client, tenantId, employeeId));
+    const { rows } = await client.query(`SELECT failed_attempts, locked_until FROM okr.user_account WHERE id = $1`, [employeeId]);
+    expect(rows[0].failed_attempts).toBe(0);
+    expect(rows[0].locked_until).toBeNull();
   });
 
   it('profileService.updateOwnProfile — real update, works for PlatformAdmin (no tenant)', async () => {

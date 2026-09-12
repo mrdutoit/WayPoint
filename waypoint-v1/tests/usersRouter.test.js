@@ -16,6 +16,7 @@ vi.mock('../frontend/api-lib/services/userService.js', async (importOriginal) =>
     inviteUser: vi.fn(),
     updateUserRole: vi.fn(),
     forcePasswordResetForUser: vi.fn(),
+    unlockUser: vi.fn(),
   };
 });
 
@@ -24,7 +25,13 @@ const userService = await import('../frontend/api-lib/services/userService.js');
 const { ForbiddenError, ValidationError } = await import('../frontend/api-lib/services/errors.js');
 const handler = (await import('../frontend/api/users-router.js')).default;
 
-function mockReq({ method, slug = [], body }) { return { method, query: { slug }, body, headers: {} }; }
+function mockReq({ method, slug = [], body }) {
+  // Simulates the real Vercel rewrite shape (a slash-joined string, or
+  // absent for the bare path) rather than a pre-split array — see
+  // api-lib/http/helpers.js's parseSlug for why that distinction is the
+  // whole point of this test harness shape.
+  return { method, query: { slug: slug.length > 0 ? slug.join('/') : undefined }, body, headers: {} };
+}
 function mockRes() { const res = {}; res.status = vi.fn().mockReturnValue(res); res.json = vi.fn().mockReturnValue(res); return res; }
 
 const TENANT_ADMIN = { id: 'ta-1', tenantId: 't1', role: 'TenantAdmin' };
@@ -129,6 +136,32 @@ describe('users-router — PUT /api/users/:id/force-password-reset', () => {
     const res = mockRes();
     await handler(mockReq({ method: 'PUT', slug: ['user-1', 'force-password-reset'], body: { password: 'weak' } }), res);
     expect(res.status).toHaveBeenCalledWith(400);
+  });
+});
+
+describe('users-router — PUT /api/users/:id/unlock', () => {
+  it('unlocks on a valid request', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    userService.unlockUser.mockResolvedValue({ id: 'user-1', email: 'a@b.com' });
+    const res = mockRes();
+    await handler(mockReq({ method: 'PUT', slug: ['user-1', 'unlock'] }), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('maps a ForbiddenError (TenantAdmin target) to 403', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    userService.unlockUser.mockRejectedValue(new ForbiddenError());
+    const res = mockRes();
+    await handler(mockReq({ method: 'PUT', slug: ['user-1', 'unlock'] }), res);
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it('rejects a non-TenantAdmin', async () => {
+    getAuthenticatedUser.mockReturnValue(EMPLOYEE);
+    const res = mockRes();
+    await handler(mockReq({ method: 'PUT', slug: ['user-1', 'unlock'] }), res);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(userService.unlockUser).not.toHaveBeenCalled();
   });
 });
 

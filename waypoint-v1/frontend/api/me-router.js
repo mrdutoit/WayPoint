@@ -36,7 +36,7 @@ async function getAction(req, res, user, runInContext) {
 }
 
 async function patchAction(req, res, user, runInContext) {
-  const { theme, avatarOption } = req.body ?? {};
-  const profile = await runInContext((client) => updateOwnProfile(client, user.id, { theme, avatarOption }));
+  const { theme, avatarOption, timezone } = req.body ?? {};
+  const profile = await runInContext((client) => updateOwnProfile(client, user.id, { theme, avatarOption, timezone }));
   res.status(200).json({ profile });
 }

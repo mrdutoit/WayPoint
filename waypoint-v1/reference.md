@@ -116,12 +116,14 @@ waypoint-v1/
   Neon's SQL console — deliberately not a migration library at this
   scale. `schema.sql` always describes what's *actually* live, never a
   running history: a schema change ships as a short-lived migration
-  file, Mark applies it against Neon, `schema.sql` is then rewritten to
-  include the change directly, and the migration file is deleted from
-  the repo — same convention as MedBroker's `schema.postgres.sql`. If a
-  numbered migration file is ever sitting in `db/` alongside
-  `schema.sql`, that specifically means it hasn't been confirmed applied
-  and folded in yet — never assume otherwise, ask.
+  file **in `db/migrations/`, ring-fenced from `schema.sql` itself, not
+  flat in `db/`** — a miss the first time this convention was set up
+  here, corrected once caught. Mark applies the migration against Neon,
+  `schema.sql` is then rewritten to include the change directly, and
+  the migration file is deleted from the repo — same convention as
+  MedBroker's `schema.postgres.sql`. If a file is ever sitting in
+  `db/migrations/`, that specifically means it hasn't been confirmed
+  applied and folded in yet — never assume otherwise, ask.
 
 ## Key design decisions worth knowing before changing anything
 
@@ -304,6 +306,34 @@ waypoint-v1/
   `GET /api/me`, not several independent ones racing each other.
   `ThemeContext` reads `user.theme` from this rather than fetching
   independently.
+
+- **Any new theme (or any CSS file defining variables `tokens.js`
+  depends on) must actually be imported in `main.jsx` — creating the
+  file is not sufficient.** `themes.css` shipped a full round earlier
+  without this import, and the resulting bug (every form field
+  rendering invisibly — a blank, borderless input on a blank
+  background, since every `var(--x)` reference resolved to nothing)
+  wasn't caught until it was live in production. Verify by checking the
+  compiled CSS bundle size actually changed, not just that the source
+  file exists — an unimported file changes nothing about the build
+  output, however correct its own contents are.
+- **`user_account`'s lockout and password-reset are two separate admin
+  actions, not one** — `unlockUser` (clears `failed_attempts`/
+  `locked_until` only) vs. `forcePasswordResetForUser` (sets a new
+  password AND clears the lockout, since a forgotten password is often
+  the actual cause of the lockout in the first place). Matches
+  MedBroker's `UserModal` (`onUnlock` vs. `onForcePasswordReset` as
+  distinct actions) — conflating them into a single "force reset always
+  also unlocks" action, as the first pass here did, forces an admin to
+  hand out a new password just to clear a lockout the user didn't
+  actually need help with.
+- **Timezone is a stored preference field only, not an app-wide display
+  conversion layer.** MedBroker's `dateFormat.js` actually converts
+  every displayed timestamp to the user's chosen timezone; WayPoint
+  hasn't adopted a display-format standard at all yet (same boundary as
+  `DatePicker.jsx`'s no-typed-entry decision). Building that conversion
+  layer is separate, larger scope than the field itself — don't assume
+  it comes free with the preference existing.
 
 ## Roles
 

@@ -5,14 +5,16 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** self-service Settings page added (theme + avatar
-preference), at Mark's request while confirming build scope. All
-backend work this round verified against real Postgres before delivery
-(16/16 integration tests), not just mocks — following directly from the
-`RETURNING o.id` lesson two rounds ago. The Objective-creation bug from
-the previous round is confirmed fixed and stays fixed; no regressions
-found. `db/06-user-profile.sql` is a new pending migration — not yet
-confirmed applied, not yet folded into `schema.sql`.
+**Last updated:** a real, live-visible bug fixed (login/every form field
+was rendering invisibly), plus the Settings/User Management work
+deepened to actually match MedBroker rather than just the theme/avatar
+mechanism. All backend work this round re-verified against real
+Postgres (17/17 integration tests). `db/migrations/06-user-profile.sql`
+is a pending migration (now including `timezone`, not yet confirmed
+applied) — **and now actually lives in `db/migrations/`**, correcting a
+miss from the previous round: the fold-into-schema.sql-then-delete
+convention was followed, but the "ring-fenced in its own folder" half
+of the same instruction was dropped without noticing.
 
 ## Where things actually stand
 
@@ -194,19 +196,104 @@ preferences, not tenant-scoped, unlike everything in `users-router.js`).
   reads `user.theme` from this rather than fetching independently, so
   login doesn't race two separate `GET /api/me` calls.
 
+## This round — a real production bug (again), plus MedBroker parity
+
+### The invisible-form-fields bug
+
+Root cause: `themes.css` was created in the previous round but **never
+imported anywhere** — no `import './themes.css'` in `main.jsx`. Every
+`var(--panel)`, `var(--line)`, `var(--ink900)` reference in
+`tokens.js`'s colours resolved to nothing, so every input's border and
+background rendered as browser-default/transparent — white-on-white,
+not just the login page, every form in the app. Confirmed via the
+compiled CSS bundle size, which had sat at a consistent 0.50–0.56 kB
+across every previous build despite `themes.css` supposedly existing —
+proof it was never actually bundled — and jumped to 1.57 kB once fixed.
+Two-line fix: the missing import in `main.jsx`, plus a default
+`data-theme="light"` on `index.html`'s `<html>` tag so there's no flash
+of unstyled content before React mounts. This is exactly why "Light and
+Dark theme didn't land" while "Avatar colour worked" — avatar swatches
+use literal hex values inline, never a CSS variable, so they were never
+exposed to this bug at all.
+
+### Settings + User Management — actually matched against MedBroker, not just the mechanism
+
+Read MedBroker's real `Settings.jsx` (272 lines) and `UserAdmin.jsx`
+(987 lines) in full this round, not just `ThemeContext.jsx`/
+`avatarOptions.js` as before — that was the gap: the previous round
+built the theme/avatar *mechanism* correctly but never checked what the
+actual Settings *page* or user admin *page* contained on the other
+side.
+
+**Added, genuinely applicable to WayPoint:**
+- **Settings.jsx**: Profile section (name/email/role, read-only — no
+  admin-side name-edit UI exists yet either, so the copy says "set when
+  your account was created" rather than falsely implying one does),
+  Security section (a "Change password" button, redundant with the nav
+  link but matches MedBroker's placement), Date & Time section (a
+  timezone preference — see the scope note below).
+- **UsersAdmin.jsx / userService.js**: a `Status` column showing
+  locked/active, and a separate **Unlock** action
+  (`PUT /api/users/:id/unlock`) — MedBroker's `UserAdmin.jsx` treats
+  "locked out" and "forgot password" as two different admin actions
+  (`onUnlock` vs `onForcePasswordReset`); WayPoint's force-password-reset
+  previously conflated them, meaning an admin had no way to clear a
+  lockout without also making the user set a brand new password.
+
+**Deliberately not built, and why — checked against MedBroker's
+`UserModal`, which also has these:**
+- **Force logout** (`onForceLogout` in MedBroker) — MedBroker has real
+  server-side sessions to invalidate. WayPoint's session is a stateless
+  Bearer JWT with no revocation mechanism (flagged as an open item
+  since Module 2) — building a "force logout" button that doesn't
+  actually invalidate anything would be worse than not having the
+  button at all. Needs the session-revocation decision first, not the
+  other way round.
+- **Link/unlink SSO identity** (`onLinkIdentity`) — WayPoint's SSO is
+  `auth.sso.enabled`, scaffolded and off. Not reachable until that
+  module is built.
+- **Top-up / balance** (`onTopUp`) — this is MedBroker's own business
+  domain (a broker's lead-purchasing credit balance), not a generic
+  user-management pattern. Not applicable to WayPoint at all.
+- **Sortable table columns**, **a full edit modal** (vs. WayPoint's
+  simpler inline-editable row) — MedBroker UX niceties, not missing
+  functionality. Skipped for scope, not forgotten.
+
+**Timezone — a stored preference only**, matching MedBroker's field but
+not MedBroker's `dateFormat.js` (the layer that actually converts every
+displayed timestamp app-wide). WayPoint hasn't adopted a display-format
+standard the way MedBroker has — same boundary already drawn for
+`DatePicker.jsx`. Building that conversion layer is separate, larger
+scope than a settings field; flagged rather than silently assumed
+either way.
+
+### Migrations folder — actually corrected this time
+
+`db/migrations/06-user-profile.sql` now genuinely lives in a
+ring-fenced folder, not flat in `db/` next to `schema.sql`. This was a
+direct, explicit instruction two rounds ago that only got half-followed
+— own that plainly rather than call it a judgement call.
+
 ## Next immediate step
 
-1. Apply `db/06-user-profile.sql` via the Neon SQL console, then delete
-   it from GitHub yourself and confirm so it can be folded into
-   `schema.sql` next round — same convention as every migration so far.
+1. Apply `db/migrations/06-user-profile.sql` via the Neon SQL console,
+   then delete it from GitHub yourself and confirm so it can be folded
+   into `schema.sql` next round — same convention as every migration so
+   far.
 2. Push this delta to GitHub and let Vercel redeploy.
-3. Re-verify end to end: the Settings page (pick a theme, pick an
-   avatar colour, confirm both persist across a refresh and show up in
-   the nav), and — since it's been a few rounds since this was last
-   actually confirmed rather than assumed — that creating and editing
-   an Objective and a Key Result still works cleanly in production, not
-   just in the sandbox.
-4. Then continue Stage 4 at Module 3 (secondary entities: Initiative,
+3. **Re-verify the CSS fix first, before anything else** — confirm the
+   login page's Email/Password fields are actually visible (bordered
+   input boxes, not blank space), and that switching Light/Dark in
+   Settings visibly changes the app's colours. This was broken in
+   production; confirm it's actually fixed there, not just in the
+   sandbox build.
+4. Then re-verify: Settings' new Profile/Security/Date & Time sections
+   render with real data, a locked-out user shows "Locked" in Users and
+   the Unlock button actually clears it (try force-password-reset on a
+   test user until it locks, or manually set `locked_until` in Neon to
+   confirm), and that creating/editing an Objective and Key Result still
+   works.
+5. Then continue Stage 4 at Module 3 (secondary entities: Initiative,
    Check-in, Reflection) against the same Stage 2 data model — this is
    also when the OKR Elements toggles for those three actually start
    having a visible effect, and when every Objective/Key Result stops

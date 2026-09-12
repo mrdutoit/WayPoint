@@ -1,7 +1,7 @@
 import { getAuthenticatedUser, requireRole } from '../api-lib/middleware/auth.js';
 import { respondToServiceError } from '../api-lib/middleware/errorResponse.js';
 import { withTenantContext } from '../api-lib/context/tenant.js';
-import { listUsersForTenant, inviteUser, updateUserRole, forcePasswordResetForUser } from '../api-lib/services/userService.js';
+import { listUsersForTenant, inviteUser, updateUserRole, forcePasswordResetForUser, unlockUser } from '../api-lib/services/userService.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
 
@@ -21,6 +21,7 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && first === 'invite' && !second) return await inviteAction(req, res, user);
     if (req.method === 'PATCH' && first && second === 'role' && !third) return await roleAction(req, res, user, first);
     if (req.method === 'PUT' && first && second === 'force-password-reset' && !third) return await forceResetAction(req, res, user, first);
+    if (req.method === 'PUT' && first && second === 'unlock' && !third) return await unlockAction(req, res, user, first);
     return res.status(404).json({ error: 'Not found' });
   } catch (err) {
     return respondToServiceError(res, err);
@@ -85,6 +86,21 @@ async function forceResetAction(req, res, user, targetUserId) {
       action: 'user.password_force_reset', entityType: 'UserAccount', entityId: reset.id,
     });
     return reset;
+  });
+  res.status(200).json({ user: result });
+}
+
+// PUT /api/users/:id/unlock — Tenant Administrator. Clears a lockout
+// without touching the password — see userService.js's module comment
+// on why this is separate from force-password-reset.
+async function unlockAction(req, res, user, targetUserId) {
+  const result = await withTenantContext(user.tenantId, async (client) => {
+    const unlocked = await unlockUser(client, user.tenantId, targetUserId);
+    await recordAuditEvent(client, {
+      tenantId: user.tenantId, actorId: user.id,
+      action: 'user.unlocked', entityType: 'UserAccount', entityId: unlocked.id,
+    });
+    return unlocked;
   });
   res.status(200).json({ user: result });
 }

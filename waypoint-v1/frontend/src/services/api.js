@@ -118,9 +118,10 @@ export const usersApi = {
     request('/users/invite', { method: 'POST', body: JSON.stringify({ role, email, firstName, lastName, password, managerId }) }),
   updateRole: (id, role) => request(`/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
   forcePasswordReset: (id, password) => request(`/users/${id}/force-password-reset`, { method: 'PUT', body: JSON.stringify({ password }) }),
+  unlock: (id) => request(`/users/${id}/unlock`, { method: 'PUT' }),
 };
 
 export const meApi = {
   get: () => request('/me'),
-  update: ({ theme, avatarOption }) => request('/me', { method: 'PATCH', body: JSON.stringify({ theme, avatarOption }) }),
+  update: ({ theme, avatarOption, timezone }) => request('/me', { method: 'PATCH', body: JSON.stringify({ theme, avatarOption, timezone }) }),
 };

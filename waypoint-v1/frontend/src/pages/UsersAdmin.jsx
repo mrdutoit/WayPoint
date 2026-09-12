@@ -54,13 +54,14 @@ export default function UsersAdmin() {
 
       {users && users.length > 0 && (
         <div style={s.tableCard}>
-          <table style={{ ...s.table, minWidth: 560 }}>
+          <table style={{ ...s.table, minWidth: 640 }}>
             <thead>
               <tr>
                 <th style={s.th}>Name</th>
                 <th style={s.th}>Email</th>
                 <th style={s.th}>Role</th>
                 <th style={s.th}>Manager</th>
+                <th style={s.th}>Status</th>
                 <th style={s.th}></th>
               </tr>
             </thead>
@@ -76,12 +77,18 @@ export default function UsersAdmin() {
   );
 }
 
+function isCurrentlyLocked(lockedUntil) {
+  return !!lockedUntil && new Date(lockedUntil) > new Date();
+}
+
 function UserRow({ user, managerName, onChanged }) {
   const isTenantAdmin = user.role === 'TenantAdmin';
+  const locked = isCurrentlyLocked(user.lockedUntil);
   const [roleSaving, setRoleSaving] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
   const [resetSaving, setResetSaving] = useState(false);
+  const [unlockSaving, setUnlockSaving] = useState(false);
   const [rowError, setRowError] = useState(null);
 
   async function handleRoleChange(e) {
@@ -106,10 +113,27 @@ function UserRow({ user, managerName, onChanged }) {
       await usersApi.forcePasswordReset(user.id, resetPassword);
       setResetOpen(false);
       setResetPassword('');
+      onChanged();
     } catch (err) {
       setRowError(err.message ?? 'Failed to reset password');
     } finally {
       setResetSaving(false);
+    }
+  }
+
+  // Separate from force-password-reset — an admin who can see this user
+  // is only locked out (not that they've forgotten their password)
+  // shouldn't be forced into typing them a brand new one.
+  async function handleUnlock() {
+    setUnlockSaving(true);
+    setRowError(null);
+    try {
+      await usersApi.unlock(user.id);
+      onChanged();
+    } catch (err) {
+      setRowError(err.message ?? 'Failed to unlock this user');
+    } finally {
+      setUnlockSaving(false);
     }
   }
 
@@ -129,16 +153,28 @@ function UserRow({ user, managerName, onChanged }) {
         </td>
         <td style={s.td}>{managerName ?? '—'}</td>
         <td style={s.td}>
+          {locked
+            ? <span style={s.chip(colors.danger, colors.dangerBg)}>Locked</span>
+            : <span style={s.chip(colors.success, colors.successBg)}>Active</span>}
+        </td>
+        <td style={s.td}>
           {!isTenantAdmin && (
-            <button type="button" onClick={() => setResetOpen((v) => !v)} style={{ ...s.btnSecondary, padding: '6px 10px', fontSize: 12 }}>
-              {resetOpen ? 'Cancel' : 'Reset password'}
-            </button>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {locked && (
+                <button type="button" onClick={handleUnlock} disabled={unlockSaving} style={{ ...s.btnSecondary, padding: '6px 10px', fontSize: 12 }}>
+                  {unlockSaving ? 'Unlocking…' : 'Unlock'}
+                </button>
+              )}
+              <button type="button" onClick={() => setResetOpen((v) => !v)} style={{ ...s.btnSecondary, padding: '6px 10px', fontSize: 12 }}>
+                {resetOpen ? 'Cancel' : 'Reset password'}
+              </button>
+            </div>
           )}
         </td>
       </tr>
       {resetOpen && (
         <tr>
-          <td colSpan={5} style={{ ...s.td, background: colors.ink50 }}>
+          <td colSpan={6} style={{ ...s.td, background: colors.ink50 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <input
                 type="password" autoComplete="new-password" placeholder="New temporary password"
@@ -147,14 +183,14 @@ function UserRow({ user, managerName, onChanged }) {
               <button type="button" onClick={handleForceReset} disabled={resetSaving || !resetPassword} style={s.btnPrimary}>
                 {resetSaving ? 'Resetting…' : 'Set password'}
               </button>
-              <span style={{ fontSize: 12, color: colors.ink500 }}>Forces a change at their next login.</span>
+              <span style={{ fontSize: 12, color: colors.ink500 }}>Forces a change at their next login, and clears any lockout.</span>
             </div>
           </td>
         </tr>
       )}
       {rowError && (
         <tr>
-          <td colSpan={5} style={s.td}>
+          <td colSpan={6} style={s.td}>
             <div style={s.chip(colors.danger, colors.dangerBg)}>{rowError}</div>
           </td>
         </tr>

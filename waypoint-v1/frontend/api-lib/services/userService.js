@@ -23,7 +23,8 @@ const ROLES_TENANT_ADMIN_CAN_ASSIGN = ['Manager', 'Employee'];
 export async function listUsersForTenant(client, tenantId) {
   const { rows } = await client.query(
     `SELECT id, manager_id AS "managerId", role, email, first_name AS "firstName",
-            last_name AS "lastName", locked_until AS "lockedUntil", created_at AS "createdAt"
+            last_name AS "lastName", failed_attempts AS "failedAttempts",
+            locked_until AS "lockedUntil", created_at AS "createdAt"
      FROM okr.user_account
      WHERE tenant_id = $1
      ORDER BY created_at ASC`,
@@ -120,6 +121,33 @@ export async function forcePasswordResetForUser(client, tenantId, userId, newPas
      WHERE tenant_id = $1 AND id = $2
      RETURNING id, email`,
     [tenantId, userId, passwordHash]
+  );
+  return rows[0];
+}
+
+/**
+ * MedBroker's UserAdmin.jsx separates "unlock" from "force-password-
+ * reset" (onUnlock vs. onForcePasswordReset) — an admin who can see a
+ * user is simply locked out from too many failed attempts, and knows
+ * they still remember their password, shouldn't be forced into typing
+ * them a brand new one. Clears the lockout only; password_hash and
+ * password_must_change are untouched.
+ */
+export async function unlockUser(client, tenantId, userId) {
+  const { rows: existing } = await client.query(
+    `SELECT id, role FROM okr.user_account WHERE tenant_id = $1 AND id = $2`,
+    [tenantId, userId]
+  );
+  if (existing.length === 0) throw new NotFoundError('User not found');
+  if (existing[0].role === 'TenantAdmin') {
+    throw new ForbiddenError('Cannot unlock a TenantAdmin\'s account through this endpoint');
+  }
+
+  const { rows } = await client.query(
+    `UPDATE okr.user_account SET failed_attempts = 0, locked_until = NULL
+     WHERE tenant_id = $1 AND id = $2
+     RETURNING id, email`,
+    [tenantId, userId]
   );
   return rows[0];
 }
