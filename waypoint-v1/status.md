@@ -5,16 +5,12 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** a real, live-visible bug fixed (login/every form field
-was rendering invisibly), plus the Settings/User Management work
-deepened to actually match MedBroker rather than just the theme/avatar
-mechanism. All backend work this round re-verified against real
-Postgres (17/17 integration tests). `db/migrations/06-user-profile.sql`
-is a pending migration (now including `timezone`, not yet confirmed
-applied) — **and now actually lives in `db/migrations/`**, correcting a
-miss from the previous round: the fold-into-schema.sql-then-delete
-convention was followed, but the "ring-fenced in its own folder" half
-of the same instruction was dropped without noticing.
+**Last updated:** fixed a mistake from the previous round — the
+CSS/Settings/User Management delivery landed correctly (confirmed: the
+Settings page now renders fully, Dark theme applies), but the migration
+that went with it broke on Mark's real database. `db/migrations/06-user-profile.sql`
+now uses `ADD COLUMN IF NOT EXISTS`, verified against Mark's exact
+partial-apply scenario, not just a clean install.
 
 ## Where things actually stand
 
@@ -51,150 +47,18 @@ page (theme + avatar preference) — personal account settings apply to
 every role regardless of which OKR modules exist yet, so this was built
 as its own thing rather than folded into a specific Module.
 
-## This round — a real production bug, plus direct testing feedback
+## Earlier rounds — brief summary (full reasoning preserved in `reference.md`)
 
-Mark hit a 404 activating a Cycle as TenantAdmin. Root cause, and
-everything that followed from fixing it properly rather than just
-patching the one symptom:
-
-### The router bug (affected every multi-segment route, not just cycles)
-
-`vercel.json` rewrites with `?slug=:slug*` don't reliably deliver a
-multi-segment path as an array — for `/api/cycles/{id}/activate` it
-arrived as a single string `"cycle-1/activate"`, so
-`[cycleId, subResource] = slugParts` silently left `subResource`
-undefined and the router fell through to its generic 404. Single-segment
-routes never exposed this, which is why it shipped in the first place.
-
-MedBroker had already hit and solved this exact problem
-(`api-lib/http/helpers.js`'s `parseSlug`) — ported that fix rather than
-re-inventing one, and applied it to **every** router (`objectives-router.js`'s
-add-Key-Result, `users-router.js`'s role-change and force-password-reset
-were equally exposed, not just cycle activation). Also fixed the deeper
-issue: every router test was mocking `req.query.slug` as a pre-split
-array, which is exactly what let this ship with 100% tests passing —
-tests now simulate the real joined-string shape (`tests/httpHelpers.test.js`
-plus every router test file's `mockReq`).
-
-### Cadence entity + Cycle rework
-
-Direct feedback: Cycle activation should be date-driven, not a manual
-toggle; Cadence should be a tenant-editable dropdown (Monthly/Quarterly/
-Bi-Annually/Annually as defaults), not free text; end date should be
-computed from start date + Cadence.
-
-- New `okr.cadence` entity, seeded with the four defaults on tenant
-  creation, tenant-editable (create/update/delete) via
-  `/api/settings/cadences`. **Locked once used by a Cycle** — Mark
-  explicitly asked for this to be "figured out," not left as a gap; see
-  `cadenceService.js`'s module comment for the full reasoning (the
-  underlying data isn't actually at risk — a Cycle's end_date is
-  computed once and stored, never live-linked — the lock exists so
-  "Quarterly" can't quietly mean something different for cycles created
-  before vs. after an edit).
-- `okr.cycle` reworked: `cadence_id` replaces the free-text `cadence`
-  column; `end_date` is always server-computed
-  (`dateMath.js` — tested against the exact existing Q3 2026 sample
-  data, which round-trips correctly: Jul 1 → Sep 30); `is_active` is
-  gone entirely — "active" is computed from today's date against
-  `[start_date, end_date]`; no two Cycles in a tenant may cover the same
-  day, enforced at the database layer via a Postgres EXCLUDE constraint,
-  not just application validation.
-- `POST /api/cycles/:id/activate` is retired.
-- Migration (`db/04-cadence-and-cycle-rework.sql`) includes an explicit
-  backfill-and-verify step for existing test data (e.g. the "Q3 2026"
-  cycle already created while testing), not a blind schema swap — read
-  its own header before running it.
-
-### Custom DatePicker
-
-"Make date fields pickable" — matched against MedBroker's own precedent
-exactly (`components/DatePicker.jsx`, an internal/staff-facing calendar
-popover, native `<input type="date">` deliberately reserved for
-public-facing forms — WayPoint has none of those yet, so this applies
-everywhere). Simplified from MedBroker's version in one deliberate way:
-no typed free-text entry, since that's tied to an app-wide day-first
-date-*format* standard MedBroker established that WayPoint hasn't — see
-the component's own header comment. Wired into the Cycles form's start
-date; the value contract (`'YYYY-MM-DD'` string via `onChange`) makes it
-a drop-in replacement anywhere else a date field is added later.
-
-### FR-013 (Terminology) and FR-025 (OKR element toggles) — pulled forward
-
-- **FR-025:** `okr.okr_element_config`, seeded all-enabled on tenant
-  creation. Dependency graph (Objective never disableable; disabling an
-  element is rejected while an enabled dependent still exists; enabling
-  auto-enables the prerequisite chain) in
-  `okrElementConfigService.js`. **One resolved ambiguity, flagged rather
-  than silently picked:** the Stage 2 doc's section 3.1 table says
-  disabling Key Result "automatically switches off Initiative and
-  Check-in" (reads like a cascade), but FR-025's own text says disabling
-  is "rejected server-side... naming the dependent element(s)" (no
-  cascade at all). Implemented per FR-025's literal, fully-specified
-  text — reject, don't cascade. The one live gate: `createKeyResult`
-  now actually checks the toggle. Initiative/Check-in/Reflection toggle
-  with no functional effect yet (those entities don't exist until
-  Module 3) — same "scaffolded ahead of use" pattern as FR-022's AI
-  Settings menu.
-- **FR-013:** `okr.terminology_setting` (absence of a row = default
-  English term — nothing seeded). `TerminologyContext.jsx`/`useTerms()`
-  applies custom labels to primary UI surfaces — nav, page titles,
-  section headers, main create/add buttons, across `App.jsx`,
-  `Objectives.jsx`, `ObjectiveDetail.jsx`, `OkrSettings.jsx`. **Explicit
-  scope boundary, not exhaustive:** backend validation-error text (e.g.
-  "cadenceId does not exist") is untouched — see
-  `terminologyService.js`'s module comment. Pluralisation is a plain
-  heuristic (`TerminologyContext.jsx`'s `pluralise()`), not a full
-  inflection library — correct for ordinary business nouns, not
-  guaranteed for every irregular plural.
-
-### Multi-role testing friction (no code change — a workaround)
-
-`api.js`'s auth token lives in a plain JS module variable, not shared
-storage — each browser tab loads its own independent copy. Opening one
-tab per role and logging in fresh in each already works without
-conflict; the one thing that breaks it is refreshing a tab, which wipes
-that tab's session only. Session persistence itself (surfaced after
-Module 2) remains open — a real decision (localStorage vs. something
-more deliberate), not fixed here.
-
-## Settings page — theme + avatar (this round)
-
-Backend verified against real Postgres before delivery (see the
-integration-test lesson from the previous round) — `GET`/`PATCH /api/me`
-works for a tenant user and for PlatformAdmin alike (personal
-preferences, not tenant-scoped, unlike everything in `users-router.js`).
-
-- `db/06-user-profile.sql` — `theme`/`avatar_option` on `user_account`,
-  not yet confirmed applied or folded into `schema.sql`.
-- Avatar is a colour/gradient pick (`constants/avatarOptions.js`), not a
-  photo upload — matches MedBroker's exact pattern
-  (`User.avatarColour`); WayPoint has no blob storage set up and this
-  avoids needing one.
-- Two themes (Light default, Dark), not MedBroker's four — deliberate
-  scope call, not an oversight. MedBroker's four palettes (custom
-  fonts, mesh/grain textures) are MedBroker's own art direction;
-  WayPoint's two themes both carry its own brand blue
-  (`reference.md`'s Brand section) instead. The Dark palette is a
-  genuine repaint for contrast, not light values dimmed — but it has
-  **not been visually verified in a real browser**, only that the CSS
-  compiles and the variables resolve. Sanity-check contrast once
-  deployed. Flag if more themes are wanted; the pattern (add a
-  `[data-theme="..."]` block, add its id to `ThemeContext.jsx`) is in
-  place either way.
-- `tokens.js`'s `colors` export now holds `var(--x)` references instead
-  of hex literals — this is what makes every existing page
-  theme-aware without needing to touch each one individually.
-  `themes.css` is the actual source of truth for values per theme.
-- Adjacent bug fixed while in `index.css`: the global focus-ring colour
-  was `rgba(79, 70, 229, ...)` — indigo, not WayPoint's brand blue —
-  doesn't match `tokens.js`'s own `shadow.focus`. Now consistent.
-- `RoleContext.jsx` now does one profile-enrichment fetch
-  (`GET /api/me`) right after login, merging `firstName`/`lastName`/
-  `theme`/`avatarOption` into `user` — none of those are in the JWT
-  (`issueToken` only signs `sub`/`tenantId`/`role`). `ThemeContext`
-  reads `user.theme` from this rather than fetching independently, so
-  login doesn't race two separate `GET /api/me` calls.
+Router 404 bug fixed (`parseSlug`, ported from MedBroker, applied to
+every router — see `reference.md`'s design decisions for the full
+story). Cadence entity + date-driven Cycle rework shipped (Cadence
+tenant-editable, locked once used; Cycle's end_date always
+server-computed; no manual "activate" any more). Custom `DatePicker`
+matching MedBroker's pattern. FR-013 (Terminology) and FR-025 (OKR
+element toggles) pulled forward from Module 7. Settings page (theme +
+avatar) built, `tokens.js` converted to CSS variables. All of this is
+stable and confirmed working — see the two rounds directly below for
+what needed fixing after the fact.
 
 ## This round — a real production bug (again), plus MedBroker parity
 
@@ -274,25 +138,59 @@ ring-fenced folder, not flat in `db/` next to `schema.sql`. This was a
 direct, explicit instruction two rounds ago that only got half-followed
 — own that plainly rather than call it a judgement call.
 
+## This round — a migration mistake, caught on Mark's real database
+
+**Not deliberate, and directly my error, not a judgement call:** the
+previous round's migration was originally delivered with just `theme`
+and `avatar_option`. Mark applied it successfully (confirmed via Neon's
+query history — Sep 12, 10:24am). Later the same round, I added a
+`timezone` column and **edited that same already-applied migration
+file** to include it, without checking whether the original had already
+been run. It had. When Mark ran the edited file, `ALTER TABLE ... ADD
+COLUMN theme ...` failed with "column already exists" — and because a
+multi-column `ALTER TABLE` is atomic, the whole statement rolled back,
+so `timezone` was never created either, even though the deployed code
+already expected it. Result: Settings mostly rendered (confirming the
+CSS fix from earlier in the round genuinely worked), but any write
+through `PATCH /api/me` — like picking an avatar colour — hit a real
+"column timezone does not exist" error.
+
+**Fixed:** `db/migrations/06-user-profile.sql` now uses
+`ADD COLUMN IF NOT EXISTS` for all three columns, so it's safe to run
+regardless of which of them already exist. Verified against Mark's
+*exact* scenario, not just a clean install — added `theme`/
+`avatar_option` to a fresh database by hand, then ran the corrected
+migration on top and confirmed it succeeds (informational NOTICEs, not
+errors) and `timezone` actually gets created. Also re-ran the full
+real-Postgres integration suite against both states (17/17).
+
+**The durable lesson, not just this one fix:** never edit an
+already-delivered migration file without first confirming whether it's
+been applied — ask, don't assume, even mid-round. `ADD COLUMN IF NOT
+EXISTS` (and the equivalent idempotent forms for other DDL) is now the
+default for any future migration in this project, not just a one-off
+patch for this file.
+
 ## Next immediate step
 
-1. Apply `db/migrations/06-user-profile.sql` via the Neon SQL console,
-   then delete it from GitHub yourself and confirm so it can be folded
-   into `schema.sql` next round — same convention as every migration so
-   far.
-2. Push this delta to GitHub and let Vercel redeploy.
-3. **Re-verify the CSS fix first, before anything else** — confirm the
-   login page's Email/Password fields are actually visible (bordered
-   input boxes, not blank space), and that switching Light/Dark in
-   Settings visibly changes the app's colours. This was broken in
-   production; confirm it's actually fixed there, not just in the
-   sandbox build.
-4. Then re-verify: Settings' new Profile/Security/Date & Time sections
-   render with real data, a locked-out user shows "Locked" in Users and
-   the Unlock button actually clears it (try force-password-reset on a
+1. **Push this delta to GitHub first, then re-run
+   `db/migrations/06-user-profile.sql`** — the corrected version, not
+   the one you already tried. It's idempotent now, so re-running it is
+   safe even though `theme`/`avatar_option` already exist — it will
+   only add `timezone`. Confirm the run shows two `NOTICE` lines (not
+   errors) plus success.
+2. Once confirmed applied, delete the migration file from GitHub and
+   note it here so it can be folded into `schema.sql` next round.
+3. Re-verify: picking an avatar colour and a Date & Time timezone in
+   Settings both actually save now (this is the exact write path that
+   was hitting "Internal server error"), and that both the CSS fix and
+   the new Settings sections still look right — the screenshot showed
+   they do, but confirm again after this deploy.
+4. Then re-verify: a locked-out user shows "Locked" in Users and the
+   Unlock button actually clears it (try force-password-reset on a
    test user until it locks, or manually set `locked_until` in Neon to
-   confirm), and that creating/editing an Objective and Key Result still
-   works.
+   confirm), and that creating/editing an Objective and Key Result
+   still works.
 5. Then continue Stage 4 at Module 3 (secondary entities: Initiative,
    Check-in, Reflection) against the same Stage 2 data model — this is
    also when the OKR Elements toggles for those three actually start

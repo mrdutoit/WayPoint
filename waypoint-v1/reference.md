@@ -335,6 +335,20 @@ waypoint-v1/
   layer is separate, larger scope than the field itself — don't assume
   it comes free with the preference existing.
 
+- **Never edit an already-delivered migration file without first
+  confirming whether it's been applied.** A migration was edited
+  mid-round to add a `timezone` column alongside already-applied
+  `theme`/`avatar_option` columns, without checking Neon's history
+  first. The edited file's `ALTER TABLE` failed on "column already
+  exists," and because a multi-column `ALTER TABLE` is atomic, the new
+  `timezone` column was never created either — while the deployed code
+  already expected it, producing a real "column does not exist" error
+  on the next write. Every migration in this project now uses
+  `ADD COLUMN IF NOT EXISTS` (or the equivalent idempotent form for
+  other DDL) specifically so a migration is safe to re-run regardless
+  of what's already there — this is now the default, not a one-off
+  patch for the file that broke.
+
 ## Roles
 
 | Role | Notes |
