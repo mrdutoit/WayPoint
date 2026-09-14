@@ -38,7 +38,7 @@ const schemaPath = join(__dirname, '../../frontend/db/schema.sql');
 // applied here too so this suite tests against the full intended
 // current-state schema, not a stale snapshot. Remove this once it's
 // folded in for real.
-const pendingMigrationPath = join(__dirname, '../../frontend/db/migrations/06-user-profile.sql');
+const module3MigrationPath = join(__dirname, '../../frontend/db/migrations/07-initiative-checkin-reflection.sql');
 
 let client, pool;
 
@@ -59,7 +59,7 @@ describeIfDb('write paths against real Postgres', () => {
     await client.query('DROP SCHEMA IF EXISTS okr CASCADE');
     const schemaSql = readFileSync(schemaPath, 'utf8');
     await client.query(schemaSql);
-    await client.query(readFileSync(pendingMigrationPath, 'utf8'));
+    await client.query(readFileSync(module3MigrationPath, 'utf8'));
   });
 
   afterAll(async () => {
@@ -84,8 +84,8 @@ describeIfDb('write paths against real Postgres', () => {
   it('applies schema.sql cleanly with no errors', async () => {
     const { rows } = await client.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'okr' ORDER BY table_name`);
     expect(rows.map((r) => r.table_name)).toEqual([
-      'audit_log', 'cadence', 'cascade_level', 'cycle', 'feature_flag',
-      'key_result', 'objective', 'okr_element_config', 'rubric_level',
+      'audit_log', 'cadence', 'cascade_level', 'check_in', 'cycle', 'feature_flag',
+      'initiative', 'key_result', 'objective', 'okr_element_config', 'reflection', 'rubric_level',
       'scoring_rubric', 'tenant', 'terminology_setting', 'user_account',
     ]);
   });
@@ -195,6 +195,98 @@ describeIfDb('write paths against real Postgres', () => {
       updateKeyResult(client, tenantId, { id: employeeId }, keyResultId, { title: 'Sign 15 new clients', weighting: 2 })
     );
     expect(updated.title).toBe('Sign 15 new clients');
+  });
+
+  it('keyResultService.getKeyResultById — real fetch, FR-020 visibility enforced against a real stranger', async () => {
+    const { getKeyResultById } = await import('../../frontend/api-lib/services/keyResultService.js');
+    const kr = await inTenantContext(() => getKeyResultById(client, tenantId, { id: employeeId }, keyResultId));
+    expect(kr.id).toBe(keyResultId);
+    await expect(
+      inTenantContext(() => getKeyResultById(client, tenantId, { id: tenantAdminId }, keyResultId))
+    ).rejects.toThrow(/owner or their Manager/i);
+  });
+
+  it('reflectionService.createReflection — real insert', async () => {
+    const { createReflection } = await import('../../frontend/api-lib/services/reflectionService.js');
+    const reflection = await inTenantContext(() =>
+      createReflection(client, tenantId, { id: employeeId }, objectiveId, { content: 'Strong quarter, ahead of plan.' })
+    );
+    expect(reflection.content).toBe('Strong quarter, ahead of plan.');
+  });
+
+  it('initiativeService.createInitiative / updateInitiative — real insert and update', async () => {
+    const { createInitiative, updateInitiative } = await import('../../frontend/api-lib/services/initiativeService.js');
+    const created = await inTenantContext(() =>
+      createInitiative(client, tenantId, { id: employeeId }, keyResultId, { title: 'Launch referral programme' })
+    );
+    expect(created.status).toBe('Not Started');
+    const updated = await inTenantContext(() =>
+      updateInitiative(client, tenantId, { id: employeeId }, created.id, { status: 'In Progress' })
+    );
+    expect(updated.status).toBe('In Progress');
+  });
+
+  it('checkInService.createCheckIn — real insert, and the FR-019 roll-up actually updates the Key Result and Objective', async () => {
+    const { createCheckIn } = await import('../../frontend/api-lib/services/checkInService.js');
+    const { rows: levels } = await client.query(
+      `SELECT id, label FROM okr.rubric_level WHERE rubric_id = $1 AND label = 'On Track'`,
+      [rubricId]
+    );
+    const onTrackLevelId = levels[0].id;
+
+    await inTenantContext(() =>
+      createCheckIn(client, tenantId, { id: employeeId }, keyResultId, { rubricLevelId: onTrackLevelId, confidence: 4, comment: 'On pace' })
+    );
+
+    const { rows: krRows } = await client.query(`SELECT status FROM okr.key_result WHERE id = $1`, [keyResultId]);
+    expect(krRows[0].status).toBe('On Track');
+
+    // objectiveId has exactly one Key Result right now, so its own
+    // roll-up should also land on "On Track" — proves the cascade from
+    // Check-in -> Key Result -> Objective actually ran, not just the
+    // Key Result half.
+    const { rows: objRows } = await client.query(`SELECT status FROM okr.objective WHERE id = $1`, [objectiveId]);
+    expect(objRows[0].status).toBe('On Track');
+  });
+
+  it('scoringService — multi-level cascade: a child Objective\'s Check-in updates the parent too, and the parent then scores from children, not its own Key Result', async () => {
+    const { createObjective } = await import('../../frontend/api-lib/services/objectiveService.js');
+    const { createKeyResult } = await import('../../frontend/api-lib/services/keyResultService.js');
+    const { createCheckIn } = await import('../../frontend/api-lib/services/checkInService.js');
+
+    const { rows: teamLevel } = await client.query(
+      `SELECT id FROM okr.cascade_level WHERE tenant_id = $1 AND label = 'Team'`,
+      [tenantId]
+    );
+    const { rows: offTrackLevel } = await client.query(
+      `SELECT id FROM okr.rubric_level WHERE rubric_id = $1 AND label = 'Off Track'`,
+      [rubricId]
+    );
+
+    // Child Objective under objectiveId (currently "On Track" from its own Key Result, per the test above).
+    const child = await inTenantContext(() =>
+      createObjective(client, tenantId, { id: employeeId, role: 'Employee' },
+        { title: 'Grow enterprise segment specifically', cascadeLevelId: teamLevel[0].id, parentObjectiveId: objectiveId })
+    );
+    const childKr = await inTenantContext(() =>
+      createKeyResult(client, tenantId, { id: employeeId }, child.id, { title: 'Sign 3 enterprise logos' })
+    );
+
+    await inTenantContext(() =>
+      createCheckIn(client, tenantId, { id: employeeId }, childKr.id, { rubricLevelId: offTrackLevel[0].id, confidence: 2 })
+    );
+
+    const { rows: childRows } = await client.query(`SELECT status FROM okr.objective WHERE id = $1`, [child.id]);
+    expect(childRows[0].status).toBe('Off Track');
+
+    // The parent (objectiveId) now has exactly one child, scored "Off
+    // Track" — per the resolved ambiguity in scoringService.js, a
+    // parent with children scores from children only, ignoring its own
+    // Key Result (which is itself "On Track"). If this assertion ever
+    // reads "On Track" instead, the parent is wrongly still scoring
+    // from its own Key Result after gaining a child.
+    const { rows: parentRows } = await client.query(`SELECT status FROM okr.objective WHERE id = $1`, [objectiveId]);
+    expect(parentRows[0].status).toBe('Off Track');
   });
 
   it('okrElementConfigService.setElementEnabled — real dependency-graph update', async () => {

@@ -49,7 +49,8 @@ waypoint-v1/
 │   │   ├── settings-router.js (cascade-levels, rubric, cadences, okr-elements, terminology)
 │   │   ├── cycles-router.js   (date-driven — no activate action)
 │   │   ├── objectives-router.js
-│   │   └── key-results-router.js
+│   │   ├── key-results-router.js
+│   │   └── initiatives-router.js
 │   ├── api-lib/                <- the real logic, never deployed directly
 │   │   ├── config.js
 │   │   ├── context/tenant.js   (Row-Level Security chokepoint)
@@ -64,13 +65,16 @@ waypoint-v1/
 │   │        cycleService.js, cadenceService.js, scoringRubricService.js,
 │   │        objectiveService.js, keyResultService.js,
 │   │        okrElementConfigService.js, terminologyService.js,
-│   │        profileService.js)
+│   │        profileService.js, checkInService.js, initiativeService.js,
+│   │        reflectionService.js, scoringService.js — the real FR-019
+│   │        roll-up, called from checkInService.js)
 │   ├── db/
 │   │   ├── schema.sql          <- plain SQL, current-state reference —
 │   │   │                          applied manually via Neon's console
-│   │   └── 06-user-profile.sql <- pending: theme/avatar_option on
-│   │                                user_account, not yet confirmed
-│   │                                applied or folded into schema.sql
+│   │   └── migrations/         <- ring-fenced from schema.sql; a file
+│   │       │                      here means "not yet confirmed applied
+│   │       │                      or folded in" — never assume otherwise
+│   │       └── 07-initiative-checkin-reflection.sql <- pending
 │   ├── src/                    <- the React app
 │   │   ├── components/ (Logo.jsx, DatePicker.jsx — internal/staff-facing
 │   │   │                calendar popover, ported from MedBroker's component
@@ -81,8 +85,8 @@ waypoint-v1/
 │   │   │             enrichment fetch — FlagContext, TerminologyContext —
 │   │   │             useTerms() — ThemeContext — useTheme())
 │   │   ├── pages/ (Login, ChangePassword, Dashboard, FeatureFlags,
-│   │   │           Objectives, ObjectiveDetail, OkrSettings, TenantsAdmin,
-│   │   │           UsersAdmin, Settings — theme + avatar)
+│   │   │           Objectives, ObjectiveDetail, KeyResultDetail,
+│   │   │           OkrSettings, TenantsAdmin, UsersAdmin, Settings)
 │   │   ├── styles/tokens.js    <- design tokens; colours are var()
 │   │   │                          references, not hex — themes.css is
 │   │   │                          the actual source of truth per theme
@@ -348,6 +352,51 @@ waypoint-v1/
   other DDL) specifically so a migration is safe to re-run regardless
   of what's already there — this is now the default, not a one-off
   patch for the file that broke.
+
+- **FR-019's Objective roll-up is equal-weighted across child Objectives,
+  not weighted** — the FR text mirrors Key Result's "weighted average"
+  wording for "linked child Objectives" during cascade roll-up, but
+  Objective has no weighting column the way Key Result does. Nothing in
+  the data model says what a child Objective's weight would even be, so
+  `scoringService.js` averages children equally rather than inventing a
+  weighting scheme. Flag if a real weighting mechanism for Objectives
+  was actually intended — that would be a schema addition, not just a
+  formula change.
+- **An Objective with child Objectives scores from those children only,
+  never blending in its own Key Results** — FR-019 never states whether
+  a parent Objective's status comes from its own Key Results, its
+  children, or both. `scoringService.js`'s `recomputeObjectiveStatus`
+  takes "has children → score from children; no children → score from
+  own Key Results" as a clean either/or, not a blend, since there's no
+  specified way to weight "a child Objective" against "a Key Result" in
+  the same average. WayPoint's schema doesn't actually forbid an
+  Objective from having both children and its own Key Results — in that
+  case, the Key Results are simply excluded from that Objective's own
+  roll-up calculation once it has a child. Verified end-to-end against
+  real Postgres, including the moment a Key Result-scored Objective
+  gains its first child and switches over.
+- **Check-in confidence is a 1-5 integer** — FR-018 only says "a
+  confidence or sentiment indicator" exists, not what scale it uses; the
+  Stage 2 design review (Sam) specifies the *control* ("icon set or
+  slider, not a dropdown") without specifying the range either. 1-5 was
+  chosen to match a 5-icon mood-style control cleanly. Flagged as an
+  inferred choice in `db/migrations/07-initiative-checkin-reflection.sql`'s
+  own comment, not asserted as a literal requirement.
+- **Objective/Key Result status is a stored column, recomputed and
+  persisted at write time — never computed live on read.** Submitting a
+  Check-in recomputes the Key Result's status, then the parent
+  Objective's, then recurses up through every ancestor in the same
+  transaction (`scoringService.js`). This keeps every GET cheap (no
+  N+1 roll-up query on every list/detail fetch) at the cost of the
+  Check-in write doing more work — the right trade-off given Check-ins
+  are far less frequent than reads.
+- **`getRubricForTenant` returns each rubric level's `id`, not just its
+  `label`/`level_index`** — this only started mattering once Check-in
+  needed a real `rubricLevelId` to submit; the original Module 2
+  version only needed labels for the settings-page editor. A reminder
+  that "nothing needs this yet" is not the same as "this will never
+  need it" — check what a query actually returns before assuming the
+  existing shape is sufficient for a new caller.
 
 ## Roles
 

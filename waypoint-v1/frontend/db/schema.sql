@@ -59,6 +59,11 @@ CREATE TABLE okr.user_account (
   locked_until          timestamptz,
   reset_token_hash      text,
   reset_token_expiry    timestamptz,
+  -- Self-service profile preferences (GET/PATCH /api/me), not tenant-
+  -- scoped admin fields — see profileService.js.
+  theme                 text NOT NULL DEFAULT 'light',        -- one of ThemeContext.jsx's THEMES
+  avatar_option         text NOT NULL DEFAULT 'grad',         -- one of avatarOptions.js's AVATAR_OPTIONS — a colour id, not a photo
+  timezone              text NOT NULL DEFAULT 'Africa/Johannesburg', -- one of profileService.js's TIMEZONE_IDS; stored preference only, no app-wide conversion layer yet
   created_at            timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ON okr.user_account (tenant_id);

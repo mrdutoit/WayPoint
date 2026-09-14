@@ -23,14 +23,23 @@ vi.mock('../frontend/api-lib/services/keyResultService.js', () => ({
   listKeyResultsForObjective: vi.fn(),
   createKeyResult: vi.fn(),
 }));
+vi.mock('../frontend/api-lib/services/reflectionService.js', () => ({
+  listReflectionsForObjective: vi.fn(),
+  createReflection: vi.fn(),
+}));
 
 const { getAuthenticatedUser } = await import('../frontend/api-lib/middleware/auth.js');
 const objectiveService = await import('../frontend/api-lib/services/objectiveService.js');
 const keyResultService = await import('../frontend/api-lib/services/keyResultService.js');
+const reflectionService = await import('../frontend/api-lib/services/reflectionService.js');
 const handler = (await import('../frontend/api/objectives-router.js')).default;
 
 function mockReq({ method, slug = [], body }) {
-  return { method, query: { slug }, body, headers: {} };
+  // Simulates the real Vercel rewrite shape (a slash-joined string, or
+  // absent for the bare path) rather than a pre-split array — see
+  // api-lib/http/helpers.js's parseSlug for why that distinction is the
+  // whole point of this test harness shape.
+  return { method, query: { slug: slug.length > 0 ? slug.join('/') : undefined }, body, headers: {} };
 }
 function mockRes() {
   const res = {};
@@ -146,6 +155,34 @@ describe('objectives-router — POST /api/objectives/:id/key-results (FR-016)', 
     const res = mockRes();
     await handler(mockReq({ method: 'POST', slug: ['obj-1', 'key-results'], body: { title: 'X' } }), res);
     expect(res.status).toHaveBeenCalledWith(403);
+  });
+});
+
+describe('objectives-router — POST /api/objectives/:id/reflections (FR-027)', () => {
+  it('creates a Reflection', async () => {
+    getAuthenticatedUser.mockReturnValue(EMPLOYEE);
+    reflectionService.createReflection.mockResolvedValue({ id: 'refl-1', content: 'We learned a lot' });
+    const res = mockRes();
+    await handler(mockReq({ method: 'POST', slug: ['obj-1', 'reflections'], body: { content: 'We learned a lot' } }), res);
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('maps a disabled-element ValidationError to 400', async () => {
+    getAuthenticatedUser.mockReturnValue(EMPLOYEE);
+    reflectionService.createReflection.mockRejectedValue(new objectiveService.ValidationError('Reflections are disabled'));
+    const res = mockRes();
+    await handler(mockReq({ method: 'POST', slug: ['obj-1', 'reflections'], body: { content: 'x' } }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+});
+
+describe('objectives-router — GET /api/objectives/:id/reflections', () => {
+  it('lists Reflections', async () => {
+    getAuthenticatedUser.mockReturnValue(EMPLOYEE);
+    reflectionService.listReflectionsForObjective.mockResolvedValue([{ id: 'refl-1' }]);
+    const res = mockRes();
+    await handler(mockReq({ method: 'GET', slug: ['obj-1', 'reflections'] }), res);
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 });
 

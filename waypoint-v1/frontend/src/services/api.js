@@ -96,11 +96,26 @@ export const objectivesApi = {
     request(`/objectives/${id}`, { method: 'PATCH', body: JSON.stringify({ title, parentObjectiveId }) }),
   createKeyResult: (id, { title, weighting, rubricId }) =>
     request(`/objectives/${id}/key-results`, { method: 'POST', body: JSON.stringify({ title, weighting, rubricId }) }),
+  listReflections: (id) => request(`/objectives/${id}/reflections`),
+  createReflection: (id, { content }) =>
+    request(`/objectives/${id}/reflections`, { method: 'POST', body: JSON.stringify({ content }) }),
 };
 
 export const keyResultsApi = {
+  get: (id) => request(`/key-results/${id}`),
   update: (id, { title, weighting }) =>
     request(`/key-results/${id}`, { method: 'PATCH', body: JSON.stringify({ title, weighting }) }),
+  listInitiatives: (id) => request(`/key-results/${id}/initiatives`),
+  createInitiative: (id, { title, ownerId, dueDate }) =>
+    request(`/key-results/${id}/initiatives`, { method: 'POST', body: JSON.stringify({ title, ownerId, dueDate }) }),
+  listCheckIns: (id) => request(`/key-results/${id}/check-ins`),
+  createCheckIn: (id, { rubricLevelId, confidence, comment }) =>
+    request(`/key-results/${id}/check-ins`, { method: 'POST', body: JSON.stringify({ rubricLevelId, confidence, comment }) }),
+};
+
+export const initiativesApi = {
+  update: (id, { title, status, dueDate }) =>
+    request(`/initiatives/${id}`, { method: 'PATCH', body: JSON.stringify({ title, status, dueDate }) }),
 };
 
 // ---------- User management (PlatformAdmin/TenantAdmin) ----------

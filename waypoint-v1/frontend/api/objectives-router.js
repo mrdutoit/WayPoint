@@ -5,6 +5,7 @@ import {
   listObjectivesForCaller, getObjectiveForCaller, createObjective, updateObjective,
 } from '../api-lib/services/objectiveService.js';
 import { listKeyResultsForObjective, createKeyResult } from '../api-lib/services/keyResultService.js';
+import { listReflectionsForObjective, createReflection } from '../api-lib/services/reflectionService.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
 
@@ -25,6 +26,12 @@ export default async function handler(req, res) {
     if (req.method === 'PATCH' && objectiveId && !subResource) return await updateAction(req, res, user, objectiveId);
     if (req.method === 'POST' && objectiveId && subResource === 'key-results') {
       return await createKeyResultAction(req, res, user, objectiveId);
+    }
+    if (req.method === 'POST' && objectiveId && subResource === 'reflections') {
+      return await createReflectionAction(req, res, user, objectiveId);
+    }
+    if (req.method === 'GET' && objectiveId && subResource === 'reflections') {
+      return await listReflectionsAction(req, res, user, objectiveId);
     }
     return res.status(404).json({ error: 'Not found' });
   } catch (err) {
@@ -92,4 +99,25 @@ async function createKeyResultAction(req, res, user, objectiveId) {
     return created;
   });
   res.status(201).json({ keyResult });
+}
+
+// POST /api/objectives/:id/reflections — Owner, Manager (FR-027, if enabled).
+async function createReflectionAction(req, res, user, objectiveId) {
+  const { content } = req.body ?? {};
+
+  const reflection = await withTenantContext(user.tenantId, async (client) => {
+    const created = await createReflection(client, user.tenantId, user, objectiveId, { content });
+    await recordAuditEvent(client, {
+      tenantId: user.tenantId, actorId: user.id,
+      action: 'reflection.created', entityType: 'Reflection', entityId: created.id,
+    });
+    return created;
+  });
+  res.status(201).json({ reflection });
+}
+
+// GET /api/objectives/:id/reflections — Owner, Manager, Tenant Administrator.
+async function listReflectionsAction(req, res, user, objectiveId) {
+  const reflections = await withTenantContext(user.tenantId, (client) => listReflectionsForObjective(client, user.tenantId, objectiveId));
+  res.status(200).json({ reflections });
 }

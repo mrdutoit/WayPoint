@@ -12,13 +12,16 @@ describe('getRubricForTenant', () => {
     expect(await getRubricForTenant(client, 't1')).toBeNull();
   });
 
-  it('returns the rubric with its ordered levels', async () => {
+  it('returns the rubric with its ordered levels, including each level\'s id (needed for Check-in submission — Module 3)', async () => {
     const client = mockClient();
     client.query
       .mockResolvedValueOnce({ rows: [{ id: 'rubric-1', name: 'Standard' }] })
-      .mockResolvedValueOnce({ rows: [{ level_index: 1, label: 'Off Track' }, { level_index: 2, label: 'On Track' }] });
+      .mockResolvedValueOnce({ rows: [{ id: 'level-1', levelIndex: 1, label: 'Off Track' }, { id: 'level-2', levelIndex: 2, label: 'On Track' }] });
     const rubric = await getRubricForTenant(client, 't1');
-    expect(rubric).toEqual({ id: 'rubric-1', name: 'Standard', levels: [{ level_index: 1, label: 'Off Track' }, { level_index: 2, label: 'On Track' }] });
+    expect(rubric).toEqual({
+      id: 'rubric-1', name: 'Standard',
+      levels: [{ id: 'level-1', levelIndex: 1, label: 'Off Track' }, { id: 'level-2', levelIndex: 2, label: 'On Track' }],
+    });
   });
 });
 
@@ -45,7 +48,7 @@ describe('setRubricForTenant — validation (FR-017: four or five levels)', () =
       .mockResolvedValueOnce({}) // upsert level 4
       .mockResolvedValueOnce({}) // delete stray levels
       .mockResolvedValueOnce({ rows: [{ id: 'rubric-1', name: 'Standard' }] }) // final read: rubric
-      .mockResolvedValueOnce({ rows: DEFAULT_RUBRIC_LEVELS.map((label, i) => ({ level_index: i + 1, label })) }); // final read: levels
+      .mockResolvedValueOnce({ rows: DEFAULT_RUBRIC_LEVELS.map((label, i) => ({ id: `level-${i + 1}`, levelIndex: i + 1, label })) }); // final read: levels
 
     const rubric = await setRubricForTenant(client, 't1', { name: 'Standard', levels: DEFAULT_RUBRIC_LEVELS });
     expect(rubric.levels.map((l) => l.label)).toEqual(DEFAULT_RUBRIC_LEVELS);

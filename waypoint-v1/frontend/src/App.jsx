@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import FeatureFlags from './pages/FeatureFlags.jsx';
 import Objectives from './pages/Objectives.jsx';
 import ObjectiveDetail from './pages/ObjectiveDetail.jsx';
+import KeyResultDetail from './pages/KeyResultDetail.jsx';
 import OkrSettings from './pages/OkrSettings.jsx';
 import TenantsAdmin from './pages/TenantsAdmin.jsx';
 import UsersAdmin from './pages/UsersAdmin.jsx';
@@ -141,6 +142,10 @@ export default function App() {
             <Route
               path="/objectives/:id"
               element={<RequireAuth><Shell><ObjectiveDetail /></Shell></RequireAuth>}
+            />
+            <Route
+              path="/key-results/:id"
+              element={<RequireAuth><Shell><KeyResultDetail /></Shell></RequireAuth>}
             />
             <Route
               path="/okr-settings"

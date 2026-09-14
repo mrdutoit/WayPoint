@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createKeyResult, updateKeyResult, computeKeyResultStatus } from '../frontend/api-lib/services/keyResultService.js';
+import { createKeyResult, updateKeyResult, getKeyResultById } from '../frontend/api-lib/services/keyResultService.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../frontend/api-lib/services/objectiveService.js';
 
 function mockClient() {
@@ -11,17 +11,6 @@ function mockClient() {
 // rows means "not yet seeded", which defaults to enabled.
 const ELEMENT_ENABLED = { rows: [] };
 const ELEMENT_DISABLED = { rows: [{ elementKey: 'KeyResult', isEnabled: false }] };
-
-// ---------- FR-024: Key Result with no Check-ins ----------
-describe('computeKeyResultStatus (FR-024)', () => {
-  it('returns "Not Started" when there are no Check-ins', () => {
-    expect(computeKeyResultStatus([])).toBe('Not Started');
-  });
-
-  it('does not silently fabricate a score-from-latest-Check-in before Check-ins exist (Module 3)', () => {
-    expect(() => computeKeyResultStatus([{ id: 'c1' }])).toThrow(/Module 3/);
-  });
-});
 
 describe('createKeyResult — FR-025 gate', () => {
   it('rejects creation when KeyResult is disabled for the tenant', async () => {
@@ -114,5 +103,43 @@ describe('updateKeyResult — does not accept status (FR-004)', () => {
     expect(kr.title).toBe('New title');
     const updateSql = client.query.mock.calls[2][0];
     expect(updateSql).not.toMatch(/status\s*=/);
+  });
+});
+
+describe('getKeyResultById — FR-020 visibility (same rule as its parent Objective)', () => {
+  const OWNER = { id: 'owner-1' };
+  const MANAGER = { id: 'manager-1' };
+  const STRANGER = { id: 'stranger-1' };
+  const KR_ROW = {
+    id: 'kr-1', tenantId: 't1', objectiveId: 'obj-1', rubricId: 'rubric-1',
+    title: 'Sign 10 clients', weighting: '1', status: 'Not Started', createdAt: new Date(),
+    ownerId: 'owner-1', ownerManagerId: 'manager-1',
+  };
+
+  it('throws NotFoundError when the Key Result does not exist', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({ rows: [] });
+    await expect(getKeyResultById(client, 't1', OWNER, 'missing')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('is visible to the owner', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({ rows: [KR_ROW] });
+    const kr = await getKeyResultById(client, 't1', OWNER, 'kr-1');
+    expect(kr.id).toBe('kr-1');
+    expect(kr.ownerId).toBeUndefined(); // internal-only field, stripped before returning
+  });
+
+  it('is visible to the owner\'s Manager', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({ rows: [KR_ROW] });
+    const kr = await getKeyResultById(client, 't1', MANAGER, 'kr-1');
+    expect(kr.id).toBe('kr-1');
+  });
+
+  it('is not visible to a stranger', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({ rows: [KR_ROW] });
+    await expect(getKeyResultById(client, 't1', STRANGER, 'kr-1')).rejects.toBeInstanceOf(ForbiddenError);
   });
 });

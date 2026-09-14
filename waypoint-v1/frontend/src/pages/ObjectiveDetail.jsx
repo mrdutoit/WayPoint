@@ -17,15 +17,17 @@ export default function ObjectiveDetail() {
   const pageStyle = isMobile ? s.pageMobile : s.page;
   const [objective, setObjective] = useState(null);
   const [keyResults, setKeyResults] = useState([]);
+  const [reflections, setReflections] = useState([]);
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [forbidden, setForbidden] = useState(false);
 
   function load() {
-    return objectivesApi.get(id)
-      .then((result) => {
+    return Promise.all([objectivesApi.get(id), objectivesApi.listReflections(id)])
+      .then(([result, reflectionsResult]) => {
         setObjective(result.objective);
         setKeyResults(result.keyResults ?? []);
+        setReflections(reflectionsResult.reflections ?? []);
       })
       .catch((err) => {
         if (err.status === 404) setNotFound(true);
@@ -33,7 +35,7 @@ export default function ObjectiveDetail() {
         else setError(err.message ?? 'Failed to load this Objective');
       });
   }
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (notFound) {
     return <div style={pageStyle}><p style={{ color: colors.ink500 }}>{t('Objective')} not found.</p></div>;
@@ -91,6 +93,26 @@ export default function ObjectiveDetail() {
         )}
 
         <AddKeyResultForm objectiveId={objective.id} onCreated={(kr) => setKeyResults((prev) => [...prev, kr])} label={t('KeyResult')} />
+      </div>
+
+      <div style={{ ...s.card, marginTop: 20 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: colors.ink900 }}>{tPlural('Reflection')}</div>
+
+        {reflections.length === 0 && (
+          <div style={{ fontSize: 13, color: colors.ink500, marginBottom: 16 }}>No {tPlural('Reflection').toLowerCase()} yet.</div>
+        )}
+        {reflections.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+            {reflections.map((r) => (
+              <div key={r.id} style={{ padding: 10, borderRadius: 8, border: `1px solid ${colors.line}` }}>
+                <div style={{ fontSize: 12, color: colors.ink400, marginBottom: 4 }}>{new Date(r.submittedAt).toLocaleString()}</div>
+                <div style={{ fontSize: 13, color: colors.ink900, whiteSpace: 'pre-wrap' }}>{r.content}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <AddReflectionForm objectiveId={objective.id} label={t('Reflection')} onCreated={(r) => setReflections((prev) => [r, ...prev])} />
       </div>
     </div>
   );
@@ -178,6 +200,7 @@ function KeyResultRow({ keyResult, onSaved }) {
       <td style={s.td}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <StatusChip status={keyResult.status} />
+          <Link to={`/key-results/${keyResult.id}`} style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12, textDecoration: 'none', display: 'inline-block' }}>View</Link>
           <button type="button" onClick={() => setEditing(true)} style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12 }}>Edit</button>
         </div>
       </td>
@@ -218,6 +241,42 @@ function AddKeyResultForm({ objectiveId, onCreated, label }) {
         <input required type="number" step="0.01" min="0.01" style={s.formInput} value={weighting} onChange={(e) => setWeighting(e.target.value)} />
       </div>
       <button type="submit" disabled={submitting} style={s.btnPrimary}>{submitting ? 'Adding…' : 'Add'}</button>
+      {error && <div style={s.chip(colors.danger, colors.dangerBg)}>{error}</div>}
+    </form>
+  );
+}
+
+function AddReflectionForm({ objectiveId, label, onCreated }) {
+  const [content, setContent] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await objectivesApi.createReflection(objectiveId, { content });
+      onCreated(result.reflection);
+      setContent('');
+    } catch (err) {
+      setError(err.message ?? `Failed to submit ${label.toLowerCase()}`);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <label style={s.label}>New {label}</label>
+      <textarea
+        required style={{ ...s.formInput, minHeight: 70, resize: 'vertical' }}
+        value={content} onChange={(e) => setContent(e.target.value)}
+        placeholder="What went well, what didn't, what would we do differently?"
+      />
+      <div>
+        <button type="submit" disabled={submitting} style={s.btnPrimary}>{submitting ? 'Submitting…' : `Submit ${label}`}</button>
+      </div>
       {error && <div style={s.chip(colors.danger, colors.dangerBg)}>{error}</div>}
     </form>
   );

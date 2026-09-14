@@ -214,13 +214,8 @@ export async function updateObjective(client, tenantId, caller, objectiveId, { t
  * with no Key Results (or whose Key Results are all still "Not Started",
  * which is every Key Result until Module 3 ships Check-ins) has no
  * computed score and stays "Not Started" rather than defaulting to a
- * rubric level. The weighted-average roll-up against real rubric scores
- * is genuinely blocked on Check-in existing — see keyResultService.js —
- * so it is not implemented here yet rather than implemented against data
- * that cannot currently exist.
+ * rubric level. The real weighted-average roll-up now lives in
+ * scoringService.js's recomputeObjectiveStatus — called from
+ * checkInService.js whenever a Check-in is submitted, since that's the
+ * only thing that can ever change it.
  */
-export function computeObjectiveStatus(keyResultStatuses) {
-  if (keyResultStatuses.length === 0) return 'Not Started';
-  if (keyResultStatuses.every((s) => s === 'Not Started')) return 'Not Started';
-  throw new Error('Weighted roll-up against real Key Result scores ships with Module 3 (Check-ins)');
-}

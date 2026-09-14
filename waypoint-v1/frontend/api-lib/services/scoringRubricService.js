@@ -24,7 +24,7 @@ export async function getRubricForTenant(client, tenantId) {
   if (rubrics.length === 0) return null;
 
   const { rows: levels } = await client.query(
-    `SELECT level_index, label FROM okr.rubric_level WHERE rubric_id = $1 ORDER BY level_index ASC`,
+    `SELECT id, level_index AS "levelIndex", label FROM okr.rubric_level WHERE rubric_id = $1 ORDER BY level_index ASC`,
     [rubrics[0].id]
   );
   return { id: rubrics[0].id, name: rubrics[0].name, levels };

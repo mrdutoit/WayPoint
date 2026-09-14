@@ -1,27 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
-  createObjective, updateObjective, getObjectiveForCaller, computeObjectiveStatus,
+  createObjective, updateObjective, getObjectiveForCaller,
   ForbiddenError, NotFoundError, ValidationError,
 } from '../frontend/api-lib/services/objectiveService.js';
 
 function mockClient() {
   return { query: vi.fn() };
 }
-
-// ---------- FR-024: Objective with no Key Results / all-"Not Started" ----------
-describe('computeObjectiveStatus (FR-024 edge cases)', () => {
-  it('returns "Not Started" for an Objective with no Key Results', () => {
-    expect(computeObjectiveStatus([])).toBe('Not Started');
-  });
-
-  it('returns "Not Started" when every Key Result is still "Not Started"', () => {
-    expect(computeObjectiveStatus(['Not Started', 'Not Started'])).toBe('Not Started');
-  });
-
-  it('does not silently fabricate a rubric-level roll-up before Check-ins exist (Module 3)', () => {
-    expect(() => computeObjectiveStatus(['On Track', 'Not Started'])).toThrow(/Module 3/);
-  });
-});
 
 // ---------- FR-015 / role authorisation ----------
 describe('createObjective — validation and authorisation', () => {

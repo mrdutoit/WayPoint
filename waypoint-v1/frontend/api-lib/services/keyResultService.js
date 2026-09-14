@@ -25,7 +25,29 @@ export async function listKeyResultsForObjective(client, tenantId, objectiveId) 
   return rows;
 }
 
-async function fetchObjectiveWithOwner(client, tenantId, objectiveId) {
+/**
+ * FR-020's visibility rule ("owner and the owner's direct Manager
+ * only") applies to a Key Result the same way it applies to its parent
+ * Objective — reuses assertCanEditObjective as the visibility check
+ * too, since the permission model is identical for view and edit here.
+ */
+export async function getKeyResultById(client, tenantId, caller, keyResultId) {
+  const { rows } = await client.query(
+    `SELECT ${KEY_RESULT_FIELDS}, o.owner_id AS "ownerId", owner.manager_id AS "ownerManagerId"
+     FROM okr.key_result kr
+     JOIN okr.objective o ON o.id = kr.objective_id
+     JOIN okr.user_account owner ON owner.id = o.owner_id
+     WHERE kr.tenant_id = $1 AND kr.id = $2`,
+    [tenantId, keyResultId]
+  );
+  const row = rows[0];
+  if (!row) throw new NotFoundError('Key Result not found');
+  assertCanEditObjective(row, caller);
+  const { ownerId, ownerManagerId, ...keyResult } = row;
+  return keyResult;
+}
+
+export async function fetchObjectiveWithOwner(client, tenantId, objectiveId) {
   const { rows } = await client.query(
     `SELECT o.id, o.owner_id AS "ownerId", owner.manager_id AS "ownerManagerId"
      FROM okr.objective o
@@ -36,9 +58,29 @@ async function fetchObjectiveWithOwner(client, tenantId, objectiveId) {
   return rows[0] ?? null;
 }
 
-function assertCanEditObjective(objectiveRow, caller) {
+export function assertCanEditObjective(objectiveRow, caller) {
   const allowed = objectiveRow.ownerId === caller.id || objectiveRow.ownerManagerId === caller.id;
   if (!allowed) throw new ForbiddenError('Only the Objective owner or their Manager can do this');
+}
+
+/**
+ * The same ownership check as assertCanEditObjective, one hop further
+ * out — for anything attached to a Key Result (Initiative, Check-in),
+ * permission is still "the parent Objective's owner or their Manager,"
+ * per FR-018/FR-026. Shared by checkInService.js and
+ * initiativeService.js rather than each re-deriving it.
+ */
+export async function fetchKeyResultWithObjectiveOwner(client, tenantId, keyResultId) {
+  const { rows } = await client.query(
+    `SELECT kr.id, kr.objective_id AS "objectiveId", kr.rubric_id AS "rubricId",
+            o.owner_id AS "ownerId", owner.manager_id AS "ownerManagerId"
+     FROM okr.key_result kr
+     JOIN okr.objective o ON o.id = kr.objective_id
+     JOIN okr.user_account owner ON owner.id = o.owner_id
+     WHERE kr.tenant_id = $1 AND kr.id = $2`,
+    [tenantId, keyResultId]
+  );
+  return rows[0] ?? null;
 }
 
 export async function createKeyResult(client, tenantId, caller, objectiveId, { title, weighting, rubricId }) {
@@ -110,11 +152,7 @@ export async function updateKeyResult(client, tenantId, caller, keyResultId, { t
 
 /**
  * FR-024 (Key Result half): "A Key Result with no Check-ins defaults to
- * a 'Not Started' status." Until Module 3 (Check-ins) ships, this is the
- * only status a Key Result can ever have — see the module note in
- * objectiveService.js's computeObjectiveStatus.
+ * a 'Not Started' status." The real "score from latest Check-in" logic
+ * now lives in scoringService.js's recomputeKeyResultStatus, called
+ * from checkInService.js whenever a Check-in is submitted.
  */
-export function computeKeyResultStatus(checkIns) {
-  if (checkIns.length === 0) return 'Not Started';
-  throw new Error('Score-from-latest-Check-in ships with Module 3 (Check-ins)');
-}
