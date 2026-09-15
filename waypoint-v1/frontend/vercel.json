@@ -15,6 +15,7 @@
     { "source": "/api/objectives/:slug*", "destination": "/api/objectives-router?slug=:slug*" },
     { "source": "/api/key-results/:slug*", "destination": "/api/key-results-router?slug=:slug*" },
     { "source": "/api/initiatives/:slug*", "destination": "/api/initiatives-router?slug=:slug*" },
+    { "source": "/api/reports/:slug*", "destination": "/api/reports-router?slug=:slug*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

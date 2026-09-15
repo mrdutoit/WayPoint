@@ -5,13 +5,13 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** Module 3 shipped — Initiative, Check-in, Reflection,
-and the real FR-019 scoring roll-up (previously a stub returning only
-"Not Started"). Every Objective and Key Result in the app can now
-actually score something, cascading up multi-level hierarchies. 297
-mocked tests + 22 real-Postgres integration tests, including an
-end-to-end proof of the multi-level cascade. `db/migrations/07-initiative-checkin-reflection.sql`
-is pending — not yet confirmed applied.
+**Last updated:** FR-033 Reporting & Dashboards shipped — the four
+reports the Stage 2 doc's approved API table actually specifies
+(scorecard, team-progress, alignment-map, checkin-compliance), out of
+the eight named in its narrative section 5. 323 mocked tests + 27
+real-Postgres integration tests. Migration 06 (theme/avatar/timezone)
+confirmed applied last round is now folded into `schema.sql`;
+`db/migrations/07-initiative-checkin-reflection.sql` remains pending.
 
 ## Where things actually stand
 
@@ -26,21 +26,24 @@ is pending — not yet confirmed applied.
     the tenant-provisioning/user-invite/password-management follow-up.
   - Module 2 (Objective, Key Result, Cascade) — complete.
   - Module 3 (Initiative, Check-in, Reflection) — complete, including
-    the real FR-019 scoring roll-up (was a stub until now).
+    the real FR-019 scoring roll-up.
+  - FR-033 (Reporting & Dashboards) — complete for the four reports the
+    Stage 2 doc's approved API table actually specifies (scorecard,
+    team-progress, alignment-map, checkin-compliance). Four more are
+    named in the doc's narrative section 5 but never given an API
+    endpoint (cycle-over-cycle trend, Initiative execution status,
+    Reflection digest, cross-tenant adoption) — not built, flagged
+    rather than assumed out of scope permanently.
   - FR-013 (Terminology) and FR-025 (OKR element toggles) — pulled
     forward from Module 7 ahead of Module 2, at Mark's request.
-  - Modules 4, 5, 6, and the remainder of 7 (integrations, reporting,
-    remaining administration) — not started.
+  - FR-021 (Billing Mode UI), FR-030-032 (Data Export, Audit Log
+    Export, Retention/Erasure) — not started; these were the other two
+    options offered alongside Reporting when this round started.
+  - FR-022 (AI Settings scaffold UI), FR-028/029 (Field-Level
+    Encryption, SSO) — deliberately deferred per the Stage 1/2 docs
+    themselves, not just unstarted.
 - **Pre-Handover Review:** Correctly not yet run — belongs after Stage 4
   completes, before Stage 5.
-
-**Hierarchy depth, updated (superseding the note from two rounds ago —
-that one is now stale, not just historical):** Objective → Key Result →
-Initiative/Check-in now all exist, and Reflection attaches directly to
-Objective. Every Objective/Key Result can now genuinely score something
-— FR-019's real weighted-average roll-up replaced the old stub that
-could only ever return "Not Started." Modules 4-6 and the rest of 7
-(reporting, integrations, remaining admin) are still not started.
 
 **Cross-cutting, not tied to a Module number:** a self-service Settings
 page (theme + avatar + timezone preference) — personal account settings
@@ -64,46 +67,59 @@ existing, jumped to 1.57 kB once the import landed). A migration edited
 mid-round without checking whether its original version had already
 been applied broke on Mark's real database the same way — fixed with
 `ADD COLUMN IF NOT EXISTS`, now the standing default for every
-migration in this project, not a one-off patch. All of the above is
-stable and confirmed working as of this note.
+migration in this project. Module 3 (Initiative, Check-in, Reflection)
+shipped the real FR-019 scoring roll-up, replacing the Module 2 stub —
+two genuine gaps in FR-019's literal text (Objective has no weighting
+column to roll up "weighted" by; whether a parent scores from its own
+Key Results, its children, or both is never stated) resolved and
+documented in `scoringService.js` and `reference.md`, verified
+end-to-end against real Postgres including a multi-level cascade. All
+of the above is stable and confirmed working as of this note.
 
-## This round — Module 3 (Initiative, Check-in, Reflection) + the real FR-019 roll-up
+## This round — FR-033 Reporting & Dashboards
 
-The centerpiece: `scoringService.js` replaces the Module 2 stubs that
-could only ever return "Not Started." Two genuine gaps in FR-019's
-literal text, resolved and documented in the code rather than guessed
-at silently — flag if either reading is wrong:
+Built the four reports the Stage 2 doc's *approved API table*
+specifies — `reportingService.js`'s `getScorecard`, `getTeamProgress`,
+`getAlignmentMap`, `getCheckinCompliance` — not all eight named in the
+doc's narrative section 5. That's a real gap in the doc itself (section
+5 lists eight report types; section 4's API table only gives four of
+them an endpoint), surfaced rather than silently picked one way:
+cycle-over-cycle trend, Initiative execution status, Reflection digest,
+and cross-tenant adoption are identified, not built.
 
-1. FR-019 says Objective roll-up is a "weighted average… of its Key
-   Results," mirroring the same wording for "linked child Objectives"
-   during cascade roll-up — but Objective has no weighting column the
-   way Key Result does. Implemented as an **equal-weighted** average
-   across child Objectives, since there's nothing to weight by.
-2. Whether a parent Objective's status comes from its own Key Results,
-   its children, or both is never stated. Implemented as: no children →
-   score from own Key Results (the unambiguous base case); **has**
-   children → score from children only, ignoring its own Key Results
-   entirely. Verified this exact behaviour end-to-end against real
-   Postgres — an Objective holding "On Track" from its own Key Result
-   correctly switches to scoring from a new child the moment that child
-   exists, cascading through multiple levels in one Check-in.
+Two scope interpretations resolved and documented, not guessed at
+silently:
 
-Also shipped: `checkInService.js`, `initiativeService.js`,
-`reflectionService.js` (all three gated by FR-025's element toggles,
-which now have something to actually gate). A real gap surfaced and
-fixed along the way: `getRubricForTenant` never exposed each rubric
-level's `id` — only `label`/`level_index` — because nothing needed it
-before Check-in existed to submit one. New `KeyResultDetail.jsx` page
-(Check-in submission + history, Initiatives) and a Reflections section
-on `ObjectiveDetail.jsx`; Key Result rows now link to it.
+- **Check-in compliance** ("who is checking in on schedule and who
+  isn't") has no schedule concept to check against — WayPoint's only
+  cadence concept is a Cycle's own length (Monthly/Quarterly/etc.),
+  not a per-Check-in frequency within a Cycle. Built the coarser,
+  actually-buildable version: has each Key Result received *any*
+  Check-in this Cycle, grouped by owner — not a fine-grained "on this
+  week's schedule" tracker.
+- **Team progress "risk" sorting** ("lowest confidence or score
+  first") reads as either could be primary. Resolved as: current
+  rubric level first (a Key Result with zero Check-ins sorts as worst
+  of all — "untouched" is at least as risky as "touched and scored
+  low"), latest confidence as the tie-breaker.
 
-297 mocked tests + 22 real-Postgres integration tests, including the
-multi-level cascade proof above. `db/migrations/07-initiative-checkin-reflection.sql`
-is pending — not yet confirmed applied, idempotent per the established
-convention. Separately: migration 06 (`theme`/`avatar_option`/`timezone`)
-was confirmed applied by Mark last round — folded into `schema.sql`
-directly this round, and the migration file deleted, completing that
-round's convention (it had been left half-done).
+CSV/JSON export, which the doc says all reports share with FR-030, is
+deliberately not built — FR-030 (Data Export) itself doesn't exist yet,
+so there's no shared mechanism to reuse; building a one-off exporter
+for just these four reports risked a second, inconsistent mechanism
+once FR-030 actually ships. These four reports are view-only for now.
+
+Frontend: a `Reports.jsx` landing page gated by role, `Scorecard.jsx`,
+`TeamProgress.jsx`, `CheckinCompliance.jsx`, and `AlignmentMap.jsx` —
+the last with a collapse/expand tree per the Stage 2 design review's
+explicit requirement (Sam) that a deep cascade stay usable, not render
+fully by default.
+
+323 mocked tests + 27 real-Postgres integration tests (up from 22 —
+5 new, covering all four reports against a real multi-employee,
+multi-level dataset, including the exact LATERAL-join and
+risk-ordering logic mocked tests can't validate). Nothing pending to
+apply this round — no schema changes.
 
 ## Next immediate step
 
@@ -111,18 +127,19 @@ round's convention (it had been left half-done).
    Neon SQL console, then delete it from GitHub yourself and confirm so
    it can be folded into `schema.sql` next round.
 2. Push this delta to GitHub and let Vercel redeploy.
-3. Re-verify end to end: open a Key Result, submit a Check-in, confirm
-   its status updates and the parent Objective's status updates too;
-   add an Initiative and change its status; add a Reflection. Then the
-   thing most worth actually trying: build a two-level cascade for real
-   (a parent Objective with a child Objective under it, each with their
-   own Key Result) and confirm the parent's status changes when the
-   child's Key Result gets a Check-in — this exact scenario is proven
-   against real Postgres in the sandbox, but hasn't been seen in the
-   deployed app yet.
-4. Then continue Stage 4 at Module 4 — the next unstarted piece per the
-   Stage 2 doc (reporting/dashboards is Module 6; check the doc's
-   module breakdown for what's actually next before assuming).
+3. Re-verify end to end: as an Employee, view your own scorecard; as a
+   Manager, view team progress and confirm the worst-scored direct
+   report actually sorts first; as a TenantAdmin, open the alignment
+   map and confirm collapse/expand works on a real multi-level tree,
+   then check-in compliance and confirm it correctly shows both
+   checked-in and not-checked-in Key Results for the same person. None
+   of this has been seen in the deployed app yet — only in the sandbox.
+4. Module 3 (Initiative, Check-in, Reflection) is confirmed working in
+   production as of this round — no further re-verification needed
+   there unless something changes.
+5. Then pick the next piece from what's still open: FR-021 (Billing
+   Mode UI), FR-030-032 (Data Export/Retention/Erasure), or the four
+   report types this round didn't build (see "This round," above).
 
 ## Open items, not yet resolved
 

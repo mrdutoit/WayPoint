@@ -11,6 +11,11 @@ import FeatureFlags from './pages/FeatureFlags.jsx';
 import Objectives from './pages/Objectives.jsx';
 import ObjectiveDetail from './pages/ObjectiveDetail.jsx';
 import KeyResultDetail from './pages/KeyResultDetail.jsx';
+import Reports from './pages/Reports.jsx';
+import Scorecard from './pages/Scorecard.jsx';
+import TeamProgress from './pages/TeamProgress.jsx';
+import AlignmentMap from './pages/AlignmentMap.jsx';
+import CheckinCompliance from './pages/CheckinCompliance.jsx';
 import OkrSettings from './pages/OkrSettings.jsx';
 import TenantsAdmin from './pages/TenantsAdmin.jsx';
 import UsersAdmin from './pages/UsersAdmin.jsx';
@@ -34,6 +39,7 @@ function Shell({ children }) {
             <>
               <Link to="/" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>Dashboard</Link>
               <Link to="/objectives" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>{tPlural('Objective')}</Link>
+              <Link to="/reports" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>Reports</Link>
               {isTenantAdmin && (
                 <>
                   <Link to="/okr-settings" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
@@ -146,6 +152,44 @@ export default function App() {
             <Route
               path="/key-results/:id"
               element={<RequireAuth><Shell><KeyResultDetail /></Shell></RequireAuth>}
+            />
+            <Route
+              path="/reports"
+              element={<RequireAuth><Shell><Reports /></Shell></RequireAuth>}
+            />
+            <Route
+              path="/reports/scorecard/:userId"
+              element={<RequireAuth><Shell><Scorecard /></Shell></RequireAuth>}
+            />
+            <Route
+              path="/reports/team-progress"
+              element={
+                <RequireAuth>
+                  <RequireRole roles={['Manager']}>
+                    <Shell><TeamProgress /></Shell>
+                  </RequireRole>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/reports/alignment-map"
+              element={
+                <RequireAuth>
+                  <RequireRole roles={['TenantAdmin']}>
+                    <Shell><AlignmentMap /></Shell>
+                  </RequireRole>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/reports/checkin-compliance"
+              element={
+                <RequireAuth>
+                  <RequireRole roles={['TenantAdmin']}>
+                    <Shell><CheckinCompliance /></Shell>
+                  </RequireRole>
+                </RequireAuth>
+              }
             />
             <Route
               path="/okr-settings"

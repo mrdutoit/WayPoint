@@ -50,7 +50,8 @@ waypoint-v1/
 │   │   ├── cycles-router.js   (date-driven — no activate action)
 │   │   ├── objectives-router.js
 │   │   ├── key-results-router.js
-│   │   └── initiatives-router.js
+│   │   ├── initiatives-router.js
+│   │   └── reports-router.js  (FR-033 — read-only, no audit events)
 │   ├── api-lib/                <- the real logic, never deployed directly
 │   │   ├── config.js
 │   │   ├── context/tenant.js   (Row-Level Security chokepoint)
@@ -67,7 +68,7 @@ waypoint-v1/
 │   │        okrElementConfigService.js, terminologyService.js,
 │   │        profileService.js, checkInService.js, initiativeService.js,
 │   │        reflectionService.js, scoringService.js — the real FR-019
-│   │        roll-up, called from checkInService.js)
+│   │        roll-up, called from checkInService.js — reportingService.js)
 │   ├── db/
 │   │   ├── schema.sql          <- plain SQL, current-state reference —
 │   │   │                          applied manually via Neon's console
@@ -86,7 +87,9 @@ waypoint-v1/
 │   │   │             useTerms() — ThemeContext — useTheme())
 │   │   ├── pages/ (Login, ChangePassword, Dashboard, FeatureFlags,
 │   │   │           Objectives, ObjectiveDetail, KeyResultDetail,
-│   │   │           OkrSettings, TenantsAdmin, UsersAdmin, Settings)
+│   │   │           OkrSettings, TenantsAdmin, UsersAdmin, Settings,
+│   │   │           Reports, Scorecard, TeamProgress, AlignmentMap,
+│   │   │           CheckinCompliance)
 │   │   ├── styles/tokens.js    <- design tokens; colours are var()
 │   │   │                          references, not hex — themes.css is
 │   │   │                          the actual source of truth per theme
@@ -397,6 +400,43 @@ waypoint-v1/
   that "nothing needs this yet" is not the same as "this will never
   need it" — check what a query actually returns before assuming the
   existing shape is sufficient for a new caller.
+
+- **The Stage 2 doc's own section 5 (report narrative) and section 4
+  (API design table) disagree on scope** — section 5 names eight report
+  types; section 4, the actual approved build contract, only gives four
+  of them an endpoint (scorecard, team-progress, alignment-map,
+  checkin-compliance). Built to the API table, not the narrative list —
+  cycle-over-cycle trend, Initiative execution status, Reflection
+  digest, and cross-tenant adoption are identified in
+  `reportingService.js`'s module comment, not built. If any of those
+  four are actually needed, the existing four are the pattern to follow
+  (a `find*` cycle lookup that returns null rather than throwing, a
+  role check, a query scoped to the caller's own visibility).
+- **Reports are read-only, computed on demand, no export** — matches
+  the Stage 2 doc's own sizing conclusion (section 8: no
+  materialised-view layer needed at Phase 1 scale). CSV/JSON export
+  ("all reports are exportable through the same mechanism as FR-030")
+  is deliberately not built — FR-030 (Data Export) itself doesn't exist
+  yet, so there is no shared export mechanism to reuse; a one-off
+  exporter for just these four reports would risk becoming a second,
+  inconsistent mechanism once FR-030 ships for real.
+- **Check-in compliance has no schedule to check against** — FR-018
+  says Check-ins happen "on the cadence configured for that tenant,"
+  but the only cadence concept actually built is a Cycle's own length
+  (Monthly/Quarterly/etc.), not a per-Check-in frequency within a
+  Cycle. `getCheckinCompliance` reports the buildable version instead:
+  has each Key Result received *any* Check-in this Cycle, not whether
+  it's current against a recurring schedule. Building the fine-grained
+  version would need a new schedule concept in the data model first,
+  not just a query change.
+- **Team progress "risk" ordering is level first, confidence as the
+  tie-breaker, with zero Check-ins sorting as the worst case of all** —
+  FR-033's "sorted by risk — lowest confidence or score first" doesn't
+  say which is primary. A Key Result nobody has checked in on yet is
+  treated as riskier than one that's been checked in on and scored
+  poorly, on the reasoning that "untouched" is at least as concerning
+  as "touched and struggling" for a Manager scanning for what needs
+  attention.
 
 ## Roles
 

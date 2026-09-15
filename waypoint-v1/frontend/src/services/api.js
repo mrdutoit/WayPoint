@@ -140,3 +140,10 @@ export const meApi = {
   get: () => request('/me'),
   update: ({ theme, avatarOption, timezone }) => request('/me', { method: 'PATCH', body: JSON.stringify({ theme, avatarOption, timezone }) }),
 };
+
+export const reportsApi = {
+  scorecard: (userId) => request(`/reports/scorecard/${userId}`),
+  teamProgress: () => request('/reports/team-progress'),
+  alignmentMap: () => request('/reports/alignment-map'),
+  checkinCompliance: () => request('/reports/checkin-compliance'),
+};
