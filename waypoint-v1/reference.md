@@ -40,18 +40,30 @@ waypoint-v1/
 ├── frontend/                  <- the one Vercel project
 │   ├── api/                   <- thin router files, each its own Vercel Function
 │   │   ├── health.js
-│   │   ├── auth-router.js     (login, password reset, change-password)
+│   │   ├── auth-router.js     (login, password reset, change-password;
+│   │   │                        ALSO /api/me via ?resource=me — theme/
+│   │   │                        avatar/timezone, no CORS inherited from
+│   │   │                        the login-test-tool exception below it)
 │   │   ├── flags-router.js    (list/update feature flags)
 │   │   ├── admin-router.js    (on-demand bootstrap)
 │   │   ├── tenants-router.js  (create/list tenants — FR-011)
 │   │   ├── users-router.js    (invite, role, force-password-reset)
-│   │   ├── me-router.js       (self-service profile — theme, avatar)
-│   │   ├── settings-router.js (cascade-levels, rubric, cadences, okr-elements, terminology)
-│   │   ├── cycles-router.js   (date-driven — no activate action)
+│   │   ├── settings-router.js (cascade-levels, rubric, cadences,
+│   │   │                        okr-elements, terminology; ALSO
+│   │   │                        /api/cycles via ?resource=cycles —
+│   │   │                        date-driven, no activate action)
 │   │   ├── objectives-router.js
-│   │   ├── key-results-router.js
-│   │   ├── initiatives-router.js
+│   │   ├── key-results-router.js (ALSO /api/initiatives via
+│   │   │                           ?resource=initiatives)
 │   │   └── reports-router.js  (FR-033 — read-only, no audit events)
+│   │
+│   │   10 files total — Vercel Hobby caps a deployment at 12
+│   │   Serverless Functions, one per file here regardless of
+│   │   vercel.json's rewrites. Run
+│   │   `find frontend/api -maxdepth 1 -name "*.js" | wc -l` before
+│   │   adding a new one — see the design decision below and
+│   │   app-builder's own skill for the mandatory gate this became
+│   │   after it was missed once already.
 │   ├── api-lib/                <- the real logic, never deployed directly
 │   │   ├── config.js
 │   │   ├── context/tenant.js   (Row-Level Security chokepoint)
@@ -437,6 +449,35 @@ waypoint-v1/
   poorly, on the reasoning that "untouched" is at least as concerning
   as "touched and struggling" for a Manager scanning for what needs
   attention.
+
+- **A new top-level file under `api/` requires checking the real
+  Serverless Function count first, every time — this failed once
+  already and cost a production deploy.** Vercel Hobby caps a
+  deployment at 12; `initiatives-router.js` and `reports-router.js`
+  were each added without running
+  `find frontend/api -maxdepth 1 -name "*.js" | wc -l` first, pushing
+  the count to 13 and failing the Vercel build outright. The lesson
+  itself wasn't new — it was already written down in app-builder's own
+  skill after MedBroker hit the identical wall — but prose guidance in
+  one section doesn't get checked under the pressure of shipping a
+  feature; it needed to be a gate with a command and a number, sitting
+  next to the Vite build gate that reliably *does* get run. Fixed both
+  the immediate count (consolidated `initiatives-router.js` into
+  `key-results-router.js`, `me-router.js` into `auth-router.js`,
+  `cycles-router.js` into `settings-router.js` — now 10 files, not
+  just under the cap but with headroom) and the process (the skill's
+  gate; the pattern documented in
+  `assets/patterns/http/multi-resource-router-consolidation.md` for
+  the next project to start from).
+- **Consolidating two routers into one file is a packaging change, not
+  license to blur their separate security postures.** `auth-router.js`
+  has deliberately wide-open CORS for a login-test tool — narrow,
+  already-justified. When `/api/me` was folded into that same file,
+  the CORS branch had to be checked and explicitly skipped for the
+  `/api/me` resource, verified by a test asserting it specifically does
+  *not* receive the header, or a profile endpoint that never needed
+  cross-origin access would have silently inherited a policy meant for
+  a different, narrower exception.
 
 ## Roles
 

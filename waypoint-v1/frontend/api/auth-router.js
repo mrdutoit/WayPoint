@@ -6,6 +6,8 @@ import {
 import { withPlatformContext, withTenantContext } from '../api-lib/context/tenant.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
 import { getAuthenticatedUser } from '../api-lib/middleware/auth.js';
+import { getOwnProfile, updateOwnProfile } from '../api-lib/services/profileService.js';
+import { respondToServiceError } from '../api-lib/middleware/errorResponse.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
 
 // A dummy hash to compare against when no user is found, so a login
@@ -14,11 +16,21 @@ import { parseSlug } from '../api-lib/http/helpers.js';
 // enumeration.
 const DUMMY_HASH = '$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQ$YQ8f0K3v1234567890abcdefghijklmnopqrstuvwx';
 
-// CORS open on this file — needed for tools/login-test.html, opened via
-// file:// with no origin the default same-origin policy recognises.
-// Safe here specifically because login already has its own protection
-// (lockout, FR-005) independent of who's calling; reset-password never
-// reveals whether an account exists either way.
+// CORS open on the auth actions below only — needed for
+// tools/login-test.html, opened via file:// with no origin the default
+// same-origin policy recognises. Safe there specifically because login
+// already has its own protection (lockout, FR-005) independent of who's
+// calling, and reset-password never reveals whether an account exists
+// either way.
+//
+// Also handles /api/me (GET/PATCH — self-service theme/avatar/timezone,
+// works for every role including PlatformAdmin) — vercel.json rewrites
+// /api/me/:slug* to this same function with an extra ?resource=me
+// marker, since Vercel's Hobby plan caps deployments at 12 Serverless
+// Functions and one file per logical route blows through that fast (see
+// reference.md's design decision). The /api/me branch deliberately does
+// NOT call setCors — it never needed cross-origin access and shouldn't
+// inherit auth's wide-open policy just because they now share a file.
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, PUT, OPTIONS');
@@ -26,6 +38,8 @@ function setCors(res) {
 }
 
 export default async function handler(req, res) {
+  if (req.query.resource === 'me') return handleMeResource(req, res);
+
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
@@ -38,6 +52,34 @@ export default async function handler(req, res) {
   if (req.method === 'PUT' && action === 'change-password') return changePasswordAction(req, res);
 
   return res.status(404).json({ error: 'Not found' });
+}
+
+// GET/PATCH /api/me — no CORS opening, same-origin frontend calls only.
+async function handleMeResource(req, res) {
+  const user = getAuthenticatedUser(req);
+  if (!user) return res.status(401).json({ error: 'Missing or invalid authorization token' });
+
+  const slugParts = parseSlug(req.query.slug);
+  if (slugParts.length > 0) return res.status(404).json({ error: 'Not found' });
+
+  const runInContext = user.tenantId
+    ? (fn) => withTenantContext(user.tenantId, fn)
+    : (fn) => withPlatformContext(fn);
+
+  try {
+    if (req.method === 'GET') {
+      const profile = await runInContext((client) => getOwnProfile(client, user.id));
+      return res.status(200).json({ profile });
+    }
+    if (req.method === 'PATCH') {
+      const { theme, avatarOption, timezone } = req.body ?? {};
+      const profile = await runInContext((client) => updateOwnProfile(client, user.id, { theme, avatarOption, timezone }));
+      return res.status(200).json({ profile });
+    }
+    return res.status(404).json({ error: 'Not found' });
+  } catch (err) {
+    return respondToServiceError(res, err);
+  }
 }
 
 async function loginAction(req, res) {

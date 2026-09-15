@@ -13,7 +13,7 @@ vi.mock('../frontend/api-lib/services/keyResultService.js', async (importOrigina
   return { ...actual, updateKeyResult: vi.fn(), getKeyResultById: vi.fn() };
 });
 vi.mock('../frontend/api-lib/services/initiativeService.js', () => ({
-  createInitiative: vi.fn(), listInitiativesForKeyResult: vi.fn(),
+  createInitiative: vi.fn(), listInitiativesForKeyResult: vi.fn(), updateInitiative: vi.fn(),
 }));
 vi.mock('../frontend/api-lib/services/checkInService.js', () => ({
   createCheckIn: vi.fn(), listCheckInsForKeyResult: vi.fn(),

@@ -12,18 +12,39 @@ vi.mock('../frontend/api-lib/services/cycleService.js', async (importOriginal) =
   const actual = await importOriginal();
   return { ...actual, getCyclesForTenant: vi.fn(), createCycle: vi.fn() };
 });
+// Loaded transitively by settings-router.js even though these tests
+// only exercise the /api/cycles branch — not mocking these out would
+// let the real (untested-here) service code run on import.
+vi.mock('../frontend/api-lib/services/cascadeLevelService.js', () => ({
+  getCascadeLevelsForTenant: vi.fn(), setCascadeLevelsForTenant: vi.fn(),
+}));
+vi.mock('../frontend/api-lib/services/scoringRubricService.js', () => ({
+  getRubricForTenant: vi.fn(), setRubricForTenant: vi.fn(), DEFAULT_RUBRIC_LEVELS: [],
+}));
+vi.mock('../frontend/api-lib/services/cadenceService.js', () => ({
+  listCadencesForTenant: vi.fn(), createCadence: vi.fn(), updateCadence: vi.fn(), deleteCadence: vi.fn(),
+}));
+vi.mock('../frontend/api-lib/services/okrElementConfigService.js', () => ({
+  getElementConfigForTenant: vi.fn(), setElementEnabled: vi.fn(),
+}));
+vi.mock('../frontend/api-lib/services/terminologyService.js', () => ({
+  getTerminologyForTenant: vi.fn(), setTerminologyForTenant: vi.fn(),
+}));
 
 const { getAuthenticatedUser } = await import('../frontend/api-lib/middleware/auth.js');
 const cycleService = await import('../frontend/api-lib/services/cycleService.js');
 const { ValidationError } = await import('../frontend/api-lib/services/errors.js');
-const handler = (await import('../frontend/api/cycles-router.js')).default;
+// Consolidated into settings-router.js (the /api/cycles/:slug* rewrite
+// adds ?resource=cycles — see vercel.json and the file's own module
+// comment for why) to stay under Vercel Hobby's 12-function ceiling.
+const handler = (await import('../frontend/api/settings-router.js')).default;
 
 function mockReq({ method, slug = [], body }) {
   // Simulates the real Vercel rewrite shape (a slash-joined string, or
   // absent for the bare path) rather than a pre-split array — see
   // api-lib/http/helpers.js's parseSlug for why that distinction is the
   // whole point of this test harness shape.
-  return { method, query: { slug: slug.length > 0 ? slug.join('/') : undefined }, body, headers: {} };
+  return { method, query: { resource: 'cycles', slug: slug.length > 0 ? slug.join('/') : undefined }, body, headers: {} };
 }
 function mockRes() { const res = {}; res.status = vi.fn().mockReturnValue(res); res.json = vi.fn().mockReturnValue(res); return res; }
 
@@ -32,7 +53,7 @@ const TENANT_ADMIN = { id: 'admin-1', tenantId: 't1', role: 'TenantAdmin' };
 
 beforeEach(() => vi.clearAllMocks());
 
-describe('cycles-router — GET /api/cycles', () => {
+describe('settings-router (/api/cycles resource) — GET /api/cycles', () => {
   it('is readable by any authenticated tenant role', async () => {
     getAuthenticatedUser.mockReturnValue(EMPLOYEE);
     cycleService.getCyclesForTenant.mockResolvedValue([{ id: 'cycle-1', status: 'Active' }]);
@@ -43,7 +64,7 @@ describe('cycles-router — GET /api/cycles', () => {
   });
 });
 
-describe('cycles-router — POST /api/cycles (FR-014: TenantAdmin only)', () => {
+describe('settings-router (/api/cycles resource) — POST /api/cycles (FR-014: TenantAdmin only)', () => {
   it('rejects an Employee', async () => {
     getAuthenticatedUser.mockReturnValue(EMPLOYEE);
     const res = mockRes();
@@ -88,7 +109,7 @@ describe('cycles-router — POST /api/cycles (FR-014: TenantAdmin only)', () => 
   });
 });
 
-describe('cycles-router — activation is retired', () => {
+describe('settings-router (/api/cycles resource) — activation is retired', () => {
   it('returns 404 for the old POST /api/cycles/:id/activate path — no such route any more', async () => {
     getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
     const res = mockRes();

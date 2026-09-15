@@ -5,13 +5,13 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** FR-033 Reporting & Dashboards shipped — the four
-reports the Stage 2 doc's approved API table actually specifies
-(scorecard, team-progress, alignment-map, checkin-compliance), out of
-the eight named in its narrative section 5. 323 mocked tests + 27
-real-Postgres integration tests. Migration 06 (theme/avatar/timezone)
-confirmed applied last round is now folded into `schema.sql`;
-`db/migrations/07-initiative-checkin-reflection.sql` remains pending.
+**Last updated:** production deploy failure fixed — 13 files under
+`frontend/api/` exceeded Vercel Hobby's 12-Serverless-Function cap,
+the exact issue already documented (after MedBroker) in app-builder's
+own skill, missed because that guidance was prose, not a checked gate.
+Consolidated to 10 files with real headroom; 324 mocked tests + 27
+real-Postgres integration tests, all re-verified. The skill itself is
+fixed too — see below.
 
 ## Where things actually stand
 
@@ -73,71 +73,83 @@ two genuine gaps in FR-019's literal text (Objective has no weighting
 column to roll up "weighted" by; whether a parent scores from its own
 Key Results, its children, or both is never stated) resolved and
 documented in `scoringService.js` and `reference.md`, verified
-end-to-end against real Postgres including a multi-level cascade. All
-of the above is stable and confirmed working as of this note.
+end-to-end against real Postgres including a multi-level cascade.
+FR-033 Reporting shipped the four reports the Stage 2 doc's *approved
+API table* actually specifies (scorecard, team-progress, alignment-map,
+checkin-compliance) out of eight named in its narrative section — a
+real gap in the doc itself, surfaced rather than silently picked one
+way. All of the above is stable and confirmed working as of this note.
 
-## This round — FR-033 Reporting & Dashboards
+## This round — fixed a production deploy failure (Vercel's 12-function cap)
 
-Built the four reports the Stage 2 doc's *approved API table*
-specifies — `reportingService.js`'s `getScorecard`, `getTeamProgress`,
-`getAlignmentMap`, `getCheckinCompliance` — not all eight named in the
-doc's narrative section 5. That's a real gap in the doc itself (section
-5 lists eight report types; section 4's API table only gives four of
-them an endpoint), surfaced rather than silently picked one way:
-cycle-over-cycle trend, Initiative execution status, Reflection digest,
-and cross-tenant adoption are identified, not built.
+**What happened, plainly:** 13 files under `frontend/api/` — one over
+Vercel Hobby's 12-Serverless-Function cap, confirmed exactly matching
+the deploy error Mark hit. This exact issue was already written down in
+app-builder's own skill after MedBroker hit it first, including the
+precise command to check for it. It happened again on WayPoint because
+that guidance lived as prose in one section, and nothing forced the
+check to actually run before adding `initiatives-router.js` and
+`reports-router.js` the last two rounds. Not a documentation gap — a
+process gap, and worth naming as exactly that rather than as a
+technical mystery.
 
-Two scope interpretations resolved and documented, not guessed at
-silently:
+**Fixed here:** consolidated three router files into existing ones,
+using the same "one file, multiple URL prefixes via a `?resource=`
+marker on the `vercel.json` rewrite" pattern already used elsewhere —
+`initiatives-router.js` → `key-results-router.js`, `me-router.js` →
+`auth-router.js`, `cycles-router.js` → `settings-router.js`. Now at 10
+files, not just under 12 but with two full slots of headroom before
+this becomes a problem again.
 
-- **Check-in compliance** ("who is checking in on schedule and who
-  isn't") has no schedule concept to check against — WayPoint's only
-  cadence concept is a Cycle's own length (Monthly/Quarterly/etc.),
-  not a per-Check-in frequency within a Cycle. Built the coarser,
-  actually-buildable version: has each Key Result received *any*
-  Check-in this Cycle, grouped by owner — not a fine-grained "on this
-  week's schedule" tracker.
-- **Team progress "risk" sorting** ("lowest confidence or score
-  first") reads as either could be primary. Resolved as: current
-  rubric level first (a Key Result with zero Check-ins sorts as worst
-  of all — "untouched" is at least as risky as "touched and scored
-  low"), latest confidence as the tie-breaker.
+One real risk caught during the merge, not just a mechanical file
+move: `auth-router.js` has deliberately wide-open CORS
+(`Access-Control-Allow-Origin: *`) for a login-test tool — a narrow,
+already-justified exception. Folding `/api/me` into that same file
+without checking would have silently given a profile endpoint that
+never needed cross-origin access the same wide-open policy. Fixed by
+branching before the CORS header is set, and added a test that asserts
+`/api/me` specifically does *not* receive it — a consolidation should
+be a packaging change, never a silent security-boundary change.
 
-CSV/JSON export, which the doc says all reports share with FR-030, is
-deliberately not built — FR-030 (Data Export) itself doesn't exist yet,
-so there's no shared mechanism to reuse; building a one-off exporter
-for just these four reports risked a second, inconsistent mechanism
-once FR-030 actually ships. These four reports are view-only for now.
+Every test file for the three merged routers was rewritten to test
+through the consolidated handlers (not deleted or skipped) — 324
+mocked tests (up from 323 — the new CORS-boundary test) + all 27
+real-Postgres integration tests re-run to confirm the refactor didn't
+touch service-level behaviour, which it shouldn't have and didn't.
 
-Frontend: a `Reports.jsx` landing page gated by role, `Scorecard.jsx`,
-`TeamProgress.jsx`, `CheckinCompliance.jsx`, and `AlignmentMap.jsx` —
-the last with a collapse/expand tree per the Stage 2 design review's
-explicit requirement (Sam) that a deep cascade stay usable, not render
-fully by default.
-
-323 mocked tests + 27 real-Postgres integration tests (up from 22 —
-5 new, covering all four reports against a real multi-employee,
-multi-level dataset, including the exact LATERAL-join and
-risk-ordering logic mocked tests can't validate). Nothing pending to
-apply this round — no schema changes.
+**Fixed the actual process gap, not just this instance:** added a
+"Serverless function count gate" to app-builder's skill, structured
+exactly like the Vite build gate that reliably *does* get run every
+delivery — a command, a number, a hard rule. Also documented the
+consolidation technique itself as a new file in the skill's patterns
+library (`http/multi-resource-router-consolidation.md`), including the
+CORS-boundary lesson above, so the next project starts from a
+proven-safe pattern instead of re-discovering the same two gotchas.
 
 ## Next immediate step
 
-1. Apply `db/migrations/07-initiative-checkin-reflection.sql` via the
-   Neon SQL console, then delete it from GitHub yourself and confirm so
-   it can be folded into `schema.sql` next round.
-2. Push this delta to GitHub and let Vercel redeploy.
-3. Re-verify end to end: as an Employee, view your own scorecard; as a
-   Manager, view team progress and confirm the worst-scored direct
-   report actually sorts first; as a TenantAdmin, open the alignment
-   map and confirm collapse/expand works on a real multi-level tree,
-   then check-in compliance and confirm it correctly shows both
-   checked-in and not-checked-in Key Results for the same person. None
-   of this has been seen in the deployed app yet — only in the sandbox.
-4. Module 3 (Initiative, Check-in, Reflection) is confirmed working in
-   production as of this round — no further re-verification needed
-   there unless something changes.
-5. Then pick the next piece from what's still open: FR-021 (Billing
+1. **Push this delta to GitHub first — this is the one that fixes the
+   actual deploy failure.** No new migration to apply this round; it's
+   a pure code/config change (router consolidation + `vercel.json`).
+2. Confirm the Vercel deployment actually succeeds this time (the
+   "Build Failed... No more than 12 Serverless Functions" error should
+   be gone) before doing anything else.
+3. Apply `db/migrations/07-initiative-checkin-reflection.sql` via the
+   Neon SQL console (this is unrelated to the deploy fix, just still
+   pending from Module 3), then delete it from GitHub yourself and
+   confirm so it can be folded into `schema.sql` next round.
+4. Re-verify end to end that nothing broke from the router merge —
+   sign in, change password, update your Settings (theme/avatar/
+   timezone), create/edit a Cycle, create/update an Initiative. All of
+   this now routes through a consolidated file; the URLs the frontend
+   calls didn't change, but confirm in the real deployment, not just
+   the sandbox.
+5. Then: as an Employee, view your own scorecard; as a Manager, view
+   team progress and confirm the worst-scored direct report sorts
+   first; as a TenantAdmin, open the alignment map (collapse/expand)
+   and check-in compliance. None of Reporting has been seen in the
+   deployed app yet — only in the sandbox.
+6. Then pick the next piece from what's still open: FR-021 (Billing
    Mode UI), FR-030-032 (Data Export/Retention/Erasure), or the four
    report types this round didn't build (see "This round," above).
 

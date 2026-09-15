@@ -7,15 +7,30 @@ vi.mock('../frontend/api-lib/context/tenant.js', () => ({
   withTenantContext: (tenantId, fn) => fn({ query: vi.fn() }),
 }));
 vi.mock('../frontend/api-lib/services/auditService.js', () => ({ recordAuditEvent: vi.fn() }));
-vi.mock('../frontend/api-lib/services/initiativeService.js', () => ({ updateInitiative: vi.fn() }));
+vi.mock('../frontend/api-lib/services/initiativeService.js', () => ({
+  updateInitiative: vi.fn(), createInitiative: vi.fn(), listInitiativesForKeyResult: vi.fn(),
+}));
+// Loaded transitively by key-results-router.js even though these
+// tests only exercise the /api/initiatives branch — not mocking these
+// out would let the real (untested-here) service code run on import.
+vi.mock('../frontend/api-lib/services/keyResultService.js', () => ({
+  updateKeyResult: vi.fn(), getKeyResultById: vi.fn(),
+}));
+vi.mock('../frontend/api-lib/services/checkInService.js', () => ({
+  createCheckIn: vi.fn(), listCheckInsForKeyResult: vi.fn(),
+}));
 
 const { getAuthenticatedUser } = await import('../frontend/api-lib/middleware/auth.js');
 const initiativeService = await import('../frontend/api-lib/services/initiativeService.js');
 const { ForbiddenError, NotFoundError, ValidationError } = await import('../frontend/api-lib/services/errors.js');
-const handler = (await import('../frontend/api/initiatives-router.js')).default;
+// Consolidated into key-results-router.js (the /api/initiatives/:slug*
+// rewrite adds ?resource=initiatives — see vercel.json and the file's
+// own module comment for why) to stay under Vercel Hobby's 12-function
+// ceiling.
+const handler = (await import('../frontend/api/key-results-router.js')).default;
 
 function mockReq({ method, slug = [], body }) {
-  return { method, query: { slug: slug.length > 0 ? slug.join('/') : undefined }, body, headers: {} };
+  return { method, query: { resource: 'initiatives', slug: slug.length > 0 ? slug.join('/') : undefined }, body, headers: {} };
 }
 function mockRes() { const res = {}; res.status = vi.fn().mockReturnValue(res); res.json = vi.fn().mockReturnValue(res); return res; }
 
@@ -24,7 +39,7 @@ const PLATFORM_ADMIN = { id: 'admin-1', tenantId: null, role: 'PlatformAdmin' };
 
 beforeEach(() => vi.clearAllMocks());
 
-describe('initiatives-router — authentication and tenancy', () => {
+describe('key-results-router (/api/initiatives resource) — authentication and tenancy', () => {
   it('returns 401 without an authenticated user', async () => {
     getAuthenticatedUser.mockReturnValue(null);
     const res = mockRes();
@@ -40,7 +55,7 @@ describe('initiatives-router — authentication and tenancy', () => {
   });
 });
 
-describe('initiatives-router — PATCH /api/initiatives/:id', () => {
+describe('key-results-router (/api/initiatives resource) — PATCH /api/initiatives/:id', () => {
   it('returns 404 when no id is present', async () => {
     getAuthenticatedUser.mockReturnValue(EMPLOYEE);
     const res = mockRes();
@@ -81,7 +96,7 @@ describe('initiatives-router — PATCH /api/initiatives/:id', () => {
   });
 });
 
-describe('initiatives-router — unmatched routes', () => {
+describe('key-results-router (/api/initiatives resource) — unmatched routes', () => {
   it('returns 404 for an unsupported method', async () => {
     getAuthenticatedUser.mockReturnValue(EMPLOYEE);
     const res = mockRes();

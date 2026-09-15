@@ -6,12 +6,24 @@ import { getRubricForTenant, setRubricForTenant, DEFAULT_RUBRIC_LEVELS } from '.
 import { listCadencesForTenant, createCadence, updateCadence, deleteCadence } from '../api-lib/services/cadenceService.js';
 import { getElementConfigForTenant, setElementEnabled } from '../api-lib/services/okrElementConfigService.js';
 import { getTerminologyForTenant, setTerminologyForTenant } from '../api-lib/services/terminologyService.js';
+import { getCyclesForTenant, createCycle } from '../api-lib/services/cycleService.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
 
 // No CORS opening — same-origin frontend calls only.
+//
+// Also handles /api/cycles (GET/POST — FR-014) — vercel.json rewrites
+// /api/cycles/:slug* to this same function with an extra
+// ?resource=cycles marker, since Cycle is already an OKR tenant-
+// configuration concern like everything else here, and Vercel's Hobby
+// plan caps deployments at 12 Serverless Functions (see reference.md's
+// design decision). Checked before this file's own internal `resource`
+// variable below, which is a different thing — /api/settings/:resource
+// sub-routing within this domain, not the cross-file marker.
 
 export default async function handler(req, res) {
+  if (req.query.resource === 'cycles') return handleCyclesResource(req, res);
+
   const user = getAuthenticatedUser(req);
   if (!user) return res.status(401).json({ error: 'Missing or invalid authorization token' });
   if (!user.tenantId) return res.status(403).json({ error: 'Settings are tenant-scoped — not available to Platform Administrator' });
@@ -34,6 +46,41 @@ export default async function handler(req, res) {
     if (req.method === 'PATCH' && resource === 'okr-elements' && elementKey) return await patchOkrElementAction(req, res, user, elementKey);
     if (req.method === 'GET' && resource === 'terminology') return await getTerminologyAction(req, res, user);
     if (req.method === 'PUT' && resource === 'terminology') return await putTerminologyAction(req, res, user);
+    return res.status(404).json({ error: 'Not found' });
+  } catch (err) {
+    return respondToServiceError(res, err);
+  }
+}
+
+// GET/POST /api/cycles — no activate action any more (FR-014); "active"
+// is computed from today's date against each Cycle's
+// [start_date, end_date] — see cycleService.js's module comment.
+async function handleCyclesResource(req, res) {
+  const user = getAuthenticatedUser(req);
+  if (!user) return res.status(401).json({ error: 'Missing or invalid authorization token' });
+  if (!user.tenantId) return res.status(403).json({ error: 'Cycles are tenant-scoped — not available to Platform Administrator' });
+
+  const slugParts = parseSlug(req.query.slug);
+  const [cycleId] = slugParts;
+
+  try {
+    if (req.method === 'GET' && !cycleId) {
+      const cycles = await withTenantContext(user.tenantId, (client) => getCyclesForTenant(client, user.tenantId));
+      return res.status(200).json({ cycles });
+    }
+    if (req.method === 'POST' && !cycleId) {
+      if (!requireRole(user, 'TenantAdmin')) return res.status(403).json({ error: 'Forbidden for this role' });
+      const { name, cadenceId, startDate } = req.body ?? {};
+      const cycle = await withTenantContext(user.tenantId, async (client) => {
+        const created = await createCycle(client, user.tenantId, { name, cadenceId, startDate });
+        await recordAuditEvent(client, {
+          tenantId: user.tenantId, actorId: user.id,
+          action: 'cycle.created', entityType: 'Cycle', entityId: created.id,
+        });
+        return created;
+      });
+      return res.status(201).json({ cycle });
+    }
     return res.status(404).json({ error: 'Not found' });
   } catch (err) {
     return respondToServiceError(res, err);

@@ -2,16 +2,27 @@ import { getAuthenticatedUser } from '../api-lib/middleware/auth.js';
 import { respondToServiceError } from '../api-lib/middleware/errorResponse.js';
 import { withTenantContext } from '../api-lib/context/tenant.js';
 import { updateKeyResult, getKeyResultById } from '../api-lib/services/keyResultService.js';
-import { listInitiativesForKeyResult, createInitiative } from '../api-lib/services/initiativeService.js';
+import { listInitiativesForKeyResult, createInitiative, updateInitiative } from '../api-lib/services/initiativeService.js';
 import { listCheckInsForKeyResult, createCheckIn } from '../api-lib/services/checkInService.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
 
 // No CORS opening — same-origin frontend calls only.
-
+//
+// Also handles /api/initiatives/:id (PATCH) — vercel.json rewrites both
+// /api/key-results/:slug* and /api/initiatives/:slug* to this same
+// function, the latter with an extra ?resource=initiatives marker,
+// since Initiative is a Key-Result-adjacent domain (already created and
+// listed as a sub-resource of key-results below) and Vercel's Hobby
+// plan caps deployments at 12 Serverless Functions — one file per
+// logical route blows through that fast. See reference.md's design
+// decision on this and app-builder's own "12-function ceiling" note.
 export default async function handler(req, res) {
   const user = getAuthenticatedUser(req);
   if (!user) return res.status(401).json({ error: 'Missing or invalid authorization token' });
+
+  if (req.query.resource === 'initiatives') return handleInitiativesResource(req, res, user);
+
   if (!user.tenantId) return res.status(403).json({ error: 'Key Results are tenant-scoped — not available to Platform Administrator' });
 
   const slugParts = parseSlug(req.query.slug);
@@ -28,6 +39,35 @@ export default async function handler(req, res) {
   } catch (err) {
     return respondToServiceError(res, err);
   }
+}
+
+// PATCH /api/initiatives/:id — Owner, Manager (FR-026).
+async function handleInitiativesResource(req, res, user) {
+  if (!user.tenantId) return res.status(403).json({ error: 'Initiatives are tenant-scoped — not available to Platform Administrator' });
+
+  const slugParts = parseSlug(req.query.slug);
+  const [initiativeId] = slugParts;
+
+  try {
+    if (req.method === 'PATCH' && initiativeId) return await updateInitiativeAction(req, res, user, initiativeId);
+    return res.status(404).json({ error: 'Not found' });
+  } catch (err) {
+    return respondToServiceError(res, err);
+  }
+}
+
+async function updateInitiativeAction(req, res, user, initiativeId) {
+  const { title, status, dueDate } = req.body ?? {};
+
+  const initiative = await withTenantContext(user.tenantId, async (client) => {
+    const updated = await updateInitiative(client, user.tenantId, user, initiativeId, { title, status, dueDate });
+    await recordAuditEvent(client, {
+      tenantId: user.tenantId, actorId: user.id,
+      action: 'initiative.updated', entityType: 'Initiative', entityId: updated.id,
+    });
+    return updated;
+  });
+  res.status(200).json({ initiative });
 }
 
 // GET /api/key-results/:id — visibility follows the parent Objective's FR-020 rule.
