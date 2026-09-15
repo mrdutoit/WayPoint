@@ -140,10 +140,16 @@ export async function getTeamProgress(client, tenantId, caller) {
  * a flat list with parent pointers is what a frontend tree component
  * needs anyway; nesting it server-side would just make the frontend
  * un-nest it again for that UI.
+ *
+ * Opened to any authenticated tenant member (was TenantAdmin-only) —
+ * this is exactly the "see the shape of the whole cascade" view that
+ * makes sense to open alongside the FR-020 Objective/Key Result
+ * visibility broadening (objectiveService.js's module comment); no
+ * reason to widen Objective visibility tenant-wide while leaving the
+ * one view built specifically to show how they connect locked to a
+ * single role.
  */
 export async function getAlignmentMap(client, tenantId, caller) {
-  if (caller.role !== 'TenantAdmin') throw new ForbiddenError('Only a Tenant Administrator can view the alignment map');
-
   const cycle = await findActiveCycle(client, tenantId);
   if (!cycle) return { cycle: null, objectives: [] };
 

@@ -49,7 +49,7 @@ export default function Objectives() {
         )}
       </div>
       <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 20 }}>
-        {tPlural('Objective')} you own, and {tPlural('Objective').toLowerCase()} owned by your direct reports (FR-020).
+        All {tPlural('Objective').toLowerCase()} in your organisation for the current Cycle — you can edit your own and your direct reports' (FR-020).
       </p>
 
       {canCreate && cascadeLevels.length === 0 && objectives !== null && (
@@ -79,6 +79,7 @@ export default function Objectives() {
             <thead>
               <tr>
                 <th style={s.th}>Title</th>
+                <th style={s.th}>Owner</th>
                 <th style={s.th}>Cascade level</th>
                 <th style={s.th}>Status</th>
               </tr>
@@ -91,6 +92,7 @@ export default function Objectives() {
                       {o.title}
                     </Link>
                   </td>
+                  <td style={s.td}>{o.ownerFirstName} {o.ownerLastName}</td>
                   <td style={s.td}>{levelLabelById[o.cascadeLevelId] ?? '—'}</td>
                   <td style={s.td}><StatusChip status={o.status} /></td>
                 </tr>

@@ -16,6 +16,12 @@ const KEY_RESULT_FIELDS = `
 `;
 
 export async function listKeyResultsForObjective(client, tenantId, objectiveId) {
+  // No caller-visibility restriction — Key Results are structural OKR
+  // data, visible to any tenant member same as their parent Objective
+  // (see objectiveService.js's module comment on the FR-020
+  // broadening). Never held back by not restricting this earlier —
+  // this was already tenant-wide before that change, just effectively
+  // hidden by the fact its parent Objective wasn't reachable either.
   const { rows } = await client.query(
     `SELECT ${KEY_RESULT_FIELDS} FROM okr.key_result kr
      WHERE kr.tenant_id = $1 AND kr.objective_id = $2
@@ -26,10 +32,11 @@ export async function listKeyResultsForObjective(client, tenantId, objectiveId) 
 }
 
 /**
- * FR-020's visibility rule ("owner and the owner's direct Manager
- * only") applies to a Key Result the same way it applies to its parent
- * Objective — reuses assertCanEditObjective as the visibility check
- * too, since the permission model is identical for view and edit here.
+ * Visible to any authenticated tenant member — see objectiveService.js's
+ * module comment on the FR-020 broadening. `canEdit` is computed and
+ * returned (advisory only, not the actual security boundary — see
+ * updateKeyResult below) so the frontend can hide edit affordances
+ * without duplicating this rule client-side.
  */
 export async function getKeyResultById(client, tenantId, caller, keyResultId) {
   const { rows } = await client.query(
@@ -42,8 +49,8 @@ export async function getKeyResultById(client, tenantId, caller, keyResultId) {
   );
   const row = rows[0];
   if (!row) throw new NotFoundError('Key Result not found');
-  assertCanEditObjective(row, caller);
   const { ownerId, ownerManagerId, ...keyResult } = row;
+  keyResult.canEdit = ownerId === caller.id || ownerManagerId === caller.id;
   return keyResult;
 }
 

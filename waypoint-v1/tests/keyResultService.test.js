@@ -106,7 +106,7 @@ describe('updateKeyResult — does not accept status (FR-004)', () => {
   });
 });
 
-describe('getKeyResultById — FR-020 visibility (same rule as its parent Objective)', () => {
+describe('getKeyResultById — visible tenant-wide, canEdit reflects the narrower owner+Manager rule', () => {
   const OWNER = { id: 'owner-1' };
   const MANAGER = { id: 'manager-1' };
   const STRANGER = { id: 'stranger-1' };
@@ -122,24 +122,28 @@ describe('getKeyResultById — FR-020 visibility (same rule as its parent Object
     await expect(getKeyResultById(client, 't1', OWNER, 'missing')).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it('is visible to the owner', async () => {
+  it('is visible to the owner, with canEdit true', async () => {
     const client = mockClient();
     client.query.mockResolvedValueOnce({ rows: [KR_ROW] });
     const kr = await getKeyResultById(client, 't1', OWNER, 'kr-1');
     expect(kr.id).toBe('kr-1');
+    expect(kr.canEdit).toBe(true);
     expect(kr.ownerId).toBeUndefined(); // internal-only field, stripped before returning
   });
 
-  it('is visible to the owner\'s Manager', async () => {
+  it('is visible to the owner\'s Manager, with canEdit true', async () => {
     const client = mockClient();
     client.query.mockResolvedValueOnce({ rows: [KR_ROW] });
     const kr = await getKeyResultById(client, 't1', MANAGER, 'kr-1');
     expect(kr.id).toBe('kr-1');
+    expect(kr.canEdit).toBe(true);
   });
 
-  it('is not visible to a stranger', async () => {
+  it('is now ALSO visible to a stranger, but with canEdit false', async () => {
     const client = mockClient();
     client.query.mockResolvedValueOnce({ rows: [KR_ROW] });
-    await expect(getKeyResultById(client, 't1', STRANGER, 'kr-1')).rejects.toBeInstanceOf(ForbiddenError);
+    const kr = await getKeyResultById(client, 't1', STRANGER, 'kr-1');
+    expect(kr.id).toBe('kr-1');
+    expect(kr.canEdit).toBe(false);
   });
 });

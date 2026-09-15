@@ -35,19 +35,17 @@ export default function Reports() {
             description="Your direct reports' Objective and Key Result status, sorted by risk."
           />
         )}
+        <ReportLink
+          to="/reports/alignment-map"
+          title="Alignment map"
+          description="The full cascade tree, company to individual, with roll-up scores at each level."
+        />
         {isTenantAdmin && (
-          <>
-            <ReportLink
-              to="/reports/alignment-map"
-              title="Alignment map"
-              description="The full cascade tree, company to individual, with roll-up scores at each level."
-            />
-            <ReportLink
-              to="/reports/checkin-compliance"
-              title="Check-in compliance"
-              description="Who has checked in this Cycle and who hasn't."
-            />
-          </>
+          <ReportLink
+            to="/reports/checkin-compliance"
+            title="Check-in compliance"
+            description="Who has checked in this Cycle and who hasn't."
+          />
         )}
       </div>
     </div>

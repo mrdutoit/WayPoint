@@ -17,7 +17,26 @@ const CHECK_IN_FIELDS = `
   ci.confidence, ci.comment, ci.submitted_at AS "submittedAt"
 `;
 
-export async function listCheckInsForKeyResult(client, tenantId, keyResultId) {
+/**
+ * Check-in comments/confidence stay restricted to owner, owner's
+ * Manager, and TenantAdmin — matching the Stage 2 API table's original
+ * audience for this endpoint, deliberately NOT widened alongside
+ * Objective/Key Result visibility (see objectiveService.js's module
+ * comment). This is where genuinely sensitive personal commentary
+ * lives, not the OKR structure itself.
+ *
+ * This check did not exist before this round at all — listing was only
+ * ever indirectly "protected" by the fact its parent Key Result wasn't
+ * reachable under the old, narrower FR-020 rule. Broadening Key Result
+ * visibility without adding this explicit check here would have leaked
+ * Check-in comments to the entire tenant as an unintended side effect.
+ */
+export async function listCheckInsForKeyResult(client, tenantId, caller, keyResultId) {
+  const keyResult = await fetchKeyResultWithObjectiveOwner(client, tenantId, keyResultId);
+  if (!keyResult) throw new NotFoundError('Key Result not found');
+  const allowed = caller.role === 'TenantAdmin' || keyResult.ownerId === caller.id || keyResult.ownerManagerId === caller.id;
+  if (!allowed) throw new ForbiddenError('Only the Key Result owner, their Manager, or a Tenant Administrator can view Check-ins');
+
   const { rows } = await client.query(
     `SELECT ${CHECK_IN_FIELDS} FROM okr.check_in ci
      WHERE ci.tenant_id = $1 AND ci.key_result_id = $2

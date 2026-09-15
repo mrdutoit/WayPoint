@@ -106,10 +106,15 @@ describe('getTeamProgress', () => {
   });
 });
 
-describe('getAlignmentMap', () => {
-  it('refuses a non-TenantAdmin', async () => {
-    await expect(getAlignmentMap(mockClient(), 't1', EMPLOYEE)).rejects.toBeInstanceOf(ForbiddenError);
-    await expect(getAlignmentMap(mockClient(), 't1', MANAGER)).rejects.toBeInstanceOf(ForbiddenError);
+describe('getAlignmentMap — opened to every role (was TenantAdmin-only)', () => {
+  it('is now accessible to an Employee and a Manager, not just TenantAdmin', async () => {
+    const employeeClient = mockClient();
+    employeeClient.query.mockResolvedValueOnce(NO_CYCLE);
+    await expect(getAlignmentMap(employeeClient, 't1', EMPLOYEE)).resolves.toEqual({ cycle: null, objectives: [] });
+
+    const managerClient = mockClient();
+    managerClient.query.mockResolvedValueOnce(NO_CYCLE);
+    await expect(getAlignmentMap(managerClient, 't1', MANAGER)).resolves.toEqual({ cycle: null, objectives: [] });
   });
 
   it('returns a flat list with parentObjectiveId for the frontend to build a tree', async () => {

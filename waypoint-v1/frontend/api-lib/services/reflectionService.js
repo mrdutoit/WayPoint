@@ -1,4 +1,4 @@
-import { NotFoundError, ValidationError } from './errors.js';
+import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { isElementEnabled } from './okrElementConfigService.js';
 import { fetchObjectiveWithOwner, assertCanEditObjective } from './keyResultService.js';
 
@@ -15,7 +15,19 @@ const REFLECTION_FIELDS = `
   r.author_id AS "authorId", r.content, r.submitted_at AS "submittedAt"
 `;
 
-export async function listReflectionsForObjective(client, tenantId, objectiveId) {
+/**
+ * Reflection content stays restricted to owner, owner's Manager, and
+ * TenantAdmin — same reasoning and same gap-closed-here as
+ * checkInService.js's listCheckInsForKeyResult; see that function's
+ * comment for the full explanation. This check did not exist before
+ * this round.
+ */
+export async function listReflectionsForObjective(client, tenantId, caller, objectiveId) {
+  const objective = await fetchObjectiveWithOwner(client, tenantId, objectiveId);
+  if (!objective) throw new NotFoundError('Objective not found');
+  const allowed = caller.role === 'TenantAdmin' || objective.ownerId === caller.id || objective.ownerManagerId === caller.id;
+  if (!allowed) throw new ForbiddenError('Only the Objective owner, their Manager, or a Tenant Administrator can view Reflections');
+
   const { rows } = await client.query(
     `SELECT ${REFLECTION_FIELDS} FROM okr.reflection r
      WHERE r.tenant_id = $1 AND r.objective_id = $2

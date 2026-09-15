@@ -5,16 +5,15 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** a real, confirmed-missing capability fixed — no way
-to assign or change a user's Manager after they were created, only at
-invite time. This is what actually blocked Mark's testing (needing Fred
-to have direct reports to test Team Progress), not the invite-time
-dropdown, which was re-checked and appears correct. Also: `Dashboard.jsx`
-was still the literal, unmodified Stage 3 scaffold placeholder — its own
-copy said modules were "built module by module in Stage 4" long after
-they all were. Replaced with a real, role-aware landing page. 336
-mocked tests + 28 real-Postgres integration tests.
-fixed too — see below.
+**Last updated:** FR-020's Objective/Key Result visibility deliberately
+broadened from "owner and owner's direct Manager only" to tenant-wide
+read access, at Mark's explicit direction after testing surfaced how
+restrictive the literal spec was — Objectives, Key Results, Initiatives,
+and the Alignment Map are now readable by anyone in the tenant; Check-in
+comments and Reflection content stay restricted to owner+Manager+
+TenantAdmin, since that's where genuinely sensitive commentary lives,
+not the OKR structure itself. Edit rights are completely unchanged.
+347 mocked tests + 30 real-Postgres integration tests.
 
 ## Where things actually stand
 
@@ -90,69 +89,98 @@ routers into existing ones (`initiatives-router.js` →
 `cycles-router.js` → `settings-router.js`, now 10 files with real
 headroom) and, more durably, adding a "Serverless function count gate"
 to the skill itself, structured exactly like the Vite build gate that
-reliably does get checked. All of the above is stable and confirmed
-working as of this note.
+reliably does get checked. The real, confirmed-missing capability
+behind Mark's next report — no way to assign or change a user's Manager
+after invite time, ever — got `updateUserManager`, a real endpoint, and
+a real editable dropdown where the Users table used to just show static
+text. `Dashboard.jsx` was found to still be the completely unmodified
+Stage 3 scaffold page (its own copy claimed modules were "not yet
+built" long after they all were) and replaced with a real, role-aware
+landing page. All of the above is stable and confirmed working as of
+this note.
 
-## This round — the manager-assignment gap, and a stale Dashboard
+## This round — FR-020's visibility rule, broadened deliberately
 
-**The actual blocker, found by testing, not guessed at:** Mark reported
-being unable to select a Manager when inviting a user, and unable to
-edit any user afterward. Re-read the invite-time dropdown code
-carefully and could not find a defect in it. The real, confirmed gap
-was narrower and more consequential: **there was no way to assign or
-change a user's Manager after they were created at all** —
-`managerId` was only ever settable at `inviteUser` time, with no
-corresponding update path. This is exactly what blocked Mark's actual
-goal (getting Fred set up with a direct report to test Team Progress),
-regardless of whether the invite-time dropdown itself has a separate
-issue — flag if it's still misbehaving once this is live, with specifics
-(did it show zero options, or the wrong ones) so it can be reproduced
-directly rather than re-guessed at.
+**Not a bug — but a real product question worth taking seriously.**
+Mark, logged in as an Employee, saw none of his Manager's Objectives —
+exactly what FR-020's literal text specifies ("visible to their owner
+and the owner's direct Manager only"). Asked directly whether this
+matches how OKR tools actually work: it doesn't, by default — most OKR
+products (Lattice, WorkBoard, Perdoo, the original Google methodology)
+treat cross-organisation transparency as the point of a cascade, not an
+afterthought, and FR-020's own text already flagged this as a
+deliberate Phase 1 restriction ("Organisation-wide transparency is a
+Phase 2 candidate"). Given three options (upward visibility, full
+org-wide read, opening the Alignment Map to everyone), Mark asked for
+all three combined "in a smart way."
 
-Added `userService.js`'s `updateUserManager` (mirrors `inviteUser`'s
-own validation level deliberately — not restricted to role `Manager`,
-since the invite form's restriction to Manager-role options is a
-frontend choice, not a backend rule; a small org's TenantAdmin managing
-someone directly before any Manager exists is a legitimate shape this
-doesn't block), a new `PATCH /api/users/:id/manager` endpoint, and a
-real editable dropdown in the Users table — the Manager column was
-static text with no edit control at all before this.
+**The smart combination:** Objectives, Key Results, and Initiatives —
+the OKR *structure* — are now readable by any tenant member; the
+Alignment Map (previously TenantAdmin-only) is open to everyone too,
+since it's exactly the "see how it all connects" view that makes no
+sense to gate once the underlying data is tenant-wide anyway. Check-in
+comments/confidence and Reflection content stay restricted to owner,
+their Manager, and TenantAdmin — that's where genuinely sensitive
+personal commentary lives, not the structure itself, and the original
+Stage 2 API table already scoped those two more narrowly than FR-020's
+blanket text even before this round, which was the actual signal this
+distinction was already implicit in the design.
 
-**Also fixed, found while answering Mark's direct question:**
-`Dashboard.jsx` was still the completely unmodified Stage 3 scaffold
-page — its own copy read "Objectives, Key Results, Initiatives,
-Check-ins, and Reflections are built module by module in Stage 4," long
-after every one of them actually shipped. Not intentional, just never
-revisited. Replaced with a real, role-aware landing page: a proper
-name-based greeting (using the profile-enrichment fetch from the
-Settings round), and quick links to Objectives, the caller's own
-scorecard, Team Progress for Managers, and Alignment Map/Users for
-TenantAdmins.
+**Edit rights are completely unchanged** — this was the part that had
+to be gotten right, not just the broadening itself. Visibility and edit
+permission used to share the exact same check (`assertVisible` gated
+both read and write identically); split into a real visibility read (no
+check, or a narrow one for Check-ins/Reflections) and a separate,
+untouched `canEdit`/`assertCanEdit` check for writes. `getObjective
+ForCaller`/`getKeyResultById` now return a computed `canEdit` flag so
+the frontend can hide Edit buttons for a read-only viewer without
+re-deriving the rule client-side — advisory only; the backend still
+enforces it independently on every write, same as before.
 
-336 mocked tests + 28 real-Postgres integration tests (up from 324/27 —
-the new manager-assignment coverage, both mocked and against a real
-row). Function count unchanged at 10 — no new router files this round.
+**A real gap caught mid-change, not after:** `listCheckInsForKeyResult`
+and `listReflectionsForObjective` had *no* visibility check at all
+before this round — they were only ever protected indirectly, by their
+parent Objective/Key Result being unreachable under the old rule.
+Broadening the parent without adding real enforcement here would have
+leaked Check-in comments and Reflection content tenant-wide as an
+unintended side effect. Added genuine restriction to both — proven
+against real Postgres, not just asserted.
+
+Frontend: `ObjectiveDetail.jsx` and `KeyResultDetail.jsx` both use the
+new `canEdit` flag to hide Edit/Add/Submit affordances for a read-only
+viewer, and both had their data-loading `Promise.all` calls split apart
+so a Check-ins or Reflections 403 (now expected, for a plain viewer)
+degrades gracefully instead of taking down the whole page. `Objectives.jsx`
+now shows an Owner column — necessary once the list spans the whole
+tenant, not just "you and your reports."
+
+347 mocked tests + 30 real-Postgres integration tests (up from 336/28
+— five existing tests rewritten to assert the new intended behaviour
+rather than deleted, plus new coverage for the two newly-restricted
+functions and the Alignment Map's broadened access, all re-verified
+against a real database). One real bug caught by the test suite while
+building this, not assumed away: `reflectionService.js` was throwing
+`ForbiddenError` without importing it — fixed immediately, re-verified.
+Function count unchanged at 10.
 
 ## Next immediate step
 
 1. Push this delta to GitHub. No new migration this round — pure code
-   change (backend + `UsersAdmin.jsx` + `Dashboard.jsx`).
-2. Re-verify the actual thing that was broken: as TenantAdmin, open
-   Users, set Joe's (or any non-TenantAdmin's) manager to Fred via the
-   now-editable Manager dropdown, confirm it saves and persists across
-   a refresh. Then sign in as Fred and confirm Team Progress now shows
-   Joe. This is the exact scenario that was blocked — confirm it's
-   actually unblocked in production, not just the sandbox.
-3. While there: try the invite-time Manager dropdown again with Fred
-   already existing as a Manager, and confirm whether it correctly
-   offers Fred as an option. The code was re-checked and looks correct,
-   but hasn't been re-confirmed against the real deployment since the
-   report — if it's still wrong, note exactly what the dropdown showed
-   (empty? wrong option? an error?) so it can be reproduced directly.
-4. Check the new Dashboard renders sensibly for each role — the
-   role-gated quick links (Team Progress for Manager, Alignment
-   Map/Users for TenantAdmin) haven't been seen outside the sandbox
-   either.
+   change across services, routers, and several frontend pages.
+2. Re-verify the actual scenario that started this: sign in as an
+   Employee, open Objectives, and confirm your Manager's (and everyone
+   else's) Objectives are now visible, with an Owner column. Open one
+   you don't own — the Edit/Add/Submit controls should NOT appear
+   (confirm this against the real deployment, since edit-hiding is a
+   frontend nicety only — the backend is what actually blocks the
+   write, worth trying to force one through devtools if paranoid).
+3. Confirm the restriction that's new: as that same Employee, open a
+   Key Result you don't own and check the Check-in section reads
+   "only visible to the owner, their Manager, and Tenant Administrators"
+   rather than either crashing or showing someone else's comments.
+   Same check for Reflections on an Objective you don't own.
+4. Confirm the Alignment Map is now reachable from the nav for every
+   role, not just TenantAdmin.
 5. Apply `db/migrations/07-initiative-checkin-reflection.sql` via the
    Neon SQL console (still pending from Module 3, unrelated to this
    round), then delete it from GitHub yourself and confirm so it can be

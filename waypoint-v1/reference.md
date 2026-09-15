@@ -501,6 +501,47 @@ waypoint-v1/
   without a build error to force it into view. Worth a periodic check
   of pages that were only ever touched once, early on.
 
+- **FR-020's Objective/Key Result visibility was deliberately broadened
+  from "owner and owner's direct Manager only" to tenant-wide read
+  access — at Mark's explicit direction, after testing surfaced how
+  restrictive the literal spec was.** An Employee could not see their
+  own Manager's Objectives at all, which defeats the actual point of a
+  cascade. Most OKR products treat cross-organisation transparency as
+  the default, not an exception — and FR-020's own text already named
+  this as a Phase 1-only restriction ("Organisation-wide transparency is
+  a Phase 2 candidate"), so this wasn't overriding a firm decision, just
+  bringing forward one the spec itself flagged as temporary.
+  Objectives, Key Results, Initiatives, and the Alignment Map (was
+  TenantAdmin-only) are now readable by any tenant member. Check-in
+  comments/confidence and Reflection content deliberately stay
+  restricted to owner/Manager/TenantAdmin — that split wasn't invented
+  here, it was already implicit in the original Stage 2 API table,
+  which scoped those two endpoints more narrowly than FR-020's blanket
+  text even before this change; this round just made the enforcement
+  match what the API design already implied.
+- **Visibility and edit permission used to be the same check —
+  splitting them apart, not just loosening the shared one, was the
+  actual work.** `objectiveService.js`'s `assertVisible` gated both
+  reading and writing identically; it's now `assertCanEdit`, used only
+  by `updateObjective`, while reading has no such gate (or, for
+  Check-ins/Reflections, a separately-defined, narrower one).
+  `getObjectiveForCaller`/`getKeyResultById` compute and return a
+  `canEdit` boolean so the frontend can hide edit affordances for a
+  read-only viewer without re-deriving the permission rule client-side —
+  advisory only, never the actual boundary; every write endpoint still
+  enforces its own check independently, unchanged from before this
+  round.
+- **`listCheckInsForKeyResult` and `listReflectionsForObjective` had no
+  visibility check at all before this round — a real gap, not a
+  hypothetical one.** Both were only ever protected indirectly, by their
+  parent Objective/Key Result being unreachable under the old FR-020
+  rule. The moment that parent became tenant-wide readable, these two
+  would have leaked Check-in comments and Reflection content to the
+  whole tenant as an unintended side effect if left alone. Real
+  owner+Manager+TenantAdmin enforcement was added to both, proven
+  against real Postgres with a genuine stranger being refused, not just
+  asserted in a mock.
+
 ## Roles
 
 | Role | Notes |

@@ -208,13 +208,19 @@ describeIfDb('write paths against real Postgres', () => {
     expect(updated.title).toBe('Sign 15 new clients');
   });
 
-  it('keyResultService.getKeyResultById — real fetch, FR-020 visibility enforced against a real stranger', async () => {
+  it('keyResultService.getKeyResultById — real fetch, visible tenant-wide with canEdit reflecting the narrower rule', async () => {
     const { getKeyResultById } = await import('../../frontend/api-lib/services/keyResultService.js');
-    const kr = await inTenantContext(() => getKeyResultById(client, tenantId, { id: employeeId }, keyResultId));
-    expect(kr.id).toBe(keyResultId);
-    await expect(
-      inTenantContext(() => getKeyResultById(client, tenantId, { id: tenantAdminId }, keyResultId))
-    ).rejects.toThrow(/owner or their Manager/i);
+    const asOwner = await inTenantContext(() => getKeyResultById(client, tenantId, { id: employeeId }, keyResultId));
+    expect(asOwner.id).toBe(keyResultId);
+    expect(asOwner.canEdit).toBe(true);
+
+    // A real TenantAdmin, neither the owner nor their Manager, can still
+    // see it (visibility broadened at Mark's direction after testing
+    // surfaced how restrictive the original FR-020 rule was) but cannot
+    // edit it.
+    const asTenantAdmin = await inTenantContext(() => getKeyResultById(client, tenantId, { id: tenantAdminId }, keyResultId));
+    expect(asTenantAdmin.id).toBe(keyResultId);
+    expect(asTenantAdmin.canEdit).toBe(false);
   });
 
   it('reflectionService.createReflection — real insert', async () => {
@@ -258,6 +264,28 @@ describeIfDb('write paths against real Postgres', () => {
     // Key Result half.
     const { rows: objRows } = await client.query(`SELECT status FROM okr.objective WHERE id = $1`, [objectiveId]);
     expect(objRows[0].status).toBe('On Track');
+  });
+
+  it('checkInService.listCheckInsForKeyResult — real fetch, genuinely restricted (this check did not exist before this round)', async () => {
+    const { listCheckInsForKeyResult } = await import('../../frontend/api-lib/services/checkInService.js');
+    const { inviteUser } = await import('../../frontend/api-lib/services/userService.js');
+    const asOwner = await inTenantContext(() => listCheckInsForKeyResult(client, tenantId, { id: employeeId, role: 'Employee' }, keyResultId));
+    expect(asOwner.length).toBeGreaterThan(0);
+
+    // A real TenantAdmin can still see them...
+    const asTenantAdmin = await inTenantContext(() => listCheckInsForKeyResult(client, tenantId, { id: tenantAdminId, role: 'TenantAdmin' }, keyResultId));
+    expect(asTenantAdmin.length).toBeGreaterThan(0);
+
+    // ...but a real, unrelated tenant member cannot — proving this
+    // restriction actually holds against real Postgres, not just a mock
+    // that never checked the SQL/logic was wired up correctly. A fresh
+    // stranger, invited with no relation to this Key Result's owner.
+    const stranger = await inTenantContext(() =>
+      inviteUser(client, tenantId, { role: 'Employee', email: 'stranger@acme.test', firstName: 'Sam', lastName: 'Stranger', password: 'Correct-Horse-9!' })
+    );
+    await expect(
+      inTenantContext(() => listCheckInsForKeyResult(client, tenantId, { id: stranger.id, role: 'Employee' }, keyResultId))
+    ).rejects.toThrow(/owner, their Manager, or a Tenant Administrator/i);
   });
 
   it('scoringService — multi-level cascade: a child Objective\'s Check-in updates the parent too, and the parent then scores from children, not its own Key Result', async () => {

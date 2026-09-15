@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
-  createObjective, updateObjective, getObjectiveForCaller,
+  createObjective, updateObjective, getObjectiveForCaller, listObjectivesForCaller,
   ForbiddenError, NotFoundError, ValidationError,
 } from '../frontend/api-lib/services/objectiveService.js';
 
@@ -75,33 +75,38 @@ describe('createObjective — validation and authorisation', () => {
   });
 });
 
-// ---------- FR-020: visibility ----------
-describe('getObjectiveForCaller (FR-020: owner + owner\'s direct Manager only)', () => {
+// ---------- FR-020: visibility (broadened at Mark's direction — see
+// objectiveService.js's module comment) ----------
+describe('getObjectiveForCaller — visible tenant-wide, canEdit reflects the narrower owner+Manager rule', () => {
   it('throws NotFoundError when the Objective does not exist in this tenant', async () => {
     const client = mockClient();
     client.query.mockResolvedValueOnce({ rows: [] });
     await expect(getObjectiveForCaller(client, 't1', 'obj-x', { id: 'u1' })).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it('is visible to its owner', async () => {
+  it('is visible to its owner, with canEdit true', async () => {
     const client = mockClient();
     client.query.mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: 'mgr-1' }] });
     const objective = await getObjectiveForCaller(client, 't1', 'obj-1', { id: 'u1' });
     expect(objective.id).toBe('obj-1');
+    expect(objective.canEdit).toBe(true);
     expect(objective.ownerManagerId).toBeUndefined(); // internal-only field stripped before returning
   });
 
-  it('is visible to the owner\'s direct Manager', async () => {
+  it('is visible to the owner\'s direct Manager, with canEdit true', async () => {
     const client = mockClient();
     client.query.mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: 'mgr-1' }] });
     const objective = await getObjectiveForCaller(client, 't1', 'obj-1', { id: 'mgr-1' });
     expect(objective.id).toBe('obj-1');
+    expect(objective.canEdit).toBe(true);
   });
 
-  it('is forbidden to an unrelated user', async () => {
+  it('is now ALSO visible to an unrelated tenant member, but with canEdit false', async () => {
     const client = mockClient();
     client.query.mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: 'mgr-1' }] });
-    await expect(getObjectiveForCaller(client, 't1', 'obj-1', { id: 'someone-else' })).rejects.toBeInstanceOf(ForbiddenError);
+    const objective = await getObjectiveForCaller(client, 't1', 'obj-1', { id: 'someone-else' });
+    expect(objective.id).toBe('obj-1');
+    expect(objective.canEdit).toBe(false);
   });
 });
 
@@ -136,5 +141,20 @@ describe('updateObjective (FR-023: no cascade cycle)', () => {
     client.query.mockResolvedValueOnce({ rows: [{ id: 'obj-A', ownerId: 'u1', ownerManagerId: 'mgr-1', title: 'A' }] });
     await expect(updateObjective(client, 't1', { id: 'stranger' }, 'obj-A', { title: 'New title' }))
       .rejects.toBeInstanceOf(ForbiddenError);
+  });
+});
+
+describe('listObjectivesForCaller — tenant-wide, not scoped to owner/reports', () => {
+  it('returns every Objective in the tenant regardless of who owns it, with owner names', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({
+      rows: [
+        { id: 'obj-1', ownerId: 'someone-else', ownerFirstName: 'Ada', ownerLastName: 'Lovelace' },
+        { id: 'obj-2', ownerId: 'u1', ownerFirstName: 'Bob', ownerLastName: 'Smith' },
+      ],
+    });
+    const objectives = await listObjectivesForCaller(client, 't1', { id: 'u1' });
+    expect(objectives).toHaveLength(2);
+    expect(objectives[0].ownerFirstName).toBe('Ada'); // visible even though owned by "someone-else", not the caller
   });
 });

@@ -18,17 +18,32 @@ export default function ObjectiveDetail() {
   const [objective, setObjective] = useState(null);
   const [keyResults, setKeyResults] = useState([]);
   const [reflections, setReflections] = useState([]);
+  const [reflectionsRestricted, setReflectionsRestricted] = useState(false);
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [forbidden, setForbidden] = useState(false);
 
   function load() {
-    return Promise.all([objectivesApi.get(id), objectivesApi.listReflections(id)])
-      .then(([result, reflectionsResult]) => {
+    return objectivesApi.get(id)
+      .then((result) => {
         setObjective(result.objective);
         setKeyResults(result.keyResults ?? []);
-        setReflections(reflectionsResult.reflections ?? []);
       })
+      .then(() =>
+        // Fetched separately from the Objective itself — Reflections stay
+        // restricted to owner/Manager/TenantAdmin even though the
+        // Objective and Key Results are now tenant-wide readable (see
+        // reflectionService.js's module comment), so this can 403 for a
+        // viewer who can otherwise see the page fine. That must not take
+        // down the rest of the page.
+        objectivesApi.listReflections(id)
+          .then((result) => setReflections(result.reflections ?? []))
+          .catch((err) => {
+            if (err.status === 403) setReflectionsRestricted(true);
+            // any other error here is non-fatal to the page — Reflections
+            // just stays empty rather than blocking Objective/Key Result content
+          })
+      )
       .catch((err) => {
         if (err.status === 404) setNotFound(true);
         else if (err.status === 403) setForbidden(true);
@@ -41,7 +56,7 @@ export default function ObjectiveDetail() {
     return <div style={pageStyle}><p style={{ color: colors.ink500 }}>{t('Objective')} not found.</p></div>;
   }
   if (forbidden) {
-    return <div style={pageStyle}><p style={{ color: colors.ink500 }}>You don't have access to this {t('Objective').toLowerCase()} (FR-020: visible to its owner and their direct Manager only).</p></div>;
+    return <div style={pageStyle}><p style={{ color: colors.ink500 }}>You don't have access to this {t('Objective').toLowerCase()}.</p></div>;
   }
   if (error) {
     return <div style={pageStyle}><div style={s.chip(colors.danger, colors.dangerBg)}>{error}</div></div>;
@@ -62,7 +77,9 @@ export default function ObjectiveDetail() {
         Status is computed automatically from {t('KeyResult')} {t('CheckIn')}s (FR-004) — it can't be set directly.
       </p>
 
-      <EditTitleForm objective={objective} onSaved={(updated) => setObjective((prev) => ({ ...prev, ...updated }))} label={t('Objective')} />
+      {objective.canEdit && (
+        <EditTitleForm objective={objective} onSaved={(updated) => setObjective((prev) => ({ ...prev, ...updated }))} label={t('Objective')} />
+      )}
 
       <div style={{ ...s.card, marginTop: 20 }}>
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: colors.ink900 }}>{tPlural('KeyResult')}</div>
@@ -83,7 +100,7 @@ export default function ObjectiveDetail() {
               </thead>
               <tbody>
                 {keyResults.map((kr) => (
-                  <KeyResultRow key={kr.id} keyResult={kr} onSaved={(updated) => {
+                  <KeyResultRow key={kr.id} keyResult={kr} canEdit={objective.canEdit} onSaved={(updated) => {
                     setKeyResults((prev) => prev.map((k) => (k.id === kr.id ? { ...k, ...updated } : k)));
                   }} />
                 ))}
@@ -92,27 +109,38 @@ export default function ObjectiveDetail() {
           </div>
         )}
 
-        <AddKeyResultForm objectiveId={objective.id} onCreated={(kr) => setKeyResults((prev) => [...prev, kr])} label={t('KeyResult')} />
+        {objective.canEdit && (
+          <AddKeyResultForm objectiveId={objective.id} onCreated={(kr) => setKeyResults((prev) => [...prev, kr])} label={t('KeyResult')} />
+        )}
       </div>
 
       <div style={{ ...s.card, marginTop: 20 }}>
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: colors.ink900 }}>{tPlural('Reflection')}</div>
 
-        {reflections.length === 0 && (
-          <div style={{ fontSize: 13, color: colors.ink500, marginBottom: 16 }}>No {tPlural('Reflection').toLowerCase()} yet.</div>
-        )}
-        {reflections.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-            {reflections.map((r) => (
-              <div key={r.id} style={{ padding: 10, borderRadius: 8, border: `1px solid ${colors.line}` }}>
-                <div style={{ fontSize: 12, color: colors.ink400, marginBottom: 4 }}>{new Date(r.submittedAt).toLocaleString()}</div>
-                <div style={{ fontSize: 13, color: colors.ink900, whiteSpace: 'pre-wrap' }}>{r.content}</div>
-              </div>
-            ))}
+        {reflectionsRestricted ? (
+          <div style={{ fontSize: 13, color: colors.ink500, marginBottom: 16 }}>
+            {tPlural('Reflection')} are only visible to the owner, their Manager, and Tenant Administrators.
           </div>
+        ) : (
+          <>
+            {reflections.length === 0 && (
+              <div style={{ fontSize: 13, color: colors.ink500, marginBottom: 16 }}>No {tPlural('Reflection').toLowerCase()} yet.</div>
+            )}
+            {reflections.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                {reflections.map((r) => (
+                  <div key={r.id} style={{ padding: 10, borderRadius: 8, border: `1px solid ${colors.line}` }}>
+                    <div style={{ fontSize: 12, color: colors.ink400, marginBottom: 4 }}>{new Date(r.submittedAt).toLocaleString()}</div>
+                    <div style={{ fontSize: 13, color: colors.ink900, whiteSpace: 'pre-wrap' }}>{r.content}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {objective.canEdit && (
+              <AddReflectionForm objectiveId={objective.id} label={t('Reflection')} onCreated={(r) => setReflections((prev) => [r, ...prev])} />
+            )}
+          </>
         )}
-
-        <AddReflectionForm objectiveId={objective.id} label={t('Reflection')} onCreated={(r) => setReflections((prev) => [r, ...prev])} />
       </div>
     </div>
   );
@@ -156,7 +184,7 @@ function EditTitleForm({ objective, onSaved, label }) {
   );
 }
 
-function KeyResultRow({ keyResult, onSaved }) {
+function KeyResultRow({ keyResult, canEdit, onSaved }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(keyResult.title);
   const [weighting, setWeighting] = useState(String(keyResult.weighting));
@@ -201,7 +229,9 @@ function KeyResultRow({ keyResult, onSaved }) {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <StatusChip status={keyResult.status} />
           <Link to={`/key-results/${keyResult.id}`} style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12, textDecoration: 'none', display: 'inline-block' }}>View</Link>
-          <button type="button" onClick={() => setEditing(true)} style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12 }}>Edit</button>
+          {canEdit && (
+            <button type="button" onClick={() => setEditing(true)} style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12 }}>Edit</button>
+          )}
         </div>
       </td>
     </tr>

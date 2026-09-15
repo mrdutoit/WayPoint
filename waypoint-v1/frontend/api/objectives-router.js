@@ -118,6 +118,6 @@ async function createReflectionAction(req, res, user, objectiveId) {
 
 // GET /api/objectives/:id/reflections — Owner, Manager, Tenant Administrator.
 async function listReflectionsAction(req, res, user, objectiveId) {
-  const reflections = await withTenantContext(user.tenantId, (client) => listReflectionsForObjective(client, user.tenantId, objectiveId));
+  const reflections = await withTenantContext(user.tenantId, (client) => listReflectionsForObjective(client, user.tenantId, user, objectiveId));
   res.status(200).json({ reflections });
 }

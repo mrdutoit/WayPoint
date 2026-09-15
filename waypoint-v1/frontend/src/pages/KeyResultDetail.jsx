@@ -23,19 +23,31 @@ export default function KeyResultDetail() {
   const [keyResult, setKeyResult] = useState(null);
   const [rubric, setRubric] = useState(null);
   const [checkIns, setCheckIns] = useState([]);
+  const [checkInsRestricted, setCheckInsRestricted] = useState(false);
   const [initiatives, setInitiatives] = useState([]);
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [forbidden, setForbidden] = useState(false);
 
   function load() {
-    return Promise.all([keyResultsApi.get(id), rubricApi.get(), keyResultsApi.listCheckIns(id), keyResultsApi.listInitiatives(id)])
-      .then(([krResult, rubricResult, checkInsResult, initiativesResult]) => {
+    return Promise.all([keyResultsApi.get(id), rubricApi.get(), keyResultsApi.listInitiatives(id)])
+      .then(([krResult, rubricResult, initiativesResult]) => {
         setKeyResult(krResult.keyResult);
         setRubric(rubricResult.rubric ?? null);
-        setCheckIns(checkInsResult.checkIns ?? []);
         setInitiatives(initiativesResult.initiatives ?? []);
       })
+      .then(() =>
+        // Fetched separately — Check-in comments/confidence stay
+        // restricted to owner/Manager/TenantAdmin even though the Key
+        // Result itself is now tenant-wide readable (see
+        // checkInService.js's module comment), so this can 403 for a
+        // viewer who can otherwise see the rest of the page fine.
+        keyResultsApi.listCheckIns(id)
+          .then((result) => setCheckIns(result.checkIns ?? []))
+          .catch((err) => {
+            if (err.status === 403) setCheckInsRestricted(true);
+          })
+      )
       .catch((err) => {
         if (err.status === 404) setNotFound(true);
         else if (err.status === 403) setForbidden(true);
@@ -67,20 +79,30 @@ export default function KeyResultDetail() {
         <div style={s.card}>
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: colors.ink900 }}>{tPlural('CheckIn')}</div>
 
-          {rubric ? (
-            <SubmitCheckInForm keyResultId={id} rubric={rubric} label={t('CheckIn')} onCreated={() => load()} />
-          ) : (
-            <div style={{ ...s.chip(colors.warn, colors.warnBg), marginBottom: 16 }}>
-              No Scoring Rubric configured for this tenant yet — ask a Tenant Administrator to set one up under OKR Settings.
+          {checkInsRestricted ? (
+            <div style={{ fontSize: 13, color: colors.ink500 }}>
+              {tPlural('CheckIn')} are only visible to the owner, their Manager, and Tenant Administrators.
             </div>
-          )}
+          ) : (
+            <>
+              {keyResult.canEdit && (
+                rubric ? (
+                  <SubmitCheckInForm keyResultId={id} rubric={rubric} label={t('CheckIn')} onCreated={() => load()} />
+                ) : (
+                  <div style={{ ...s.chip(colors.warn, colors.warnBg), marginBottom: 16 }}>
+                    No Scoring Rubric configured for this tenant yet — ask a Tenant Administrator to set one up under OKR Settings.
+                  </div>
+                )
+              )}
 
-          {checkIns.length === 0 ? (
-            <div style={{ fontSize: 13, color: colors.ink500, marginTop: 12 }}>No {tPlural('CheckIn').toLowerCase()} yet.</div>
-          ) : (
-            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {checkIns.map((ci) => <CheckInRow key={ci.id} checkIn={ci} rubric={rubric} />)}
-            </div>
+              {checkIns.length === 0 ? (
+                <div style={{ fontSize: 13, color: colors.ink500, marginTop: 12 }}>No {tPlural('CheckIn').toLowerCase()} yet.</div>
+              ) : (
+                <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {checkIns.map((ci) => <CheckInRow key={ci.id} checkIn={ci} rubric={rubric} />)}
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -93,14 +115,16 @@ export default function KeyResultDetail() {
           {initiatives.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
               {initiatives.map((init) => (
-                <InitiativeRow key={init.id} initiative={init} onSaved={(updated) => {
+                <InitiativeRow key={init.id} initiative={init} canEdit={keyResult.canEdit} onSaved={(updated) => {
                   setInitiatives((prev) => prev.map((i) => (i.id === init.id ? { ...i, ...updated } : i)));
                 }} />
               ))}
             </div>
           )}
 
-          <AddInitiativeForm keyResultId={id} label={t('Initiative')} onCreated={(init) => setInitiatives((prev) => [...prev, init])} />
+          {keyResult.canEdit && (
+            <AddInitiativeForm keyResultId={id} label={t('Initiative')} onCreated={(init) => setInitiatives((prev) => [...prev, init])} />
+          )}
         </div>
       </div>
     </div>
@@ -185,7 +209,7 @@ function CheckInRow({ checkIn, rubric }) {
   );
 }
 
-function InitiativeRow({ initiative, onSaved }) {
+function InitiativeRow({ initiative, canEdit, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -207,9 +231,13 @@ function InitiativeRow({ initiative, onSaved }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: 10, borderRadius: 8, border: `1px solid ${colors.line}` }}>
       <span style={{ fontSize: 13, color: colors.ink900, flex: '1 1 200px' }}>{initiative.title}</span>
       {initiative.dueDate && <span style={{ fontSize: 12, color: colors.ink500 }}>Due {initiative.dueDate}</span>}
-      <select value={initiative.status} onChange={handleStatusChange} disabled={saving} style={{ ...s.select, width: 140 }}>
-        {INITIATIVE_STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}
-      </select>
+      {canEdit ? (
+        <select value={initiative.status} onChange={handleStatusChange} disabled={saving} style={{ ...s.select, width: 140 }}>
+          {INITIATIVE_STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}
+        </select>
+      ) : (
+        <span style={s.chip(colors.ink500, colors.ink100)}>{initiative.status}</span>
+      )}
       {error && <span style={s.chip(colors.danger, colors.dangerBg)}>{error}</span>}
     </div>
   );

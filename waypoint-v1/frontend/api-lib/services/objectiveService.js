@@ -33,22 +33,40 @@ const OBJECTIVE_FIELDS = `
 `;
 
 /**
- * FR-020: "An Objective and its Key Results are visible to their owner
- * and the owner's direct Manager only." Applied literally — a
- * TenantAdmin does not get blanket visibility here; org-wide viewing is
- * the dedicated GET /api/reports/alignment-map endpoint (Module 6), not
- * this list. Flag to Mark if TenantAdmin was expected to see everything
- * via this endpoint too.
+ * FR-020, revised at Mark's direction after testing surfaced how
+ * restrictive the literal rule was: Objectives and Key Results are now
+ * readable by any authenticated tenant member — matching how most OKR
+ * tools actually work (transparency/alignment is the point of a
+ * cascade), not FR-020's original "owner and owner's direct Manager
+ * only," which the Stage 2 doc itself flagged as a Phase 1-only
+ * restriction ("Organisation-wide transparency is a Phase 2
+ * candidate"). EDIT rights are unchanged and still exactly as narrow as
+ * before — see updateObjective's assertCanEdit below; broadening who
+ * can *see* something must never broaden who can *change* it.
+ *
+ * Check-in comments/confidence and Reflection content are deliberately
+ * NOT part of this broadening — they stay restricted to owner, owner's
+ * Manager, and TenantAdmin (checkInService.js, reflectionService.js),
+ * since that's where genuinely sensitive personal commentary lives, not
+ * the OKR structure itself. This mirrors what the original Stage 2 API
+ * table already did on its own: Check-in/Reflection listing was scoped
+ * to "Owner, Manager, Tenant Administrator" even when FR-020's literal
+ * text was more restrictive across the board — that distinction between
+ * structural transparency and commentary privacy was already implicit
+ * in the design, just not applied consistently until now.
  */
 export async function listObjectivesForCaller(client, tenantId, caller) {
+  // ownerFirstName/ownerLastName added specifically for this broadened
+  // (tenant-wide) list — showing whose Objective is whose matters a lot
+  // more once the list isn't implicitly scoped to "you and your reports"
+  // any more.
   const { rows } = await client.query(
-    `SELECT ${OBJECTIVE_FIELDS}
+    `SELECT ${OBJECTIVE_FIELDS}, owner.first_name AS "ownerFirstName", owner.last_name AS "ownerLastName"
      FROM okr.objective o
      JOIN okr.user_account owner ON owner.id = o.owner_id
      WHERE o.tenant_id = $1
-       AND (o.owner_id = $2 OR owner.manager_id = $2)
      ORDER BY o.created_at DESC`,
-    [tenantId, caller.id]
+    [tenantId]
   );
   return rows;
 }
@@ -64,16 +82,30 @@ async function fetchObjectiveRow(client, tenantId, objectiveId) {
   return rows[0] ?? null;
 }
 
-function assertVisible(objectiveRow, caller) {
-  const visible = objectiveRow.ownerId === caller.id || objectiveRow.ownerManagerId === caller.id;
-  if (!visible) throw new ForbiddenError('You do not have access to this Objective');
+/**
+ * The narrow rule FR-020 originally applied to *viewing* now applies
+ * only to editing — owner or the owner's direct Manager. Renamed from
+ * the old assertVisible to make that split explicit at the call site,
+ * not just in a comment.
+ */
+function assertCanEdit(objectiveRow, caller) {
+  const allowed = objectiveRow.ownerId === caller.id || objectiveRow.ownerManagerId === caller.id;
+  if (!allowed) throw new ForbiddenError('Only the Objective owner or their Manager can do this');
 }
 
+/**
+ * Visible to any authenticated tenant member — see the module-level
+ * note above. `canEdit` is computed and returned so the frontend can
+ * hide edit affordances for a read-only viewer without duplicating this
+ * rule client-side; the backend still enforces it independently on
+ * every write (updateObjective), so this flag is advisory only, never
+ * the actual security boundary.
+ */
 export async function getObjectiveForCaller(client, tenantId, objectiveId, caller) {
   const row = await fetchObjectiveRow(client, tenantId, objectiveId);
   if (!row) throw new NotFoundError('Objective not found');
-  assertVisible(row, caller);
   const { ownerManagerId, ...objective } = row;
+  objective.canEdit = row.ownerId === caller.id || ownerManagerId === caller.id;
   return objective;
 }
 
@@ -183,13 +215,14 @@ export async function createObjective(client, tenantId, caller, { title, cascade
 }
 
 /**
- * Owner or the owner's direct Manager only (matches FR-020's visibility
- * pairing). `status` is deliberately not an accepted field — see FR-004.
+ * Owner or the owner's direct Manager only — unchanged since the
+ * visibility broadening above; editing was never part of that change.
+ * `status` is deliberately not an accepted field — see FR-004.
  */
 export async function updateObjective(client, tenantId, caller, objectiveId, { title, parentObjectiveId }) {
   const existing = await fetchObjectiveRow(client, tenantId, objectiveId);
   if (!existing) throw new NotFoundError('Objective not found');
-  assertVisible(existing, caller);
+  assertCanEdit(existing, caller);
 
   const nextTitle = title !== undefined ? title : existing.title;
   if (!nextTitle?.trim()) throw new ValidationError('title cannot be empty');

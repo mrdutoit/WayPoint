@@ -133,12 +133,52 @@ describe('createCheckIn — triggers the FR-019 roll-up', () => {
   });
 });
 
-describe('listCheckInsForKeyResult', () => {
-  it('returns check-ins for the key result, most recent first', async () => {
+describe('listCheckInsForKeyResult — restricted to owner, Manager, TenantAdmin (deliberately NOT broadened with Objective/Key Result visibility)', () => {
+  const TENANT_ADMIN = { id: 'admin-1', role: 'TenantAdmin' };
+
+  it('throws NotFoundError when the Key Result does not exist', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce({ rows: [{ id: 'ci-2' }, { id: 'ci-1' }] });
-    const result = await listCheckInsForKeyResult(client, 't1', 'kr-1');
+    client.query.mockResolvedValueOnce({ rows: [] });
+    await expect(listCheckInsForKeyResult(client, 't1', OWNER, 'missing')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('refuses a stranger — this is exactly the check that did not exist before this round', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({ rows: [KEY_RESULT_ROW] });
+    await expect(listCheckInsForKeyResult(client, 't1', STRANGER, 'kr-1')).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('allows the owner', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [KEY_RESULT_ROW] })
+      .mockResolvedValueOnce({ rows: [{ id: 'ci-2' }, { id: 'ci-1' }] });
+    const result = await listCheckInsForKeyResult(client, 't1', OWNER, 'kr-1');
     expect(result).toEqual([{ id: 'ci-2' }, { id: 'ci-1' }]);
-    expect(client.query.mock.calls[0][0]).toMatch(/ORDER BY ci\.submitted_at DESC/);
+  });
+
+  it('allows the owner\'s Manager', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [KEY_RESULT_ROW] })
+      .mockResolvedValueOnce({ rows: [] });
+    await expect(listCheckInsForKeyResult(client, 't1', MANAGER, 'kr-1')).resolves.toEqual([]);
+  });
+
+  it('allows TenantAdmin, who is neither the owner nor their Manager', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [KEY_RESULT_ROW] })
+      .mockResolvedValueOnce({ rows: [] });
+    await expect(listCheckInsForKeyResult(client, 't1', TENANT_ADMIN, 'kr-1')).resolves.toEqual([]);
+  });
+
+  it('orders by most recent first', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [KEY_RESULT_ROW] })
+      .mockResolvedValueOnce({ rows: [{ id: 'ci-2' }, { id: 'ci-1' }] });
+    await listCheckInsForKeyResult(client, 't1', OWNER, 'kr-1');
+    expect(client.query.mock.calls[1][0]).toMatch(/ORDER BY ci\.submitted_at DESC/);
   });
 });

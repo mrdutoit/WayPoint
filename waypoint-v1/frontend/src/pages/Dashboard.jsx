@@ -46,11 +46,9 @@ export default function Dashboard() {
         {isManager && (
           <QuickLink to="/reports/team-progress" title="Team progress" description="Your direct reports' status, sorted by risk." />
         )}
+        <QuickLink to="/reports/alignment-map" title="Alignment map" description="The full cascade tree, company to individual." />
         {isTenantAdmin && (
-          <>
-            <QuickLink to="/reports/alignment-map" title="Alignment map" description="The full cascade tree, company to individual." />
-            <QuickLink to="/users" title="Users" description="Invite, manage roles, and reset passwords." />
-          </>
+          <QuickLink to="/users" title="Users" description="Invite, manage roles, and reset passwords." />
         )}
       </div>
 

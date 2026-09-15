@@ -173,13 +173,7 @@ export default function App() {
             />
             <Route
               path="/reports/alignment-map"
-              element={
-                <RequireAuth>
-                  <RequireRole roles={['TenantAdmin']}>
-                    <Shell><AlignmentMap /></Shell>
-                  </RequireRole>
-                </RequireAuth>
-              }
+              element={<RequireAuth><Shell><AlignmentMap /></Shell></RequireAuth>}
             />
             <Route
               path="/reports/checkin-compliance"

@@ -165,6 +165,12 @@ describeIfDb('reporting queries against real Postgres', () => {
     expect(companyRow.cascadeLevel).toBe('Company');
   });
 
+  it('getAlignmentMap — real fetch, now genuinely accessible to a non-TenantAdmin (was TenantAdmin-only)', async () => {
+    const { getAlignmentMap } = await import('../../frontend/api-lib/services/reportingService.js');
+    const result = await getAlignmentMap(client, tenantId, { id: employeeId, role: 'Employee' });
+    expect(result.objectives.length).toBeGreaterThan(0);
+  });
+
   it('getCheckinCompliance — real fetch, correctly reports true and false within one owner', async () => {
     const { getCheckinCompliance } = await import('../../frontend/api-lib/services/reportingService.js');
     const result = await getCheckinCompliance(client, tenantId, { id: 'admin', role: 'TenantAdmin' });

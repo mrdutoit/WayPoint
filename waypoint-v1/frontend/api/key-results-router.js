@@ -70,7 +70,7 @@ async function updateInitiativeAction(req, res, user, initiativeId) {
   res.status(200).json({ initiative });
 }
 
-// GET /api/key-results/:id — visibility follows the parent Objective's FR-020 rule.
+// GET /api/key-results/:id — visible to any tenant member (see keyResultService.js's module comment).
 async function getAction(req, res, user, keyResultId) {
   const keyResult = await withTenantContext(user.tenantId, (client) => getKeyResultById(client, user.tenantId, user, keyResultId));
   res.status(200).json({ keyResult });
@@ -106,7 +106,7 @@ async function createInitiativeAction(req, res, user, keyResultId) {
   res.status(201).json({ initiative });
 }
 
-// GET /api/key-results/:id/initiatives — Owner, Manager (visibility follows the parent Objective's FR-020 rule).
+// GET /api/key-results/:id/initiatives — visible to any tenant member (structural, not restricted like Check-ins).
 async function listInitiativesAction(req, res, user, keyResultId) {
   const initiatives = await withTenantContext(user.tenantId, (client) => listInitiativesForKeyResult(client, user.tenantId, keyResultId));
   res.status(200).json({ initiatives });
@@ -129,6 +129,6 @@ async function createCheckInAction(req, res, user, keyResultId) {
 
 // GET /api/key-results/:id/check-ins — Owner, Manager, Tenant Administrator.
 async function listCheckInsAction(req, res, user, keyResultId) {
-  const checkIns = await withTenantContext(user.tenantId, (client) => listCheckInsForKeyResult(client, user.tenantId, keyResultId));
+  const checkIns = await withTenantContext(user.tenantId, (client) => listCheckInsForKeyResult(client, user.tenantId, user, keyResultId));
   res.status(200).json({ checkIns });
 }
