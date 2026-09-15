@@ -479,6 +479,28 @@ waypoint-v1/
   cross-origin access would have silently inherited a policy meant for
   a different, narrower exception.
 
+- **A user's manager is editable after creation (`updateUserManager`),
+  not just settable once at invite time.** This was a genuinely missing
+  capability, not an edge case — found because it directly blocked
+  testing (no way to give a Manager a direct report after both accounts
+  already existed). Deliberately not restricted to users with role
+  `Manager`, matching `inviteUser`'s own validation level exactly — the
+  invite form's dropdown only offering Manager-role options is a
+  frontend choice, not a backend rule, so a TenantAdmin managing someone
+  directly before any Manager exists in a small org is a legitimate
+  shape this doesn't block. Same `isTenantAdmin` guard as role-editing
+  and force-reset — a TenantAdmin's own manager assignment isn't
+  editable through this endpoint either, no safe recovery path for that
+  case existing yet.
+- **`Dashboard.jsx` needs the same "stale copy" scrutiny as everything
+  else** — it was the literal, unmodified Stage 3 scaffold page,
+  including copy that named modules as "not yet built" long after they
+  shipped. A page nobody has reason to revisit once it "works" (renders
+  something, doesn't error) can silently go stale for an entire
+  build — the same lesson as `themes.css` never being imported, just
+  without a build error to force it into view. Worth a periodic check
+  of pages that were only ever touched once, early on.
+
 ## Roles
 
 | Role | Notes |

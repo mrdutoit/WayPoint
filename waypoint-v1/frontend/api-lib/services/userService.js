@@ -94,6 +94,48 @@ export async function updateUserRole(client, tenantId, userId, newRole) {
 }
 
 /**
+ * Confirmed missing entirely — invite-time was the only place a
+ * manager could ever be set, with no way to assign or change one
+ * afterward. A real gap: creating a user before their manager exists
+ * yet (or just wanting to restructure reporting lines later) had no
+ * path back. managerId may be null to clear the assignment.
+ *
+ * Not restricted to users with role 'Manager' — mirrors inviteUser's
+ * own validation level (managerId just needs to exist in the tenant),
+ * not a new, stricter rule introduced here. The invite form's UI
+ * happens to only offer Manager-role users as options, but that's a
+ * frontend choice, not a backend requirement — a small org's
+ * TenantAdmin managing someone directly before any Manager exists is a
+ * legitimate shape this doesn't need to block.
+ */
+export async function updateUserManager(client, tenantId, userId, managerId) {
+  const { rows: existing } = await client.query(
+    `SELECT id, role FROM okr.user_account WHERE tenant_id = $1 AND id = $2`,
+    [tenantId, userId]
+  );
+  if (existing.length === 0) throw new NotFoundError('User not found');
+  if (existing[0].role === 'TenantAdmin') {
+    throw new ForbiddenError('Cannot set a manager for a TenantAdmin through this endpoint');
+  }
+
+  if (managerId) {
+    if (managerId === userId) throw new ValidationError('A user cannot be their own manager');
+    const { rows: managerRows } = await client.query(
+      `SELECT id FROM okr.user_account WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, managerId]
+    );
+    if (managerRows.length === 0) throw new ValidationError('managerId does not exist in this tenant');
+  }
+
+  const { rows } = await client.query(
+    `UPDATE okr.user_account SET manager_id = $3 WHERE tenant_id = $1 AND id = $2
+     RETURNING id, manager_id AS "managerId", role, email, first_name AS "firstName", last_name AS "lastName"`,
+    [tenantId, userId, managerId ?? null]
+  );
+  return rows[0];
+}
+
+/**
  * Beyond the literal Stage 2 API table (deliberate addition — see the
  * router file). Mirrors MedBroker's force-password-reset (§118): an
  * admin-set password always forces a change at next login, and this

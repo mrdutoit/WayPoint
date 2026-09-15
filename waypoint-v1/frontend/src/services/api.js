@@ -132,6 +132,7 @@ export const usersApi = {
   invite: ({ role, email, firstName, lastName, password, managerId }) =>
     request('/users/invite', { method: 'POST', body: JSON.stringify({ role, email, firstName, lastName, password, managerId }) }),
   updateRole: (id, role) => request(`/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+  updateManager: (id, managerId) => request(`/users/${id}/manager`, { method: 'PATCH', body: JSON.stringify({ managerId }) }),
   forcePasswordReset: (id, password) => request(`/users/${id}/force-password-reset`, { method: 'PUT', body: JSON.stringify({ password }) }),
   unlock: (id) => request(`/users/${id}/unlock`, { method: 'PUT' }),
 };

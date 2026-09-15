@@ -25,11 +25,7 @@ export default function UsersAdmin() {
   }
   useEffect(() => { load(); }, []);
 
-  const nameById = useMemo(() => {
-    const map = {};
-    for (const u of users ?? []) map[u.id] = `${u.firstName} ${u.lastName}`;
-    return map;
-  }, [users]);
+  const managers = useMemo(() => (users ?? []).filter((u) => u.role === 'Manager'), [users]);
 
   return (
     <div style={isMobile ? s.pageMobile : s.page}>
@@ -45,7 +41,7 @@ export default function UsersAdmin() {
       </p>
 
       {showInvite && (
-        <InviteUserForm managers={(users ?? []).filter((u) => u.role === 'Manager')} onCreated={() => { setShowInvite(false); load(); }} />
+        <InviteUserForm managers={managers} onCreated={() => { setShowInvite(false); load(); }} />
       )}
 
       {error && <div style={{ ...s.chip(colors.danger, colors.dangerBg), marginBottom: 16 }}>{error}</div>}
@@ -67,7 +63,7 @@ export default function UsersAdmin() {
             </thead>
             <tbody>
               {users.map((u) => (
-                <UserRow key={u.id} user={u} managerName={u.managerId ? nameById[u.managerId] : null} onChanged={load} />
+                <UserRow key={u.id} user={u} managers={managers} onChanged={load} />
               ))}
             </tbody>
           </table>
@@ -81,10 +77,11 @@ function isCurrentlyLocked(lockedUntil) {
   return !!lockedUntil && new Date(lockedUntil) > new Date();
 }
 
-function UserRow({ user, managerName, onChanged }) {
+function UserRow({ user, managers, onChanged }) {
   const isTenantAdmin = user.role === 'TenantAdmin';
   const locked = isCurrentlyLocked(user.lockedUntil);
   const [roleSaving, setRoleSaving] = useState(false);
+  const [managerSaving, setManagerSaving] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
   const [resetSaving, setResetSaving] = useState(false);
@@ -103,6 +100,24 @@ function UserRow({ user, managerName, onChanged }) {
       setRowError(err.message ?? 'Failed to change role');
     } finally {
       setRoleSaving(false);
+    }
+  }
+
+  // Set at invite time only until now — confirmed missing entirely, not
+  // just hard to find: there was no way to assign or change a Manager
+  // after a user was created.
+  async function handleManagerChange(e) {
+    const newManagerId = e.target.value || null;
+    if (newManagerId === (user.managerId ?? null)) return;
+    setManagerSaving(true);
+    setRowError(null);
+    try {
+      await usersApi.updateManager(user.id, newManagerId);
+      onChanged();
+    } catch (err) {
+      setRowError(err.message ?? 'Failed to change manager');
+    } finally {
+      setManagerSaving(false);
     }
   }
 
@@ -151,7 +166,21 @@ function UserRow({ user, managerName, onChanged }) {
             </select>
           )}
         </td>
-        <td style={s.td}>{managerName ?? '—'}</td>
+        <td style={s.td}>
+          {isTenantAdmin ? (
+            '—'
+          ) : (
+            <select
+              value={user.managerId ?? ''} onChange={handleManagerChange} disabled={managerSaving}
+              style={{ ...s.select, width: 150 }}
+            >
+              <option value="">No manager</option>
+              {managers.filter((m) => m.id !== user.id).map((m) => (
+                <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+              ))}
+            </select>
+          )}
+        </td>
         <td style={s.td}>
           {locked
             ? <span style={s.chip(colors.danger, colors.dangerBg)}>Locked</span>

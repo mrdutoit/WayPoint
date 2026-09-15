@@ -128,6 +128,17 @@ describeIfDb('write paths against real Postgres', () => {
     await inTenantContext(() => updateUserRole(client, tenantId, employeeId, 'Employee')); // put it back
   });
 
+  it('userService.updateUserManager — real update, the exact gap Mark hit (no way to (re)assign a manager after invite)', async () => {
+    const { updateUserManager } = await import('../../frontend/api-lib/services/userService.js');
+    // employeeId already has managerId set from invite — clear it, then
+    // reassign, proving both directions work against a real row, not
+    // just that invite-time assignment does.
+    const cleared = await inTenantContext(() => updateUserManager(client, tenantId, employeeId, null));
+    expect(cleared.managerId).toBeNull();
+    const reassigned = await inTenantContext(() => updateUserManager(client, tenantId, employeeId, managerId));
+    expect(reassigned.managerId).toBe(managerId);
+  });
+
   it('cascadeLevelService.setCascadeLevelsForTenant — real upsert', async () => {
     const { setCascadeLevelsForTenant } = await import('../../frontend/api-lib/services/cascadeLevelService.js');
     const levels = await inTenantContext(() => setCascadeLevelsForTenant(client, tenantId, ['Company', 'Team']));

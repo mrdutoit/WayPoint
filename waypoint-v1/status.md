@@ -5,12 +5,15 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** production deploy failure fixed — 13 files under
-`frontend/api/` exceeded Vercel Hobby's 12-Serverless-Function cap,
-the exact issue already documented (after MedBroker) in app-builder's
-own skill, missed because that guidance was prose, not a checked gate.
-Consolidated to 10 files with real headroom; 324 mocked tests + 27
-real-Postgres integration tests, all re-verified. The skill itself is
+**Last updated:** a real, confirmed-missing capability fixed — no way
+to assign or change a user's Manager after they were created, only at
+invite time. This is what actually blocked Mark's testing (needing Fred
+to have direct reports to test Team Progress), not the invite-time
+dropdown, which was re-checked and appears correct. Also: `Dashboard.jsx`
+was still the literal, unmodified Stage 3 scaffold placeholder — its own
+copy said modules were "built module by module in Stage 4" long after
+they all were. Replaced with a real, role-aware landing page. 336
+mocked tests + 28 real-Postgres integration tests.
 fixed too — see below.
 
 ## Where things actually stand
@@ -78,80 +81,85 @@ FR-033 Reporting shipped the four reports the Stage 2 doc's *approved
 API table* actually specifies (scorecard, team-progress, alignment-map,
 checkin-compliance) out of eight named in its narrative section — a
 real gap in the doc itself, surfaced rather than silently picked one
-way. All of the above is stable and confirmed working as of this note.
+way. A production deploy then failed — 13 files under `frontend/api/`
+over Vercel Hobby's 12-function cap, the exact issue already written
+down in app-builder's skill after MedBroker, missed because that
+guidance was prose, not a checked gate. Fixed by consolidating three
+routers into existing ones (`initiatives-router.js` →
+`key-results-router.js`, `me-router.js` → `auth-router.js`,
+`cycles-router.js` → `settings-router.js`, now 10 files with real
+headroom) and, more durably, adding a "Serverless function count gate"
+to the skill itself, structured exactly like the Vite build gate that
+reliably does get checked. All of the above is stable and confirmed
+working as of this note.
 
-## This round — fixed a production deploy failure (Vercel's 12-function cap)
+## This round — the manager-assignment gap, and a stale Dashboard
 
-**What happened, plainly:** 13 files under `frontend/api/` — one over
-Vercel Hobby's 12-Serverless-Function cap, confirmed exactly matching
-the deploy error Mark hit. This exact issue was already written down in
-app-builder's own skill after MedBroker hit it first, including the
-precise command to check for it. It happened again on WayPoint because
-that guidance lived as prose in one section, and nothing forced the
-check to actually run before adding `initiatives-router.js` and
-`reports-router.js` the last two rounds. Not a documentation gap — a
-process gap, and worth naming as exactly that rather than as a
-technical mystery.
+**The actual blocker, found by testing, not guessed at:** Mark reported
+being unable to select a Manager when inviting a user, and unable to
+edit any user afterward. Re-read the invite-time dropdown code
+carefully and could not find a defect in it. The real, confirmed gap
+was narrower and more consequential: **there was no way to assign or
+change a user's Manager after they were created at all** —
+`managerId` was only ever settable at `inviteUser` time, with no
+corresponding update path. This is exactly what blocked Mark's actual
+goal (getting Fred set up with a direct report to test Team Progress),
+regardless of whether the invite-time dropdown itself has a separate
+issue — flag if it's still misbehaving once this is live, with specifics
+(did it show zero options, or the wrong ones) so it can be reproduced
+directly rather than re-guessed at.
 
-**Fixed here:** consolidated three router files into existing ones,
-using the same "one file, multiple URL prefixes via a `?resource=`
-marker on the `vercel.json` rewrite" pattern already used elsewhere —
-`initiatives-router.js` → `key-results-router.js`, `me-router.js` →
-`auth-router.js`, `cycles-router.js` → `settings-router.js`. Now at 10
-files, not just under 12 but with two full slots of headroom before
-this becomes a problem again.
+Added `userService.js`'s `updateUserManager` (mirrors `inviteUser`'s
+own validation level deliberately — not restricted to role `Manager`,
+since the invite form's restriction to Manager-role options is a
+frontend choice, not a backend rule; a small org's TenantAdmin managing
+someone directly before any Manager exists is a legitimate shape this
+doesn't block), a new `PATCH /api/users/:id/manager` endpoint, and a
+real editable dropdown in the Users table — the Manager column was
+static text with no edit control at all before this.
 
-One real risk caught during the merge, not just a mechanical file
-move: `auth-router.js` has deliberately wide-open CORS
-(`Access-Control-Allow-Origin: *`) for a login-test tool — a narrow,
-already-justified exception. Folding `/api/me` into that same file
-without checking would have silently given a profile endpoint that
-never needed cross-origin access the same wide-open policy. Fixed by
-branching before the CORS header is set, and added a test that asserts
-`/api/me` specifically does *not* receive it — a consolidation should
-be a packaging change, never a silent security-boundary change.
+**Also fixed, found while answering Mark's direct question:**
+`Dashboard.jsx` was still the completely unmodified Stage 3 scaffold
+page — its own copy read "Objectives, Key Results, Initiatives,
+Check-ins, and Reflections are built module by module in Stage 4," long
+after every one of them actually shipped. Not intentional, just never
+revisited. Replaced with a real, role-aware landing page: a proper
+name-based greeting (using the profile-enrichment fetch from the
+Settings round), and quick links to Objectives, the caller's own
+scorecard, Team Progress for Managers, and Alignment Map/Users for
+TenantAdmins.
 
-Every test file for the three merged routers was rewritten to test
-through the consolidated handlers (not deleted or skipped) — 324
-mocked tests (up from 323 — the new CORS-boundary test) + all 27
-real-Postgres integration tests re-run to confirm the refactor didn't
-touch service-level behaviour, which it shouldn't have and didn't.
-
-**Fixed the actual process gap, not just this instance:** added a
-"Serverless function count gate" to app-builder's skill, structured
-exactly like the Vite build gate that reliably *does* get run every
-delivery — a command, a number, a hard rule. Also documented the
-consolidation technique itself as a new file in the skill's patterns
-library (`http/multi-resource-router-consolidation.md`), including the
-CORS-boundary lesson above, so the next project starts from a
-proven-safe pattern instead of re-discovering the same two gotchas.
+336 mocked tests + 28 real-Postgres integration tests (up from 324/27 —
+the new manager-assignment coverage, both mocked and against a real
+row). Function count unchanged at 10 — no new router files this round.
 
 ## Next immediate step
 
-1. **Push this delta to GitHub first — this is the one that fixes the
-   actual deploy failure.** No new migration to apply this round; it's
-   a pure code/config change (router consolidation + `vercel.json`).
-2. Confirm the Vercel deployment actually succeeds this time (the
-   "Build Failed... No more than 12 Serverless Functions" error should
-   be gone) before doing anything else.
-3. Apply `db/migrations/07-initiative-checkin-reflection.sql` via the
-   Neon SQL console (this is unrelated to the deploy fix, just still
-   pending from Module 3), then delete it from GitHub yourself and
-   confirm so it can be folded into `schema.sql` next round.
-4. Re-verify end to end that nothing broke from the router merge —
-   sign in, change password, update your Settings (theme/avatar/
-   timezone), create/edit a Cycle, create/update an Initiative. All of
-   this now routes through a consolidated file; the URLs the frontend
-   calls didn't change, but confirm in the real deployment, not just
-   the sandbox.
-5. Then: as an Employee, view your own scorecard; as a Manager, view
-   team progress and confirm the worst-scored direct report sorts
-   first; as a TenantAdmin, open the alignment map (collapse/expand)
-   and check-in compliance. None of Reporting has been seen in the
-   deployed app yet — only in the sandbox.
+1. Push this delta to GitHub. No new migration this round — pure code
+   change (backend + `UsersAdmin.jsx` + `Dashboard.jsx`).
+2. Re-verify the actual thing that was broken: as TenantAdmin, open
+   Users, set Joe's (or any non-TenantAdmin's) manager to Fred via the
+   now-editable Manager dropdown, confirm it saves and persists across
+   a refresh. Then sign in as Fred and confirm Team Progress now shows
+   Joe. This is the exact scenario that was blocked — confirm it's
+   actually unblocked in production, not just the sandbox.
+3. While there: try the invite-time Manager dropdown again with Fred
+   already existing as a Manager, and confirm whether it correctly
+   offers Fred as an option. The code was re-checked and looks correct,
+   but hasn't been re-confirmed against the real deployment since the
+   report — if it's still wrong, note exactly what the dropdown showed
+   (empty? wrong option? an error?) so it can be reproduced directly.
+4. Check the new Dashboard renders sensibly for each role — the
+   role-gated quick links (Team Progress for Manager, Alignment
+   Map/Users for TenantAdmin) haven't been seen outside the sandbox
+   either.
+5. Apply `db/migrations/07-initiative-checkin-reflection.sql` via the
+   Neon SQL console (still pending from Module 3, unrelated to this
+   round), then delete it from GitHub yourself and confirm so it can be
+   folded into `schema.sql` next round.
 6. Then pick the next piece from what's still open: FR-021 (Billing
    Mode UI), FR-030-032 (Data Export/Retention/Erasure), or the four
-   report types this round didn't build (see "This round," above).
+   report types not yet built (see "Earlier rounds," above).
 
 ## Open items, not yet resolved
 
@@ -164,8 +172,10 @@ proven-safe pattern instead of re-discovering the same two gotchas.
   wasn't built into User Management (see `reference.md`).
 - FR-015's "at their permitted cascade level" has no defined role→level
   permission mapping — flagged when Module 2 shipped, still open.
-- No admin-side UI to edit a user's name after creation — Settings'
-  Profile section is read-only because of this, not by design choice.
+- No admin-side UI to edit a user's name or email after creation
+  (manager is now editable, as of this round — see above; name/email
+  still aren't) — Settings' Profile section is read-only because of
+  this, not by design choice.
 - Two FR-019 interpretations were resolved rather than confirmed with
   Mark (Objective roll-up is equal-weighted, not weighted — Objective
   has no weighting field; a parent with children scores from children

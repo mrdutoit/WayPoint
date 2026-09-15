@@ -15,6 +15,7 @@ vi.mock('../frontend/api-lib/services/userService.js', async (importOriginal) =>
     listUsersForTenant: vi.fn(),
     inviteUser: vi.fn(),
     updateUserRole: vi.fn(),
+    updateUserManager: vi.fn(),
     forcePasswordResetForUser: vi.fn(),
     unlockUser: vi.fn(),
   };
@@ -118,6 +119,48 @@ describe('users-router — PATCH /api/users/:id/role', () => {
     const res = mockRes();
     await handler(mockReq({ method: 'PATCH', slug: ['user-1', 'role'], body: { role: 'Manager' } }), res);
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+});
+
+describe('users-router — PATCH /api/users/:id/manager', () => {
+  it('assigns a manager on a valid request', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    userService.updateUserManager.mockResolvedValue({ id: 'user-1', managerId: 'mgr-1' });
+    const res = mockRes();
+    await handler(mockReq({ method: 'PATCH', slug: ['user-1', 'manager'], body: { managerId: 'mgr-1' } }), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('clears a manager assignment when managerId is omitted', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    userService.updateUserManager.mockResolvedValue({ id: 'user-1', managerId: null });
+    const res = mockRes();
+    await handler(mockReq({ method: 'PATCH', slug: ['user-1', 'manager'], body: {} }), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('maps ForbiddenError (TenantAdmin target) to 403', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    userService.updateUserManager.mockRejectedValue(new ForbiddenError());
+    const res = mockRes();
+    await handler(mockReq({ method: 'PATCH', slug: ['admin-2', 'manager'], body: { managerId: 'mgr-1' } }), res);
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it('maps a self-management ValidationError to 400', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    userService.updateUserManager.mockRejectedValue(new ValidationError('A user cannot be their own manager'));
+    const res = mockRes();
+    await handler(mockReq({ method: 'PATCH', slug: ['user-1', 'manager'], body: { managerId: 'user-1' } }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('rejects a non-TenantAdmin', async () => {
+    getAuthenticatedUser.mockReturnValue(EMPLOYEE);
+    const res = mockRes();
+    await handler(mockReq({ method: 'PATCH', slug: ['user-1', 'manager'], body: { managerId: 'mgr-1' } }), res);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(userService.updateUserManager).not.toHaveBeenCalled();
   });
 });
 

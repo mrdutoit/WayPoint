@@ -1,7 +1,7 @@
 import { getAuthenticatedUser, requireRole } from '../api-lib/middleware/auth.js';
 import { respondToServiceError } from '../api-lib/middleware/errorResponse.js';
 import { withTenantContext } from '../api-lib/context/tenant.js';
-import { listUsersForTenant, inviteUser, updateUserRole, forcePasswordResetForUser, unlockUser } from '../api-lib/services/userService.js';
+import { listUsersForTenant, inviteUser, updateUserRole, updateUserManager, forcePasswordResetForUser, unlockUser } from '../api-lib/services/userService.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
 
@@ -20,6 +20,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && !first) return await listAction(req, res, user);
     if (req.method === 'POST' && first === 'invite' && !second) return await inviteAction(req, res, user);
     if (req.method === 'PATCH' && first && second === 'role' && !third) return await roleAction(req, res, user, first);
+    if (req.method === 'PATCH' && first && second === 'manager' && !third) return await managerAction(req, res, user, first);
     if (req.method === 'PUT' && first && second === 'force-password-reset' && !third) return await forceResetAction(req, res, user, first);
     if (req.method === 'PUT' && first && second === 'unlock' && !third) return await unlockAction(req, res, user, first);
     return res.status(404).json({ error: 'Not found' });
@@ -67,6 +68,21 @@ async function roleAction(req, res, user, targetUserId) {
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
       action: 'user.role_changed', entityType: 'UserAccount', entityId: result.id,
+    });
+    return result;
+  });
+  res.status(200).json({ user: updated });
+}
+
+// PATCH /api/users/:id/manager — Tenant Administrator. managerId may be
+// null/omitted to clear the assignment.
+async function managerAction(req, res, user, targetUserId) {
+  const { managerId } = req.body ?? {};
+  const updated = await withTenantContext(user.tenantId, async (client) => {
+    const result = await updateUserManager(client, user.tenantId, targetUserId, managerId);
+    await recordAuditEvent(client, {
+      tenantId: user.tenantId, actorId: user.id,
+      action: 'user.manager_changed', entityType: 'UserAccount', entityId: result.id,
     });
     return result;
   });

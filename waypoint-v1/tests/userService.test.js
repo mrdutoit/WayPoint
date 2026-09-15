@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { listUsersForTenant, inviteUser, updateUserRole, forcePasswordResetForUser, unlockUser } from '../frontend/api-lib/services/userService.js';
+import { listUsersForTenant, inviteUser, updateUserRole, updateUserManager, forcePasswordResetForUser, unlockUser } from '../frontend/api-lib/services/userService.js';
 import { ValidationError, ForbiddenError, NotFoundError } from '../frontend/api-lib/services/errors.js';
 
 function mockClient() {
@@ -144,5 +144,63 @@ describe('unlockUser', () => {
     expect(updateCall[0]).toMatch(/locked_until = NULL/);
     expect(updateCall[0]).not.toMatch(/password_hash/);
     expect(updateCall[0]).not.toMatch(/password_must_change/);
+  });
+});
+
+describe('updateUserManager', () => {
+  it('throws NotFoundError when the user does not exist', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({ rows: [] });
+    await expect(updateUserManager(client, 't1', 'missing', 'mgr-1')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('refuses to set a manager for a TenantAdmin', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({ rows: [{ id: 'admin-1', role: 'TenantAdmin' }] });
+    await expect(updateUserManager(client, 't1', 'admin-1', 'mgr-1')).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('rejects a user being set as their own manager', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({ rows: [{ id: 'user-1', role: 'Employee' }] });
+    await expect(updateUserManager(client, 't1', 'user-1', 'user-1')).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('rejects a managerId that does not exist in the tenant', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 'user-1', role: 'Employee' }] })
+      .mockResolvedValueOnce({ rows: [] }); // manager lookup — not found
+    await expect(updateUserManager(client, 't1', 'user-1', 'nonexistent')).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('assigns a manager', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 'user-1', role: 'Employee' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'mgr-1' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'user-1', managerId: 'mgr-1' }] });
+    const updated = await updateUserManager(client, 't1', 'user-1', 'mgr-1');
+    expect(updated.managerId).toBe('mgr-1');
+  });
+
+  it('clears a manager assignment when managerId is null', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 'user-1', role: 'Employee' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'user-1', managerId: null }] }); // no manager-existence lookup — skipped for null
+    const updated = await updateUserManager(client, 't1', 'user-1', null);
+    expect(updated.managerId).toBeNull();
+    expect(client.query).toHaveBeenCalledTimes(2); // confirms the manager-lookup query was skipped
+  });
+
+  it('does not restrict managerId to users with role Manager — matches inviteUser\'s own validation level', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 'user-1', role: 'Employee' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'admin-1' }] }) // the "manager" being assigned is a TenantAdmin — accepted
+      .mockResolvedValueOnce({ rows: [{ id: 'user-1', managerId: 'admin-1' }] });
+    const updated = await updateUserManager(client, 't1', 'user-1', 'admin-1');
+    expect(updated.managerId).toBe('admin-1');
   });
 });
