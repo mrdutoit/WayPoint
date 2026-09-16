@@ -35,88 +35,66 @@ verified working pattern (checked directly against another production
 codebase) rather than the two-project split an earlier iteration of this
 scaffold used.
 
+Tree below reflects the repo as of 2026-09-16 (Stage 4, Modules 1–3, 4,
+6 partial, and 7 built — see `status.md`). Re-verify against the repo
+before trusting this for anything precision-sensitive; file lists are
+exactly the kind of thing that drifts fastest.
+
 ```
 waypoint-v1/
-├── frontend/                  <- the one Vercel project
-│   ├── api/                   <- thin router files, each its own Vercel Function
+├── frontend/                       <- the one Vercel project
+│   ├── api/                        <- thin router files, each its own Vercel Function
+│   │   ├── admin-router.js         (on-demand bootstrap)
+│   │   ├── auth-router.js          (login, password reset/change)
+│   │   ├── flags-router.js         (list/update feature flags)
 │   │   ├── health.js
-│   │   ├── auth-router.js     (login, password reset, change-password;
-│   │   │                        ALSO /api/me via ?resource=me — theme/
-│   │   │                        avatar/timezone, no CORS inherited from
-│   │   │                        the login-test-tool exception below it)
-│   │   ├── flags-router.js    (list/update feature flags)
-│   │   ├── admin-router.js    (on-demand bootstrap)
-│   │   ├── tenants-router.js  (create/list tenants — FR-011)
-│   │   ├── users-router.js    (invite, role, force-password-reset)
-│   │   ├── settings-router.js (cascade-levels, rubric, cadences,
-│   │   │                        okr-elements, terminology; ALSO
-│   │   │                        /api/cycles via ?resource=cycles —
-│   │   │                        date-driven, no activate action)
-│   │   ├── objectives-router.js
-│   │   ├── key-results-router.js (ALSO /api/initiatives via
-│   │   │                           ?resource=initiatives)
-│   │   └── reports-router.js  (FR-033 — read-only, no audit events)
-│   │
-│   │   10 files total — Vercel Hobby caps a deployment at 12
-│   │   Serverless Functions, one per file here regardless of
-│   │   vercel.json's rewrites. Run
-│   │   `find frontend/api -maxdepth 1 -name "*.js" | wc -l` before
-│   │   adding a new one — see the design decision below and
-│   │   app-builder's own skill for the mandatory gate this became
-│   │   after it was missed once already.
-│   ├── api-lib/                <- the real logic, never deployed directly
+│   │   ├── key-results-router.js   (Key Results, Initiatives, Check-ins)
+│   │   ├── objectives-router.js    (Objectives, Key Result creation, Reflections)
+│   │   ├── reports-router.js       (scorecard, team-progress, alignment-map, checkin-compliance)
+│   │   ├── settings-router.js      (cascade levels, terminology, rubric, cadences, OKR elements)
+│   │   ├── tenants-router.js       (tenant provisioning, billing mode)
+│   │   └── users-router.js         (user admin, invites, role changes)
+│   ├── api-lib/                    <- the real logic, never deployed directly
 │   │   ├── config.js
-│   │   ├── context/tenant.js   (Row-Level Security chokepoint)
-│   │   ├── http/helpers.js     (parseSlug — every router's multi-segment path parsing)
+│   │   ├── context/tenant.js       (Row-Level Security chokepoint)
+│   │   ├── http/helpers.js
 │   │   ├── middleware/
 │   │   │   ├── auth.js
-│   │   │   └── errorResponse.js (typed service errors → HTTP status)
+│   │   │   └── errorResponse.js
 │   │   └── services/
-│   │       (db.js, authService.js, auditService.js, flagService.js,
-│   │        bootstrapService.js, logger.js, errors.js, dateMath.js,
-│   │        userService.js, tenantService.js, cascadeLevelService.js,
-│   │        cycleService.js, cadenceService.js, scoringRubricService.js,
-│   │        objectiveService.js, keyResultService.js,
-│   │        okrElementConfigService.js, terminologyService.js,
-│   │        profileService.js, checkInService.js, initiativeService.js,
-│   │        reflectionService.js, scoringService.js — the real FR-019
-│   │        roll-up, called from checkInService.js — reportingService.js)
+│   │       (auditService.js, authService.js, bootstrapService.js,
+│   │        cadenceService.js, cascadeLevelService.js, checkInService.js,
+│   │        cycleService.js, dateMath.js, db.js, errors.js, flagService.js,
+│   │        initiativeService.js, keyResultService.js, logger.js,
+│   │        objectiveService.js, okrElementConfigService.js,
+│   │        profileService.js, reflectionService.js, reportingService.js,
+│   │        scoringRubricService.js, scoringService.js, tenantService.js,
+│   │        terminologyService.js, userService.js)
 │   ├── db/
-│   │   ├── schema.sql          <- plain SQL, current-state reference —
-│   │   │                          applied manually via Neon's console
-│   │   └── migrations/         <- ring-fenced from schema.sql; a file
-│   │       │                      here means "not yet confirmed applied
-│   │       │                      or folded in" — never assume otherwise
-│   │       └── 07-initiative-checkin-reflection.sql <- pending
-│   ├── src/                    <- the React app
-│   │   ├── components/ (Logo.jsx, DatePicker.jsx — internal/staff-facing
-│   │   │                calendar popover, ported from MedBroker's component
-│   │   │                of the same name — Avatar.jsx — coloured initials
-│   │   │                bubble, not a photo)
-│   │   ├── constants/avatarOptions.js <- avatar colour/gradient ids
-│   │   ├── context/ (RoleContext — also does the one post-login profile-
-│   │   │             enrichment fetch — FlagContext, TerminologyContext —
-│   │   │             useTerms() — ThemeContext — useTheme())
-│   │   ├── pages/ (Login, ChangePassword, Dashboard, FeatureFlags,
-│   │   │           Objectives, ObjectiveDetail, KeyResultDetail,
-│   │   │           OkrSettings, TenantsAdmin, UsersAdmin, Settings,
-│   │   │           Reports, Scorecard, TeamProgress, AlignmentMap,
-│   │   │           CheckinCompliance)
-│   │   ├── styles/tokens.js    <- design tokens; colours are var()
-│   │   │                          references, not hex — themes.css is
-│   │   │                          the actual source of truth per theme
-│   │   ├── themes.css          <- [data-theme="light"|"dark"] variable blocks
+│   │   └── schema.sql              <- plain SQL, applied manually via Neon's console
+│   ├── src/                        <- the React app
+│   │   ├── components/ (Avatar.jsx, DatePicker.jsx, Logo.jsx)
+│   │   ├── constants/avatarOptions.js
+│   │   ├── context/ (FlagContext, RoleContext, TerminologyContext, ThemeContext)
+│   │   ├── hooks/ (useFetch.js, useWindowSize.js)
+│   │   ├── pages/
+│   │   │   (AlignmentMap.jsx, ChangePassword.jsx, CheckinCompliance.jsx,
+│   │   │    Dashboard.jsx, FeatureFlags.jsx, KeyResultDetail.jsx, Login.jsx,
+│   │   │    ObjectiveDetail.jsx, Objectives.jsx, OkrSettings.jsx, Reports.jsx,
+│   │   │    Scorecard.jsx, Settings.jsx, TeamProgress.jsx, TenantsAdmin.jsx,
+│   │   │    UsersAdmin.jsx)
+│   │   ├── services/api.js
+│   │   ├── styles/tokens.js        <- design tokens, incl. brand colours
+│   │   ├── utils/dateFormat.js
 │   │   └── App.jsx
-│   ├── public/                 <- favicon.png, apple-touch-icon.png, waypoint-icon.png
-│   ├── vercel.json             <- routes friendly paths to the router files
+│   ├── public/                     <- favicon.png, favicon.svg, apple-touch-icon.png, waypoint-icon.png
+│   ├── vercel.json                 <- routes friendly paths to the router files
 │   └── package.json
-├── tools/                      <- standalone local HTML admin utilities
-│   ├── bootstrap-admin.html    (seeds flags + PlatformAdmin, on demand)
-│   └── login-test.html         (verifies sign-in end to end)
-├── tests/                      <- vitest, run from repo root
-│   └── integration/            <- real-Postgres tests, gated behind
-│                                  TEST_DATABASE_URL, skip cleanly without one
-└── README.md                   <- setup, deployment, env vars
+├── tools/                          <- standalone local HTML admin utilities
+│   ├── bootstrap-admin.html        (seeds flags + PlatformAdmin, on demand)
+│   └── login-test.html             (verifies sign-in end to end)
+├── tests/                          <- vitest, run from repo root; includes tests/integration/
+└── README.md                       <- setup, deployment, env vars
 ```
 
 ## Tech stack
@@ -133,16 +111,12 @@ waypoint-v1/
   (`auth.sso.enabled`) for later.
 - **Schema:** One plain SQL file (`db/schema.sql`), applied by hand via
   Neon's SQL console — deliberately not a migration library at this
-  scale. `schema.sql` always describes what's *actually* live, never a
-  running history: a schema change ships as a short-lived migration
-  file **in `db/migrations/`, ring-fenced from `schema.sql` itself, not
-  flat in `db/`** — a miss the first time this convention was set up
-  here, corrected once caught. Mark applies the migration against Neon,
-  `schema.sql` is then rewritten to include the change directly, and
-  the migration file is deleted from the repo — same convention as
-  MedBroker's `schema.postgres.sql`. If a file is ever sitting in
-  `db/migrations/`, that specifically means it hasn't been confirmed
-  applied and folded in yet — never assume otherwise, ask.
+  scale. A schema change ships as a short-lived migration file that gets
+  applied to Neon and then folded back into `schema.sql` as the single
+  current-state reference; the migration file itself doesn't persist in
+  the repo once applied. This folding step was missed for the module
+  that introduced `initiative`/`check_in`/`reflection` — corrected
+  2026-09-16 (see `status.md`).
 
 ## Key design decisions worth knowing before changing anything
 
@@ -161,386 +135,19 @@ waypoint-v1/
   already protected by their own mechanism (lockout, or the bootstrap
   secret) independent of caller origin, which is what makes the
   exception safe rather than a general loosening.
-- **Every table carries `tenant_id` directly, even when it's also
-  derivable via a join (FR-010).** `okr.key_result` and
-  `okr.rubric_level` both get their own `tenant_id` column even though
-  the Stage 2 ERD's slimmed diagram view omits it there — the ERD text
-  itself says fields shown are only "relevant to that view," and FR-010
-  says "every table" without qualification. Applied to
-  `okr.audit_log` in the Stage 3 scaffold too, for the same reason.
-- **Typed service errors, not plain `Error`.** Every validation/
-  authorisation/not-found throw in the service layer uses
-  `ValidationError`/`ForbiddenError`/`NotFoundError` from
-  `api-lib/services/errors.js` (or a domain-specific subclass with its
-  own `name`, like `CascadeLevelInUseError`). `errorResponse.js` maps
-  by `err.name` — a plain `Error` falls through to a generic 500 instead
-  of the correct 400/403/404. This was a real bug the first time Module
-  2 was built (three of five new services used plain `Error`) — caught
-  by the router-level tests, not by inspection, which is the argument
-  for writing them rather than skipping straight to "looks right."
-- **Admin-created users always force a password change (`password_must_change`).**
-  There is no transactional email provider wired up yet (see the TODO in
-  `auth-router.js`), so tenant provisioning (FR-011) and user invite both
-  have the Platform/Tenant Administrator type a temporary password
-  directly. Every such password sets `password_must_change = true`
-  (`db/03-user-management.sql`); the frontend blocks the entire app
-  behind `ChangePassword forced` (`App.jsx`'s `RequireAuth`) until it's
-  cleared via `PUT /api/auth/change-password`. This is what keeps an
-  admin-typed password from ever persisting as a shared secret. Pattern
-  and password-complexity rule (12+ chars, upper/lower/digit/symbol)
-  both carried over from MedBroker's equivalent (`checkPasswordComplexity`,
-  §72/§118) rather than invented fresh — see `authService.js`.
-- **WayPoint's session is a client-held Bearer JWT with no server-side
-  revocation** (unlike MedBroker's httpOnly-cookie session, which can be
-  reissued/invalidated). `change-password` issues a fresh token so the
-  frontend doesn't need to force a re-login, but the previous token
-  remains technically valid until it naturally expires — a known gap,
-  not a decision anyone's actually made yet. Also: `api.js`'s auth token
-  lives in a module-level JS variable only, not persisted to storage —
-  a page refresh currently logs everyone out. Both are pre-existing
-  Stage 3 scaffold gaps, surfaced while building this, not introduced by
-  it — worth a decision before either matters for anything higher-stakes
-  than OKR content.
-
-- **WayPoint's session is a client-held Bearer JWT with no server-side
-  revocation** (unlike MedBroker's httpOnly-cookie session, which can be
-  reissued/invalidated). `change-password` issues a fresh token so the
-  frontend doesn't need to force a re-login, but the previous token
-  remains technically valid until it naturally expires — a known gap,
-  not a decision anyone's actually made yet. Also: `api.js`'s auth token
-  lives in a module-level JS variable only, not persisted to storage —
-  a page refresh currently logs everyone out. Both are pre-existing
-  Stage 3 scaffold gaps, surfaced while building this, not introduced by
-  it — worth a decision before either matters for anything higher-stakes
-  than OKR content.
-- **Every multi-segment router path goes through `parseSlug`
-  (`api-lib/http/helpers.js`), never `Array.isArray(req.query.slug) ? …`
-  inline.** A `vercel.json` rewrite's `?slug=:slug*` does not reliably
-  deliver a multi-segment path as an array — it can arrive as a single
-  slash-joined string — so positional destructuring
-  (`[id, subResource] = slugParts`) silently breaks for any two-segment
-  route if the raw value isn't parsed defensively first. This was a real
-  production bug (cycle activation 404'd) before this fix; MedBroker had
-  already hit and solved the identical problem, and this ports that
-  fix rather than re-solving it. Every router test's `mockReq` simulates
-  the real joined-string shape, not a pre-split array, specifically so a
-  regression here fails a test again rather than shipping unnoticed.
-- **A Cycle's "active" status is computed from today's date, not a
-  manually-toggled flag** — no `POST /api/cycles/:id/activate` any more.
-  No two Cycles in a tenant may cover the same day, enforced at the
-  database layer via a Postgres EXCLUDE constraint (needs the
-  `btree_gist` extension for the `tenant_id` equality term). `end_date`
-  is always server-computed from `start_date` + the chosen Cadence's
-  `months` (`dateMath.js`), never accepted from the caller.
-- **A Cadence (or Cascade Level) already referenced by a Cycle (or
-  Objective) is locked, not deleted-and-cascaded or silently
-  overwritable** — `CadenceInUseError`/`CascadeLevelInUseError`, both
-  409s. The underlying data isn't actually at risk either way (an
-  end_date, once computed, is stored on the Cycle row, never re-derived
-  live from the Cadence) — the lock exists so a term like "Quarterly"
-  can't quietly mean something different for records created before an
-  edit than the ones created after it, not because editing would
-  corrupt anything already stored.
-- **Internal/staff-facing date fields use the custom `DatePicker`
-  component, not native `<input type="date">`** — matches MedBroker's
-  exact precedent and reasoning (`components/DatePicker.jsx`'s own
-  header comment has the full case). WayPoint has no public-facing forms
-  yet, so every current date field qualifies; revisit if that changes.
-  Deliberately simpler than MedBroker's version — no typed free-text
-  entry, since that's tied to an app-wide day-first date-*format*
-  standard MedBroker established that WayPoint hasn't adopted.
-- **Terminology customisation (FR-013) is applied to primary UI
-  surfaces only** — nav, page titles, section headers, main create/add
-  buttons — not to every string in the app. Backend validation-error
-  text is never substituted. Pluralisation
-  (`TerminologyContext.jsx`'s `pluralise()`) is a plain heuristic, not a
-  full inflection library.
-- **FR-025's disable rule is implemented as reject, not cascade** — the
-  Stage 2 doc's section 3.1 table phrasing ("switching Key Result off
-  automatically switches off Initiative and Check-in") and FR-025's own
-  text ("rejected server-side... naming the dependent element(s)")
-  describe two different behaviours for the same case; the literal,
-  fully-specified FR-025 text was implemented. Flag if auto-cascade was
-  actually intended — `okrElementConfigService.js`'s module comment has
-  the full reasoning.
-
-- **A shared field-list constant (`OBJECTIVE_FIELDS`, `KEY_RESULT_FIELDS`)
-  used across a SELECT-with-JOIN and an INSERT/UPDATE must alias the
-  target table in the INSERT/UPDATE itself** (`INSERT INTO okr.objective
-  AS o (...)`, `UPDATE okr.key_result AS kr SET ...`) — Postgres supports
-  aliasing an INSERT/UPDATE target exactly like a SELECT's FROM clause,
-  and the constant's `o.`/`kr.`-prefixed columns need that alias to
-  exist wherever they're reused. Missing it produces `missing
-  FROM-clause entry for table "o"` — a real bug that shipped and passed
-  209 tests, because every test in this suite mocks `client.query`
-  entirely and can't validate SQL syntax against anything real. Verify
-  any new shared field-list constant's INSERT/UPDATE usage against
-  `tests/integration/` before trusting mocked tests alone.
-- **`db.js` configures `pg`'s DATE type parser to return plain strings**
-  (`types.setTypeParser(1082, (val) => val)`) rather than `pg`'s default
-  JS `Date` objects — every date-handling function in this app
-  (`dateMath.js`, the Cycles table display) assumes a plain
-  `'YYYY-MM-DD'` string, and without this the API serialises a Date
-  object as a full ISO datetime instead (`"2026-09-30T00:00:00.000Z"`).
-  Any future connection pool or raw script touching `okr.cycle.start_date`/
-  `end_date` needs the same configuration, or should import `db.js`'s
-  `pool` directly rather than creating its own client — see
-  `tests/integration/writes.integration.test.js` for why this matters
-  enough to test for directly.
-- **`tests/integration/` exercises every create/update path against a
-  real Postgres instance**, gated behind `TEST_DATABASE_URL` so it skips
-  cleanly without one. Mocked unit tests (everything else in `tests/`)
-  verify logic; this verifies the SQL itself is valid — a distinction
-  that matters because the two bugs above both shipped past 209 passing
-  mocked tests. Same principle MedBroker already established ("A local
-  Postgres instance is required for any queries mixing differently-typed
-  columns") — applied here as a standing practice, not a one-off fix.
-  Worth running before any delivery that touches a RETURNING clause, a
-  JOIN, or a type this suite's mocks can't actually validate.
-
-- **Theme is a CSS-variable contract (`themes.css`), not per-component
-  styling.** `tokens.js`'s `colors` export holds `var(--x)` references,
-  never hex literals — `themes.css` is the only place an actual colour
-  value lives, in `[data-theme="light"|"dark"]` blocks. This is what
-  makes every existing page theme-aware without being touched
-  individually: they already go through `colors.*`/`s.*` from
-  `tokens.js`, so switching `ThemeContext`'s active theme reskins the
-  whole app for free. Two themes, not MedBroker's four — deliberate:
-  MedBroker's four palettes (custom fonts, mesh/grain textures) are its
-  own art direction; WayPoint's two both carry WayPoint's own brand
-  blue instead of porting MedBroker's. Adding a third theme later is
-  just another `[data-theme="..."]` block plus an entry in
-  `ThemeContext.jsx`'s `THEMES` — the pattern doesn't need to change.
-- **Avatar is a colour/gradient pick, not a photo upload** — matches
-  MedBroker's `User.avatarColour` exactly (`constants/avatarOptions.js`
-  stores a stable id, not a file). WayPoint has no blob storage
-  configured and this avoids needing one for what's a cosmetic
-  preference, not a product requirement.
-- **`RoleContext.jsx` does the one post-login profile-enrichment fetch**
-  (`GET /api/me`) — `firstName`/`lastName`/`theme`/`avatarOption` are
-  not in the JWT (`issueToken` only signs `sub`/`tenantId`/`role`), so
-  something has to fetch them once after login. Doing it in
-  `RoleContext` rather than in each consumer (`ThemeContext`, the nav's
-  `Avatar`, `Settings.jsx`) means login triggers exactly one
-  `GET /api/me`, not several independent ones racing each other.
-  `ThemeContext` reads `user.theme` from this rather than fetching
-  independently.
-
-- **Any new theme (or any CSS file defining variables `tokens.js`
-  depends on) must actually be imported in `main.jsx` — creating the
-  file is not sufficient.** `themes.css` shipped a full round earlier
-  without this import, and the resulting bug (every form field
-  rendering invisibly — a blank, borderless input on a blank
-  background, since every `var(--x)` reference resolved to nothing)
-  wasn't caught until it was live in production. Verify by checking the
-  compiled CSS bundle size actually changed, not just that the source
-  file exists — an unimported file changes nothing about the build
-  output, however correct its own contents are.
-- **`user_account`'s lockout and password-reset are two separate admin
-  actions, not one** — `unlockUser` (clears `failed_attempts`/
-  `locked_until` only) vs. `forcePasswordResetForUser` (sets a new
-  password AND clears the lockout, since a forgotten password is often
-  the actual cause of the lockout in the first place). Matches
-  MedBroker's `UserModal` (`onUnlock` vs. `onForcePasswordReset` as
-  distinct actions) — conflating them into a single "force reset always
-  also unlocks" action, as the first pass here did, forces an admin to
-  hand out a new password just to clear a lockout the user didn't
-  actually need help with.
-- **Timezone is a stored preference field only, not an app-wide display
-  conversion layer.** MedBroker's `dateFormat.js` actually converts
-  every displayed timestamp to the user's chosen timezone; WayPoint
-  hasn't adopted a display-format standard at all yet (same boundary as
-  `DatePicker.jsx`'s no-typed-entry decision). Building that conversion
-  layer is separate, larger scope than the field itself — don't assume
-  it comes free with the preference existing.
-
-- **Never edit an already-delivered migration file without first
-  confirming whether it's been applied.** A migration was edited
-  mid-round to add a `timezone` column alongside already-applied
-  `theme`/`avatar_option` columns, without checking Neon's history
-  first. The edited file's `ALTER TABLE` failed on "column already
-  exists," and because a multi-column `ALTER TABLE` is atomic, the new
-  `timezone` column was never created either — while the deployed code
-  already expected it, producing a real "column does not exist" error
-  on the next write. Every migration in this project now uses
-  `ADD COLUMN IF NOT EXISTS` (or the equivalent idempotent form for
-  other DDL) specifically so a migration is safe to re-run regardless
-  of what's already there — this is now the default, not a one-off
-  patch for the file that broke.
-
-- **FR-019's Objective roll-up is equal-weighted across child Objectives,
-  not weighted** — the FR text mirrors Key Result's "weighted average"
-  wording for "linked child Objectives" during cascade roll-up, but
-  Objective has no weighting column the way Key Result does. Nothing in
-  the data model says what a child Objective's weight would even be, so
-  `scoringService.js` averages children equally rather than inventing a
-  weighting scheme. Flag if a real weighting mechanism for Objectives
-  was actually intended — that would be a schema addition, not just a
-  formula change.
-- **An Objective with child Objectives scores from those children only,
-  never blending in its own Key Results** — FR-019 never states whether
-  a parent Objective's status comes from its own Key Results, its
-  children, or both. `scoringService.js`'s `recomputeObjectiveStatus`
-  takes "has children → score from children; no children → score from
-  own Key Results" as a clean either/or, not a blend, since there's no
-  specified way to weight "a child Objective" against "a Key Result" in
-  the same average. WayPoint's schema doesn't actually forbid an
-  Objective from having both children and its own Key Results — in that
-  case, the Key Results are simply excluded from that Objective's own
-  roll-up calculation once it has a child. Verified end-to-end against
-  real Postgres, including the moment a Key Result-scored Objective
-  gains its first child and switches over.
-- **Check-in confidence is a 1-5 integer** — FR-018 only says "a
-  confidence or sentiment indicator" exists, not what scale it uses; the
-  Stage 2 design review (Sam) specifies the *control* ("icon set or
-  slider, not a dropdown") without specifying the range either. 1-5 was
-  chosen to match a 5-icon mood-style control cleanly. Flagged as an
-  inferred choice in `db/migrations/07-initiative-checkin-reflection.sql`'s
-  own comment, not asserted as a literal requirement.
-- **Objective/Key Result status is a stored column, recomputed and
-  persisted at write time — never computed live on read.** Submitting a
-  Check-in recomputes the Key Result's status, then the parent
-  Objective's, then recurses up through every ancestor in the same
-  transaction (`scoringService.js`). This keeps every GET cheap (no
-  N+1 roll-up query on every list/detail fetch) at the cost of the
-  Check-in write doing more work — the right trade-off given Check-ins
-  are far less frequent than reads.
-- **`getRubricForTenant` returns each rubric level's `id`, not just its
-  `label`/`level_index`** — this only started mattering once Check-in
-  needed a real `rubricLevelId` to submit; the original Module 2
-  version only needed labels for the settings-page editor. A reminder
-  that "nothing needs this yet" is not the same as "this will never
-  need it" — check what a query actually returns before assuming the
-  existing shape is sufficient for a new caller.
-
-- **The Stage 2 doc's own section 5 (report narrative) and section 4
-  (API design table) disagree on scope** — section 5 names eight report
-  types; section 4, the actual approved build contract, only gives four
-  of them an endpoint (scorecard, team-progress, alignment-map,
-  checkin-compliance). Built to the API table, not the narrative list —
-  cycle-over-cycle trend, Initiative execution status, Reflection
-  digest, and cross-tenant adoption are identified in
-  `reportingService.js`'s module comment, not built. If any of those
-  four are actually needed, the existing four are the pattern to follow
-  (a `find*` cycle lookup that returns null rather than throwing, a
-  role check, a query scoped to the caller's own visibility).
-- **Reports are read-only, computed on demand, no export** — matches
-  the Stage 2 doc's own sizing conclusion (section 8: no
-  materialised-view layer needed at Phase 1 scale). CSV/JSON export
-  ("all reports are exportable through the same mechanism as FR-030")
-  is deliberately not built — FR-030 (Data Export) itself doesn't exist
-  yet, so there is no shared export mechanism to reuse; a one-off
-  exporter for just these four reports would risk becoming a second,
-  inconsistent mechanism once FR-030 ships for real.
-- **Check-in compliance has no schedule to check against** — FR-018
-  says Check-ins happen "on the cadence configured for that tenant,"
-  but the only cadence concept actually built is a Cycle's own length
-  (Monthly/Quarterly/etc.), not a per-Check-in frequency within a
-  Cycle. `getCheckinCompliance` reports the buildable version instead:
-  has each Key Result received *any* Check-in this Cycle, not whether
-  it's current against a recurring schedule. Building the fine-grained
-  version would need a new schedule concept in the data model first,
-  not just a query change.
-- **Team progress "risk" ordering is level first, confidence as the
-  tie-breaker, with zero Check-ins sorting as the worst case of all** —
-  FR-033's "sorted by risk — lowest confidence or score first" doesn't
-  say which is primary. A Key Result nobody has checked in on yet is
-  treated as riskier than one that's been checked in on and scored
-  poorly, on the reasoning that "untouched" is at least as concerning
-  as "touched and struggling" for a Manager scanning for what needs
-  attention.
-
-- **A new top-level file under `api/` requires checking the real
-  Serverless Function count first, every time — this failed once
-  already and cost a production deploy.** Vercel Hobby caps a
-  deployment at 12; `initiatives-router.js` and `reports-router.js`
-  were each added without running
-  `find frontend/api -maxdepth 1 -name "*.js" | wc -l` first, pushing
-  the count to 13 and failing the Vercel build outright. The lesson
-  itself wasn't new — it was already written down in app-builder's own
-  skill after MedBroker hit the identical wall — but prose guidance in
-  one section doesn't get checked under the pressure of shipping a
-  feature; it needed to be a gate with a command and a number, sitting
-  next to the Vite build gate that reliably *does* get run. Fixed both
-  the immediate count (consolidated `initiatives-router.js` into
-  `key-results-router.js`, `me-router.js` into `auth-router.js`,
-  `cycles-router.js` into `settings-router.js` — now 10 files, not
-  just under the cap but with headroom) and the process (the skill's
-  gate; the pattern documented in
-  `assets/patterns/http/multi-resource-router-consolidation.md` for
-  the next project to start from).
-- **Consolidating two routers into one file is a packaging change, not
-  license to blur their separate security postures.** `auth-router.js`
-  has deliberately wide-open CORS for a login-test tool — narrow,
-  already-justified. When `/api/me` was folded into that same file,
-  the CORS branch had to be checked and explicitly skipped for the
-  `/api/me` resource, verified by a test asserting it specifically does
-  *not* receive the header, or a profile endpoint that never needed
-  cross-origin access would have silently inherited a policy meant for
-  a different, narrower exception.
-
-- **A user's manager is editable after creation (`updateUserManager`),
-  not just settable once at invite time.** This was a genuinely missing
-  capability, not an edge case — found because it directly blocked
-  testing (no way to give a Manager a direct report after both accounts
-  already existed). Deliberately not restricted to users with role
-  `Manager`, matching `inviteUser`'s own validation level exactly — the
-  invite form's dropdown only offering Manager-role options is a
-  frontend choice, not a backend rule, so a TenantAdmin managing someone
-  directly before any Manager exists in a small org is a legitimate
-  shape this doesn't block. Same `isTenantAdmin` guard as role-editing
-  and force-reset — a TenantAdmin's own manager assignment isn't
-  editable through this endpoint either, no safe recovery path for that
-  case existing yet.
-- **`Dashboard.jsx` needs the same "stale copy" scrutiny as everything
-  else** — it was the literal, unmodified Stage 3 scaffold page,
-  including copy that named modules as "not yet built" long after they
-  shipped. A page nobody has reason to revisit once it "works" (renders
-  something, doesn't error) can silently go stale for an entire
-  build — the same lesson as `themes.css` never being imported, just
-  without a build error to force it into view. Worth a periodic check
-  of pages that were only ever touched once, early on.
-
-- **FR-020's Objective/Key Result visibility was deliberately broadened
-  from "owner and owner's direct Manager only" to tenant-wide read
-  access — at Mark's explicit direction, after testing surfaced how
-  restrictive the literal spec was.** An Employee could not see their
-  own Manager's Objectives at all, which defeats the actual point of a
-  cascade. Most OKR products treat cross-organisation transparency as
-  the default, not an exception — and FR-020's own text already named
-  this as a Phase 1-only restriction ("Organisation-wide transparency is
-  a Phase 2 candidate"), so this wasn't overriding a firm decision, just
-  bringing forward one the spec itself flagged as temporary.
-  Objectives, Key Results, Initiatives, and the Alignment Map (was
-  TenantAdmin-only) are now readable by any tenant member. Check-in
-  comments/confidence and Reflection content deliberately stay
-  restricted to owner/Manager/TenantAdmin — that split wasn't invented
-  here, it was already implicit in the original Stage 2 API table,
-  which scoped those two endpoints more narrowly than FR-020's blanket
-  text even before this change; this round just made the enforcement
-  match what the API design already implied.
-- **Visibility and edit permission used to be the same check —
-  splitting them apart, not just loosening the shared one, was the
-  actual work.** `objectiveService.js`'s `assertVisible` gated both
-  reading and writing identically; it's now `assertCanEdit`, used only
-  by `updateObjective`, while reading has no such gate (or, for
-  Check-ins/Reflections, a separately-defined, narrower one).
-  `getObjectiveForCaller`/`getKeyResultById` compute and return a
-  `canEdit` boolean so the frontend can hide edit affordances for a
-  read-only viewer without re-deriving the permission rule client-side —
-  advisory only, never the actual boundary; every write endpoint still
-  enforces its own check independently, unchanged from before this
-  round.
-- **`listCheckInsForKeyResult` and `listReflectionsForObjective` had no
-  visibility check at all before this round — a real gap, not a
-  hypothetical one.** Both were only ever protected indirectly, by their
-  parent Objective/Key Result being unreachable under the old FR-020
-  rule. The moment that parent became tenant-wide readable, these two
-  would have leaked Check-in comments and Reflection content to the
-  whole tenant as an unintended side effect if left alone. Real
-  owner+Manager+TenantAdmin enforcement was added to both, proven
-  against real Postgres with a genuine stranger being refused, not just
-  asserted in a mock.
+- **Objective/Key Result visibility was broadened from FR-020's literal
+  text** to tenant-wide read access for any authenticated member — Edit
+  rights stayed exactly as narrow as FR-020 originally specified (owner
+  or owner's direct Manager only). Check-in comments and Reflection
+  content were deliberately *not* broadened alongside this — they stay
+  restricted to owner/Manager/TenantAdmin, since that's where genuinely
+  sensitive personal commentary lives. See `objectiveService.js`'s
+  module comment for the full reasoning.
+- **Cascade linking is optional at creation (FR-015 as written), not
+  enforced.** An Objective can be created without a parent even when an
+  eligible parent already exists, and can be re-parented later via edit.
+  This matches how Perdoo and ClickUp both handle goal alignment — as a
+  separate linking action, not a create-time gate.
 
 ## Roles
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useWindowSize } from '../hooks/useWindowSize.js';
 import { useTerms } from '../context/TerminologyContext.jsx';
-import { objectivesApi, keyResultsApi } from '../services/api.js';
+import { objectivesApi, keyResultsApi, cascadeLevelsApi } from '../services/api.js';
 import { s, colors, STATUS_META } from '../styles/tokens.js';
 
 function StatusChip({ status }) {
@@ -19,15 +19,27 @@ export default function ObjectiveDetail() {
   const [keyResults, setKeyResults] = useState([]);
   const [reflections, setReflections] = useState([]);
   const [reflectionsRestricted, setReflectionsRestricted] = useState(false);
+  const [cascadeLevels, setCascadeLevels] = useState([]);
+  const [allObjectives, setAllObjectives] = useState([]);
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [forbidden, setForbidden] = useState(false);
 
   function load() {
-    return objectivesApi.get(id)
-      .then((result) => {
+    // cascadeLevels/allObjectives are only used to populate the parent-Objective
+    // selector below — each caught independently so a failure there can never
+    // masquerade as the primary Objective fetch failing (which drives the
+    // notFound/forbidden branches below); it just leaves re-parenting unavailable.
+    return Promise.all([
+      objectivesApi.get(id),
+      cascadeLevelsApi.list().catch(() => ({ levels: [] })),
+      objectivesApi.list().catch(() => ({ objectives: [] })),
+    ])
+      .then(([result, levelResult, objResult]) => {
         setObjective(result.objective);
         setKeyResults(result.keyResults ?? []);
+        setCascadeLevels(levelResult?.levels ?? []);
+        setAllObjectives(objResult?.objectives ?? []);
       })
       .then(() =>
         // Fetched separately from the Objective itself — Reflections stay
@@ -78,7 +90,13 @@ export default function ObjectiveDetail() {
       </p>
 
       {objective.canEdit && (
-        <EditTitleForm objective={objective} onSaved={(updated) => setObjective((prev) => ({ ...prev, ...updated }))} label={t('Objective')} />
+        <EditObjectiveForm
+          objective={objective}
+          cascadeLevels={cascadeLevels}
+          allObjectives={allObjectives}
+          onSaved={(updated) => setObjective((prev) => ({ ...prev, ...updated }))}
+          label={t('Objective')}
+        />
       )}
 
       <div style={{ ...s.card, marginTop: 20 }}>
@@ -146,16 +164,36 @@ export default function ObjectiveDetail() {
   );
 }
 
-function EditTitleForm({ objective, onSaved, label }) {
+/**
+ * Rename + re-parent. Cascade LEVEL itself is deliberately not editable
+ * here — moving an Objective to a different level has data-integrity
+ * implications (existing children, Key Result roll-up) that need an
+ * explicit decision before building, not a silent assumption; title and
+ * parent-within-the-same-level are unambiguous and already fully
+ * supported server-side (updateObjective, FR-015/FR-023), so only the
+ * UI for those two was missing.
+ */
+function EditObjectiveForm({ objective, cascadeLevels, allObjectives, onSaved, label }) {
   const [title, setTitle] = useState(objective.title);
+  const [parentObjectiveId, setParentObjectiveId] = useState(objective.parentObjectiveId ?? '');
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
+  // Same rule as CreateObjectiveForm (Objectives.jsx): a valid parent must
+  // sit exactly one cascade level above this Objective's own level (FR-015).
+  const ownLevel = cascadeLevels.find((l) => l.id === objective.cascadeLevelId);
+  const validParents = ownLevel
+    ? allObjectives.filter((o) =>
+        o.id !== objective.id
+        && cascadeLevels.find((l) => l.id === o.cascadeLevelId)?.level_index === ownLevel.level_index - 1
+      )
+    : [];
+
   if (!editing) {
     return (
       <button type="button" onClick={() => setEditing(true)} style={{ ...s.btnSecondary, padding: '6px 10px', fontSize: 12 }}>
-        Rename
+        Edit
       </button>
     );
   }
@@ -164,21 +202,43 @@ function EditTitleForm({ objective, onSaved, label }) {
     setSaving(true);
     setError(null);
     try {
-      const result = await objectivesApi.update(objective.id, { title });
+      // Explicitly null (not omitted) so choosing "No parent" actually
+      // detaches — updateObjective treats an omitted field as "leave
+      // unchanged" and only an explicit null as "clear it".
+      const result = await objectivesApi.update(objective.id, { title, parentObjectiveId: parentObjectiveId || null });
       onSaved(result.objective);
       setEditing(false);
     } catch (err) {
-      setError(err.message ?? `Failed to rename ${label}`);
+      setError(err.message ?? `Failed to update ${label}`);
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <input style={{ ...s.formInput, maxWidth: 360 }} value={title} onChange={(e) => setTitle(e.target.value)} />
-      <button type="button" onClick={handleSave} disabled={saving} style={s.btnPrimary}>{saving ? 'Saving…' : 'Save'}</button>
-      <button type="button" onClick={() => setEditing(false)} style={s.btnSecondary}>Cancel</button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 420 }}>
+      <div>
+        <label style={s.label} htmlFor="edit-objective-title">Title</label>
+        <input id="edit-objective-title" style={s.formInput} value={title} onChange={(e) => setTitle(e.target.value)} />
+      </div>
+
+      {validParents.length > 0 && (
+        <div>
+          <label style={s.label} htmlFor="edit-objective-parent">Parent {label} (optional)</label>
+          <select
+            id="edit-objective-parent" style={s.select}
+            value={parentObjectiveId} onChange={(e) => setParentObjectiveId(e.target.value)}
+          >
+            <option value="">No parent</option>
+            {validParents.map((o) => <option key={o.id} value={o.id}>{o.title}</option>)}
+          </select>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <button type="button" onClick={handleSave} disabled={saving} style={s.btnPrimary}>{saving ? 'Saving…' : 'Save'}</button>
+        <button type="button" onClick={() => setEditing(false)} style={s.btnSecondary}>Cancel</button>
+      </div>
       {error && <span style={s.chip(colors.danger, colors.dangerBg)}>{error}</span>}
     </div>
   );

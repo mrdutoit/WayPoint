@@ -238,6 +238,61 @@ CREATE TABLE okr.key_result (
 CREATE INDEX ON okr.key_result (tenant_id);
 CREATE INDEX ON okr.key_result (objective_id, rubric_id); -- roll-up query performance, per Stage 2 design review (Alex)
 
+-- ---------- initiative (FR-026) ----------
+-- Status is NOT server-computed (no FR-004 equivalent) — the owner/Manager
+-- sets it directly, since it tracks real execution of concrete work rather
+-- than a rubric score rolled up from anything. Reconstructed from
+-- initiativeService.js — verify against Neon before treating as final.
+CREATE TABLE okr.initiative (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id      uuid NOT NULL REFERENCES okr.tenant(id) ON DELETE CASCADE,
+  key_result_id  uuid NOT NULL REFERENCES okr.key_result(id) ON DELETE CASCADE,
+  owner_id       uuid NOT NULL REFERENCES okr.user_account(id) ON DELETE RESTRICT,
+  title          text NOT NULL,
+  status         text NOT NULL DEFAULT 'Not Started', -- 'Not Started' | 'In Progress' | 'Done'
+  due_date       date,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX ON okr.initiative (tenant_id);
+CREATE INDEX ON okr.initiative (key_result_id);
+
+-- ---------- check_in (FR-018) ----------
+-- confidence is a 1-5 integer (see checkInService.js's module comment —
+-- FR-018 doesn't pin an exact range, 1-5 was the choice made against it).
+-- Submitting a Check-in triggers the FR-019 roll-up (scoringService.js),
+-- but that recomputes key_result.status/objective.status — it does not
+-- write back onto this table. Reconstructed from checkInService.js —
+-- verify against Neon before treating as final.
+CREATE TABLE okr.check_in (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id        uuid NOT NULL REFERENCES okr.tenant(id) ON DELETE CASCADE,
+  key_result_id    uuid NOT NULL REFERENCES okr.key_result(id) ON DELETE CASCADE,
+  submitted_by_id  uuid NOT NULL REFERENCES okr.user_account(id) ON DELETE RESTRICT,
+  rubric_level_id  uuid NOT NULL REFERENCES okr.rubric_level(id) ON DELETE RESTRICT,
+  confidence       int NOT NULL,
+  comment          text,
+  submitted_at     timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT check_in_confidence_range CHECK (confidence BETWEEN 1 AND 5)
+);
+CREATE INDEX ON okr.check_in (tenant_id);
+CREATE INDEX ON okr.check_in (key_result_id);
+
+-- ---------- reflection (FR-027) ----------
+-- Append-only by design — FR-027 never mentions editing a Reflection
+-- after submission, and no updateReflection exists (reflectionService.js).
+-- Reconstructed from reflectionService.js — verify against Neon before
+-- treating as final.
+CREATE TABLE okr.reflection (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id     uuid NOT NULL REFERENCES okr.tenant(id) ON DELETE CASCADE,
+  objective_id  uuid NOT NULL REFERENCES okr.objective(id) ON DELETE CASCADE,
+  author_id     uuid NOT NULL REFERENCES okr.user_account(id) ON DELETE RESTRICT,
+  content       text NOT NULL,
+  submitted_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX ON okr.reflection (tenant_id);
+CREATE INDEX ON okr.reflection (objective_id);
+
 -- ---------- okr_element_config (FR-025) ----------
 -- Objective is always enabled and never appears disabled — enforced at
 -- the application layer (cannot be disabled at all, not just "requires
@@ -284,6 +339,9 @@ ALTER TABLE okr.scoring_rubric        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE okr.rubric_level          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE okr.objective             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE okr.key_result            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE okr.initiative            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE okr.check_in              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE okr.reflection            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE okr.okr_element_config    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE okr.terminology_setting   ENABLE ROW LEVEL SECURITY;
 
@@ -329,6 +387,18 @@ CREATE POLICY tenant_isolation ON okr.objective
          OR current_setting('app.is_platform_admin', true) = 'true');
 
 CREATE POLICY tenant_isolation ON okr.key_result
+  USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid
+         OR current_setting('app.is_platform_admin', true) = 'true');
+
+CREATE POLICY tenant_isolation ON okr.initiative
+  USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid
+         OR current_setting('app.is_platform_admin', true) = 'true');
+
+CREATE POLICY tenant_isolation ON okr.check_in
+  USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid
+         OR current_setting('app.is_platform_admin', true) = 'true');
+
+CREATE POLICY tenant_isolation ON okr.reflection
   USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid
          OR current_setting('app.is_platform_admin', true) = 'true');
 
