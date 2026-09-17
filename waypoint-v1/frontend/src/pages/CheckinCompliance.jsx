@@ -4,6 +4,7 @@ import { useWindowSize } from '../hooks/useWindowSize.js';
 import { useTerms } from '../context/TerminologyContext.jsx';
 import { reportsApi } from '../services/api.js';
 import { s, colors } from '../styles/tokens.js';
+import StatusDonut from '../components/charts/StatusDonut.jsx';
 
 export default function CheckinCompliance() {
   const { isMobile } = useWindowSize();
@@ -35,32 +36,52 @@ export default function CheckinCompliance() {
           {data.byOwner.length === 0 ? (
             <p style={{ fontSize: 13, color: colors.ink500 }}>No {tPlural('KeyResult').toLowerCase()} this Cycle.</p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {data.byOwner.map((owner) => {
-                const total = owner.keyResults.length;
-                const done = owner.keyResults.filter((kr) => kr.hasCheckedIn).length;
-                return (
-                  <div key={owner.employeeId} style={s.card}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 15, fontWeight: 700, color: colors.ink900 }}>{owner.employeeFirstName} {owner.employeeLastName}</span>
-                      <span style={s.chip(done === total ? colors.success : colors.warn, done === total ? colors.successBg : colors.warnBg)}>
-                        {done}/{total} checked in
-                      </span>
+            <>
+              <div style={{ ...s.card, maxWidth: 360, marginBottom: 20 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: colors.ink900, marginBottom: 12 }}>
+                  Overall compliance
+                </div>
+                <StatusDonut
+                  data={(() => {
+                    const all = data.byOwner.flatMap((owner) => owner.keyResults);
+                    const done = all.filter((kr) => kr.hasCheckedIn).length;
+                    return [
+                      { status: 'Checked in', count: done },
+                      { status: 'Missing', count: all.length - done },
+                    ];
+                  })()}
+                  centerLabel={tPlural('KeyResult').toLowerCase()}
+                  colorFor={(status) => (status === 'Checked in' ? colors.success : colors.warn)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {data.byOwner.map((owner) => {
+                  const total = owner.keyResults.length;
+                  const done = owner.keyResults.filter((kr) => kr.hasCheckedIn).length;
+                  return (
+                    <div key={owner.employeeId} style={s.card}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: colors.ink900 }}>{owner.employeeFirstName} {owner.employeeLastName}</span>
+                        <span style={s.chip(done === total ? colors.success : colors.warn, done === total ? colors.successBg : colors.warnBg)}>
+                          {done}/{total} checked in
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {owner.keyResults.map((kr) => (
+                          <div key={kr.keyResultId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {kr.hasCheckedIn
+                              ? <span style={{ color: colors.success, fontSize: 13 }}>✓</span>
+                              : <span style={{ color: colors.danger, fontSize: 13 }}>✗</span>}
+                            <span style={{ fontSize: 13, color: colors.ink700 }}>{kr.keyResultTitle}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {owner.keyResults.map((kr) => (
-                        <div key={kr.keyResultId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          {kr.hasCheckedIn
-                            ? <span style={{ color: colors.success, fontSize: 13 }}>✓</span>
-                            : <span style={{ color: colors.danger, fontSize: 13 }}>✗</span>}
-                          <span style={{ fontSize: 13, color: colors.ink700 }}>{kr.keyResultTitle}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </>
       )}

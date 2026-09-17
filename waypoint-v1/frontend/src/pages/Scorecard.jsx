@@ -4,6 +4,8 @@ import { useWindowSize } from '../hooks/useWindowSize.js';
 import { useTerms } from '../context/TerminologyContext.jsx';
 import { reportsApi } from '../services/api.js';
 import { s, colors, STATUS_META } from '../styles/tokens.js';
+import { groupByStatus } from '../utils/statusGroups.js';
+import StatusDonut from '../components/charts/StatusDonut.jsx';
 
 function StatusChip({ status }) {
   const meta = STATUS_META[status] ?? { color: colors.ink500, bg: colors.ink100 };
@@ -45,6 +47,18 @@ export default function Scorecard() {
 
           {data.objectives.length === 0 && (
             <p style={{ fontSize: 13, color: colors.ink500 }}>No {tPlural('Objective').toLowerCase()} this Cycle.</p>
+          )}
+
+          {data.objectives.length > 0 && (
+            <div style={{ ...s.card, maxWidth: 360, marginBottom: 20 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: colors.ink900, marginBottom: 12 }}>
+                {tPlural('KeyResult')} by status
+              </div>
+              <StatusDonut
+                data={groupByStatus(data.objectives.flatMap((o) => o.keyResults))}
+                centerLabel={tPlural('KeyResult').toLowerCase()}
+              />
+            </div>
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

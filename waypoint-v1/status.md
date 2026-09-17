@@ -72,7 +72,11 @@ equivalent to "the module was reviewed and closed out."
 - Check-in submission driving Key Result and Objective status roll-up
 - Initiatives and Reflections against Key Results/Objectives
 - Reporting: Scorecard, Team Progress, Alignment Map (collapsible tree,
-  not a visual canvas), Check-in Compliance
+  not a visual canvas), Check-in Compliance — Dashboard, Scorecard, Team
+  Progress, and Check-in Compliance now lead with a Recharts-based chart
+  (status donut/bar) above the existing table/list detail, not replacing
+  it (see Corrections below); Alignment Map is unchanged (tree, by
+  design — see the Backlog note on the visual strategy map, still open)
 - Cascade level, terminology, scoring rubric, and OKR element
   configuration (Tenant Admin)
 - Health check endpoint
@@ -89,7 +93,6 @@ equivalent to "the module was reviewed and closed out."
 - Cycle-over-cycle trend, Initiative execution status, Reflection digest,
   and Cross-tenant adoption reports (named in the Stage 2 doc, never
   given an API endpoint)
-- Chart/visual rendering on the built reports (currently tables)
 - AI Settings functionality (menu scaffolded per FR-022, flags have no
   effect yet — Phase 2 by design)
 
@@ -112,6 +115,26 @@ equivalent to "the module was reviewed and closed out."
 - This file and `reference.md` were both meaningfully behind the repo —
   see each file's own note on what changed.
 
+## Later the same day: charts added (2026-09-16, second delivery)
+
+Closed the "Chart-based dashboards" backlog item below. Added `recharts`
+(dependency, `frontend/package.json`) and a small reusable chart set
+under `frontend/src/components/charts/` (`StatCard`, `StatusDonut`,
+`StatusBarChart`), themed entirely from `tokens.js`'s existing
+`CHART_PALETTE`/`STATUS_META` — no new backend, every chart is computed
+client-side from endpoints that already existed (`GET /api/objectives`,
+team-progress, checkin-compliance). Dashboard (`/`) rebuilt from a bare
+quick-link list into a role-aware analytics view (KPI cards + Objective
+status donut for everyone; a team status bar chart added for Manager; a
+check-in compliance donut added for TenantAdmin; PlatformAdmin gets a
+separate, simpler view since they have no tenant to chart). Scorecard,
+Team Progress, and Check-in Compliance each gained a chart summary above
+their existing detail. `npm run build` (frontend) and the full backend
+`npm test` (347 tests) both pass against this delivery — the first time
+this session that's been verified rather than assumed. Alignment Map was
+deliberately left untouched — it's a tree, not a chart, and stays its
+own backlog item (visual strategy map, below).
+
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
 Raised when comparing WayPoint against Perdoo's UI (screenshots reviewed
@@ -133,10 +156,8 @@ silent addition, before being built:
   equivalent (parent-child cascade, collapse/expand for deep trees) but
   renders as an indented list, not a box-and-connector canvas. A
   presentation-layer enhancement on data already computed, not a new
-  capability.
-- **Chart-based dashboards** — progress-over-time, status breakdowns as
-  pie/gauge visuals rather than tables. Same data as the existing
-  reports; cheapest item on this list to close.
+  capability. (Charts are now built — see above — this is specifically
+  about the cascade tree itself, which is still a list.)
 - **Composite team "business review" view** — trend + roll-up + freeform
   wins/observations in one page. Partial overlap with Team Progress +
   Reflections; not currently its own FR.
@@ -147,9 +168,14 @@ silent addition, before being built:
 
 ## Next immediate step
 
-Confirm which of the corrections above (Objective re-parenting UI,
-`schema.sql` fold-back) are acceptable as delivered, and decide which
-backlog item — if any — gets a proper FR pass next.
+Confirm the charts delivery (Dashboard, Scorecard, Team Progress,
+Check-in Compliance) looks right in a real browser — this was verified
+by `npm run build`/`npm test` passing, not by visual review, so the
+first real check is Mark's own eyes on it. Also confirm which of the
+earlier corrections (Objective re-parenting UI, `schema.sql` fold-back)
+are acceptable as delivered, and decide which backlog item — if any —
+gets a proper FR pass next (visual strategy map is the natural
+follow-on to the charts work, if that direction continues).
 
 ## Open items, not yet resolved
 

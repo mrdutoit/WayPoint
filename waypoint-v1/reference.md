@@ -73,7 +73,8 @@ waypoint-v1/
 │   ├── db/
 │   │   └── schema.sql              <- plain SQL, applied manually via Neon's console
 │   ├── src/                        <- the React app
-│   │   ├── components/ (Avatar.jsx, DatePicker.jsx, Logo.jsx)
+│   │   ├── components/ (Avatar.jsx, DatePicker.jsx, Logo.jsx,
+│   │   │   charts/ (StatCard.jsx, StatusDonut.jsx, StatusBarChart.jsx))
 │   │   ├── constants/avatarOptions.js
 │   │   ├── context/ (FlagContext, RoleContext, TerminologyContext, ThemeContext)
 │   │   ├── hooks/ (useFetch.js, useWindowSize.js)
@@ -84,8 +85,8 @@ waypoint-v1/
 │   │   │    Scorecard.jsx, Settings.jsx, TeamProgress.jsx, TenantsAdmin.jsx,
 │   │   │    UsersAdmin.jsx)
 │   │   ├── services/api.js
-│   │   ├── styles/tokens.js        <- design tokens, incl. brand colours
-│   │   ├── utils/dateFormat.js
+│   │   ├── styles/tokens.js        <- design tokens, incl. brand colours, CHART_PALETTE
+│   │   ├── utils/ (dateFormat.js, statusGroups.js)
 │   │   └── App.jsx
 │   ├── public/                     <- favicon.png, favicon.svg, apple-touch-icon.png, waypoint-icon.png
 │   ├── vercel.json                 <- routes friendly paths to the router files
@@ -109,6 +110,11 @@ waypoint-v1/
 - **Auth:** Standalone (Argon2id password hashing + JWT), not SSO by
   default. SSO is a scaffolded, switched-off feature flag
   (`auth.sso.enabled`) for later.
+- **Charts:** Recharts, themed entirely from `tokens.js` (`CHART_PALETTE`,
+  `STATUS_META`) — never a hardcoded hex. Shared primitives live in
+  `src/components/charts/` (`StatCard`, `StatusDonut`, `StatusBarChart`);
+  a page groups its own data with `utils/statusGroups.js` and hands the
+  result to one of these rather than each page reimplementing grouping.
 - **Schema:** One plain SQL file (`db/schema.sql`), applied by hand via
   Neon's SQL console — deliberately not a migration library at this
   scale. A schema change ships as a short-lived migration file that gets
