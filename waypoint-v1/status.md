@@ -68,7 +68,9 @@ equivalent to "the module was reviewed and closed out."
   enabled directly in Neon if the tables are live and working)
 - Feature flags: read + admin update, platform-wide
 - Objective/Key Result creation, cascade linking (optional at creation,
-  matching FR-015), re-parenting (edit — see Corrections below)
+  matching FR-015), re-parenting (edit — see Corrections below), and a
+  collapsible hierarchy view on the Objectives list itself (toggle
+  against the existing flat table), matching Alignment Map's tree
 - Check-in submission driving Key Result and Objective status roll-up
 - Initiatives and Reflections against Key Results/Objectives
 - Reporting: Scorecard, Team Progress, Alignment Map (collapsible tree,
@@ -134,6 +136,46 @@ their existing detail. `npm run build` (frontend) and the full backend
 this session that's been verified rather than assumed. Alignment Map was
 deliberately left untouched — it's a tree, not a chart, and stays its
 own backlog item (visual strategy map, below).
+
+## Later the same day, again: hierarchy view + dashboard redesign (2026-09-16, third delivery)
+
+Two changes, prompted by Mark's own comparison of the Objectives list
+against the Alignment Map report, and against reference screenshots of
+a differently-styled product dashboard:
+
+- **Objectives page** (`/objectives`) now defaults to the same
+  collapsible parent/child tree as Alignment Map, with a toggle back to
+  the flat table. The tree-building logic was extracted out of
+  `AlignmentMap.jsx` into `utils/objectiveTree.js` so both pages use the
+  identical algorithm rather than a second copy that could drift.
+  `GET /api/objectives` already returned `parentObjectiveId` per row —
+  no backend change needed. Titles in the tree view are still links
+  through to the edit page; Alignment Map's aren't, and stays that way —
+  Objectives is the CRUD entry point, the report isn't.
+- **Dashboard redesigned a second time.** The first pass (same day,
+  above) used identical boxed stat cards with ALL-CAPS labels for every
+  number — the generic "SaaS-card kit" pattern, not a deliberate choice.
+  Rebuilt around one hero (an on-track/achieved progress ring paired
+  with the status donut, in a single card with its own visual weight —
+  a thin brand-gradient top edge, more generous padding) with the
+  individual counts demoted to a lighter icon-led metric row beneath it
+  rather than competing boxes. New icon set (`components/charts/icons.jsx`)
+  is hand-rolled inline SVG, not a new dependency. `npm run build` and
+  `npm test` (347) both still pass.
+
+Mark also referenced a set of screenshots from an unrelated consumer
+product (an AI fantasy-sports assistant) as a style reference for "high-
+end design studio" quality — bespoke mini-illustration per card, a
+purple/violet palette. That's a marketing/explainer-page genre (selling
+a system to a prospective user) rather than an operational daily-use
+dashboard, and the palette was explicitly rejected for WayPoint back
+when the brand was set (`reference.md`'s Brand section: "if anything
+still looks purple, it's stale"). What was actually borrowed from those
+references — real visual hierarchy, purposeful icon-led colour instead
+of decoration, one clear hero rather than uniform boxes — without the
+custom bespoke illustration-per-metric, which is a different scale of
+design investment than an internal KPI dashboard justifies. Flag if
+that trade-off read is wrong.
 
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 

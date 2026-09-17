@@ -3,23 +3,11 @@ import { Link } from 'react-router-dom';
 import { useWindowSize } from '../hooks/useWindowSize.js';
 import { reportsApi } from '../services/api.js';
 import { s, colors, STATUS_META } from '../styles/tokens.js';
+import { buildObjectiveTree } from '../utils/objectiveTree.js';
 
 function StatusChip({ status }) {
   const meta = STATUS_META[status] ?? { color: colors.ink500, bg: colors.ink100 };
   return <span style={s.chip(meta.color, meta.bg)}>{status}</span>;
-}
-
-function buildTree(objectives) {
-  const byId = new Map(objectives.map((o) => [o.id, { ...o, children: [] }]));
-  const roots = [];
-  for (const obj of byId.values()) {
-    if (obj.parentObjectiveId && byId.has(obj.parentObjectiveId)) {
-      byId.get(obj.parentObjectiveId).children.push(obj);
-    } else {
-      roots.push(obj);
-    }
-  }
-  return roots;
 }
 
 // Sam's Stage 2 design review: "must stay usable for a deep cascade —
@@ -67,7 +55,7 @@ export default function AlignmentMap() {
   if (error) return <div style={pageStyle}><div style={s.chip(colors.danger, colors.dangerBg)}>{error}</div></div>;
   if (!data) return <div style={pageStyle}><p style={{ fontSize: 13, color: colors.ink500 }}>Loading…</p></div>;
 
-  const tree = buildTree(data.objectives);
+  const tree = buildObjectiveTree(data.objectives);
 
   return (
     <div style={pageStyle}>

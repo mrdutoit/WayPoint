@@ -74,7 +74,7 @@ waypoint-v1/
 │   │   └── schema.sql              <- plain SQL, applied manually via Neon's console
 │   ├── src/                        <- the React app
 │   │   ├── components/ (Avatar.jsx, DatePicker.jsx, Logo.jsx,
-│   │   │   charts/ (StatCard.jsx, StatusDonut.jsx, StatusBarChart.jsx))
+│   │   │   charts/ (StatCard.jsx, StatusDonut.jsx, StatusBarChart.jsx, icons.jsx))
 │   │   ├── constants/avatarOptions.js
 │   │   ├── context/ (FlagContext, RoleContext, TerminologyContext, ThemeContext)
 │   │   ├── hooks/ (useFetch.js, useWindowSize.js)
@@ -86,7 +86,7 @@ waypoint-v1/
 │   │   │    UsersAdmin.jsx)
 │   │   ├── services/api.js
 │   │   ├── styles/tokens.js        <- design tokens, incl. brand colours, CHART_PALETTE
-│   │   ├── utils/ (dateFormat.js, statusGroups.js)
+│   │   ├── utils/ (dateFormat.js, statusGroups.js, objectiveTree.js)
 │   │   └── App.jsx
 │   ├── public/                     <- favicon.png, favicon.svg, apple-touch-icon.png, waypoint-icon.png
 │   ├── vercel.json                 <- routes friendly paths to the router files

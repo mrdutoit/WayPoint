@@ -4,11 +4,72 @@ import { useRole } from '../context/RoleContext.jsx';
 import { useTerms } from '../context/TerminologyContext.jsx';
 import { useWindowSize } from '../hooks/useWindowSize.js';
 import { objectivesApi, cascadeLevelsApi } from '../services/api.js';
-import { s, colors, STATUS_META } from '../styles/tokens.js';
+import { s, colors, radius, STATUS_META } from '../styles/tokens.js';
+import { buildObjectiveTree } from '../utils/objectiveTree.js';
 
 function StatusChip({ status }) {
   const meta = STATUS_META[status] ?? { color: colors.ink500, bg: colors.ink100 };
   return <span style={s.chip(meta.color, meta.bg)}>{status}</span>;
+}
+
+function ViewToggle({ view, onChange }) {
+  return (
+    <div style={{ display: 'inline-flex', border: `1px solid ${colors.line}`, borderRadius: radius.sm, overflow: 'hidden' }}>
+      {[['hierarchy', 'Hierarchy'], ['list', 'List']].map(([value, label]) => (
+        <button
+          key={value} type="button" onClick={() => onChange(value)}
+          style={{
+            padding: '7px 14px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+            background: view === value ? colors.brand600 : colors.panel,
+            color: view === value ? '#fff' : colors.ink700,
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Same layout as AlignmentMap.jsx's TreeNode (so the two views of the
+// same cascade look like the same feature, not two unrelated screens),
+// with the title as a link through to the edit page — this is still the
+// CRUD entry point, the Alignment Map report never was.
+function ObjectiveTreeNode({ node, depth, levelLabelById }) {
+  const [expanded, setExpanded] = useState(depth === 0);
+  const hasChildren = node.children.length > 0;
+
+  return (
+    <div>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0',
+        paddingLeft: depth * 24, borderBottom: `1px solid ${colors.line}`, flexWrap: 'wrap',
+      }}>
+        {hasChildren ? (
+          <button
+            type="button" onClick={() => setExpanded((v) => !v)}
+            style={{ ...s.btnSecondary, padding: '2px 8px', fontSize: 12, minWidth: 24 }}
+          >
+            {expanded ? '−' : '+'}
+          </button>
+        ) : <span style={{ width: 24 }} />}
+        <span style={{ fontSize: 11, color: colors.ink400, textTransform: 'uppercase' }}>
+          {levelLabelById[node.cascadeLevelId] ?? '—'}
+        </span>
+        <Link
+          to={`/objectives/${node.id}`}
+          style={{ fontSize: 13, color: colors.brand600, textDecoration: 'none', fontWeight: 600, flex: '1 1 auto' }}
+        >
+          {node.title}
+        </Link>
+        <span style={{ fontSize: 12, color: colors.ink500 }}>{node.ownerFirstName} {node.ownerLastName}</span>
+        <StatusChip status={node.status} />
+      </div>
+      {expanded && node.children.map((child) => (
+        <ObjectiveTreeNode key={child.id} node={child} depth={depth + 1} levelLabelById={levelLabelById} />
+      ))}
+    </div>
+  );
 }
 
 export default function Objectives() {
@@ -19,6 +80,7 @@ export default function Objectives() {
   const [cascadeLevels, setCascadeLevels] = useState([]);
   const [error, setError] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [view, setView] = useState('hierarchy');
 
   const canCreate = role === 'Manager' || role === 'Employee';
 
@@ -38,6 +100,8 @@ export default function Objectives() {
     return map;
   }, [cascadeLevels]);
 
+  const tree = useMemo(() => buildObjectiveTree(objectives ?? []), [objectives]);
+
   return (
     <div style={isMobile ? s.pageMobile : s.page}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
@@ -48,9 +112,12 @@ export default function Objectives() {
           </button>
         )}
       </div>
-      <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 20 }}>
-        All {tPlural('Objective').toLowerCase()} in your organisation for the current Cycle — you can edit your own and your direct reports' (FR-020).
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+        <p style={{ fontSize: 13, color: colors.ink500, margin: 0 }}>
+          All {tPlural('Objective').toLowerCase()} in your organisation for the current Cycle — you can edit your own and your direct reports' (FR-020).
+        </p>
+        {objectives && objectives.length > 0 && <ViewToggle view={view} onChange={setView} />}
+      </div>
 
       {canCreate && cascadeLevels.length === 0 && objectives !== null && (
         <div style={{ ...s.chip(colors.warn, colors.warnBg), marginBottom: 16 }}>
@@ -73,7 +140,15 @@ export default function Objectives() {
         <div style={{ fontSize: 13, color: colors.ink500 }}>No {tPlural('Objective').toLowerCase()} yet.</div>
       )}
 
-      {objectives && objectives.length > 0 && (
+      {objectives && objectives.length > 0 && view === 'hierarchy' && (
+        <div style={s.card}>
+          {tree.map((root) => (
+            <ObjectiveTreeNode key={root.id} node={root} depth={0} levelLabelById={levelLabelById} />
+          ))}
+        </div>
+      )}
+
+      {objectives && objectives.length > 0 && view === 'list' && (
         <div style={s.tableCard}>
           <table style={{ ...s.table, minWidth: 480 }}>
             <thead>

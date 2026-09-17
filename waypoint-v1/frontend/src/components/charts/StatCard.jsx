@@ -1,15 +1,25 @@
-import { s, colors, type } from '../../styles/tokens.js';
+import { colors, type } from '../../styles/tokens.js';
 
-export default function StatCard({ label, value, accent = colors.ink900, sublabel }) {
+// A compact metric: icon + number + label, meant to sit inline inside a
+// shared container rather than as its own bordered/shadowed box — three
+// or four of these boxed identically was the generic "SaaS-card kit"
+// tell (same radius, same shadow, no hierarchy). See Dashboard.jsx.
+export default function StatCard({ icon: Icon, label, value, accent = colors.ink900 }) {
   return (
-    <div style={{ ...s.card, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140, flex: '1 1 160px' }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: colors.ink500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-        {label}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      {Icon && (
+        <div style={{
+          width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: accent, background: `color-mix(in srgb, ${accent} 14%, transparent)`,
+        }}>
+          <Icon size={18} />
+        </div>
+      )}
+      <div>
+        <div style={{ fontSize: 21, fontWeight: 700, color: colors.ink900, lineHeight: 1.15, ...type.numeric }}>{value}</div>
+        <div style={{ fontSize: 13, color: colors.ink500 }}>{label}</div>
       </div>
-      <div style={{ fontSize: 30, fontWeight: 700, color: accent, ...type.numeric }}>
-        {value}
-      </div>
-      {sublabel && <div style={{ fontSize: 12, color: colors.ink400 }}>{sublabel}</div>}
     </div>
   );
 }
