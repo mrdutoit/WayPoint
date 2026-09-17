@@ -68,9 +68,10 @@ equivalent to "the module was reviewed and closed out."
   enabled directly in Neon if the tables are live and working)
 - Feature flags: read + admin update, platform-wide
 - Objective/Key Result creation, cascade linking (optional at creation,
-  matching FR-015), re-parenting (edit — see Corrections below), and a
-  collapsible hierarchy view on the Objectives list itself (toggle
-  against the existing flat table), matching Alignment Map's tree
+  matching FR-015), re-parenting and cascade-level moves (edit — see
+  2026-09-17 below), and a collapsible hierarchy view on the Objectives
+  list itself (toggle against the existing flat table), matching
+  Alignment Map's tree
 - Check-in submission driving Key Result and Objective status roll-up
 - Initiatives and Reflections against Key Results/Objectives
 - Reporting: Scorecard, Team Progress, Alignment Map (collapsible tree,
@@ -81,6 +82,8 @@ equivalent to "the module was reviewed and closed out."
   design — see the Backlog note on the visual strategy map, still open)
 - Cascade level, terminology, scoring rubric, and OKR element
   configuration (Tenant Admin)
+- Data export (FR-030) — JSON or a CSV-per-entity zip, Tenant Admin for
+  their own tenant, Platform Admin for any tenant (see 2026-09-17 below)
 - Health check endpoint
 - Platform Administrator bootstrap, on-demand, idempotent
 
@@ -91,7 +94,12 @@ equivalent to "the module was reviewed and closed out."
 - Field-level encryption (flag exists, `security.fieldEncryption.enabled`,
   not implemented — no special personal information in scope yet per
   Stage 1, so correctly deferred)
-- Data export / audit log export (FR-030/FR-031)
+- Audit log — confirmed 2026-09-17 that this doesn't exist in any form
+  yet, not even a page: `auditService.js` only exports
+  `recordAuditEvent` (write-only), called from 7 routers, so events are
+  being recorded, but nothing reads them back — no list endpoint, no
+  export endpoint (FR-031), no page, for any role including
+  PlatformAdmin. Next in the build queue.
 - Cycle-over-cycle trend, Initiative execution status, Reflection digest,
   and Cross-tenant adoption reports (named in the Stage 2 doc, never
   given an API endpoint)
@@ -177,7 +185,7 @@ custom bespoke illustration-per-metric, which is a different scale of
 design investment than an internal KPI dashboard justifies. Flag if
 that trade-off read is wrong.
 
-## 2026-09-17: API health card removed, confidence-trend sparklines added
+## 2026-09-17: health card removed, sparklines, cascade-level move, Data Export
 
 - **Dashboard's "API health" card removed.** It was leftover Stage 3
   scaffold content — a bare "database reachable" chip doesn't give any
@@ -204,9 +212,49 @@ that trade-off read is wrong.
   - **Sunburst** for the cascade (Company → Division → Team →
     Individual) — the more visually ambitious version of the "visual
     strategy map" backlog item below, same underlying data as Alignment
-    Map.
-  None built yet — raised for prioritisation, not started.
-- `npm run build` and `npm test` (347) both pass.
+    Map. Build order confirmed: heatmap, then treemap, then sunburst.
+  None built yet — next up after Data export and Audit log export below.
+- **Objective cascade-level move built** — previously an open design
+  question, resolved: yes, movable. `updateObjective` now accepts
+  `cascadeLevelId`. Blocked outright if the Objective has children
+  (named in the error — re-parent or detach them first, no
+  auto-cascading onto descendants); the parent link auto-detaches rather
+  than errors if it no longer fits the new level and wasn't itself
+  re-specified in the same call. Mid-build, an unnecessary refactor of
+  the FR-023 cycle-check query broke two existing tests — caught by
+  actually running the suite, reverted to the original tested
+  implementation, built the new behaviour around it with a try/catch
+  instead. 5 new tests added for the new capability.
+  `ObjectiveDetail.jsx`'s edit form has a level dropdown now, with a
+  proactive warning when children would block the move.
+- **Data export (FR-030) built** — `exportService.js` (six entities,
+  explicit column lists matched against `schema.sql`, not `SELECT *`,
+  so a future schema drift breaks the export loudly instead of silently
+  changing its shape) plus a small dependency-free `csv.js` writer,
+  reused-ready for audit log export next. New endpoint
+  `GET /api/tenants/:id/export?format=json|csv` in `tenants-router.js` —
+  TenantAdmin for their own tenant, PlatformAdmin for any tenant,
+  audit-logged on every export. CSV format is a zip (one file per
+  entity, via `jszip` — the six entities don't share one table shape,
+  so a single CSV isn't a coherent option). UI: an export section on OKR
+  Settings (TenantAdmin) and per-row export buttons on Tenants Admin
+  (PlatformAdmin), both triggering a real browser download.
+  `res.send()`/`res.setHeader()` for a binary/text body is the one
+  mechanism in this delivery with no prior use elsewhere in the
+  codebase (every other route uses `res.json()`) — confirmed correct
+  against Vercel's own Node.js Functions documentation, since nothing
+  in this environment can deploy-test it directly; still worth being
+  the first thing checked after deploying.
+- `jszip` had to be added as a dependency in **both**
+  `frontend/package.json` (the app itself) **and** the root
+  `package.json` (test-only) — a test file that imports a package
+  directly resolves it relative to the test file's own location, which
+  is outside `frontend/`, so root `node_modules` needs its own copy even
+  though the app's real runtime copy lives in `frontend/node_modules`.
+  Same reason `pg` was already a root devDependency despite no service
+  file importing it directly. Noted in `reference.md` so this doesn't
+  need rediscovering.
+- `npm run build` and the full `npm test` (372, up from 347) both pass.
 
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
@@ -241,13 +289,15 @@ silent addition, before being built:
 
 ## Next immediate step
 
-Decide which of the three newer chart candidates (calendar heatmap,
-weighting treemap, cascade sunburst — see 2026-09-17 above) to build
-first, if any. Also still open: confirm the charts/dashboard delivery
-looks right in a real browser (verified by `npm run build`/`npm test`
-passing, not by visual review so far), and confirm which of the earlier
-corrections (Objective re-parenting UI, `schema.sql` fold-back) are
-acceptable as delivered.
+Confirmed order: Audit log export (FR-031) next — this needs the read
+side built from scratch (no list/query capability exists at all yet,
+see "What's explicitly NOT built yet" above), not just an export
+wrapper the way Data export was. After that, the three chart
+candidates in order: calendar heatmap, weighting treemap, cascade
+sunburst. Also still open: confirm the whole 2026-09-17 delivery looks
+right in a real browser and that the export downloads actually work end
+to end against live Neon/Vercel — everything here was verified by
+`npm run build`/`npm test` passing, not by a real deploy.
 
 ## Open items, not yet resolved
 

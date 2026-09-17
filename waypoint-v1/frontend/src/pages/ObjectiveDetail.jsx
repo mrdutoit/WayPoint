@@ -165,30 +165,32 @@ export default function ObjectiveDetail() {
 }
 
 /**
- * Rename + re-parent. Cascade LEVEL itself is deliberately not editable
- * here — moving an Objective to a different level has data-integrity
- * implications (existing children, Key Result roll-up) that need an
- * explicit decision before building, not a silent assumption; title and
- * parent-within-the-same-level are unambiguous and already fully
- * supported server-side (updateObjective, FR-015/FR-023), so only the
- * UI for those two was missing.
+ * Rename, re-parent, and — as of 2026-09-17, at Mark's direction — move
+ * to a different cascade level. See updateObjective's module comment
+ * (objectiveService.js) for the two rules that protect FR-015 when the
+ * level changes: blocked while children are linked, and the parent link
+ * auto-detaches if it no longer fits the newly-selected level.
  */
 function EditObjectiveForm({ objective, cascadeLevels, allObjectives, onSaved, label }) {
   const [title, setTitle] = useState(objective.title);
+  const [levelId, setLevelId] = useState(objective.cascadeLevelId);
   const [parentObjectiveId, setParentObjectiveId] = useState(objective.parentObjectiveId ?? '');
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  // Same rule as CreateObjectiveForm (Objectives.jsx): a valid parent must
-  // sit exactly one cascade level above this Objective's own level (FR-015).
-  const ownLevel = cascadeLevels.find((l) => l.id === objective.cascadeLevelId);
-  const validParents = ownLevel
+  const sortedLevels = [...cascadeLevels].sort((a, b) => a.level_index - b.level_index);
+  const selectedLevel = cascadeLevels.find((l) => l.id === levelId);
+  // Recomputed against whichever level is currently selected in the form,
+  // not the Objective's original level — changing the dropdown above
+  // should immediately re-filter which parents make sense below it.
+  const validParents = selectedLevel
     ? allObjectives.filter((o) =>
         o.id !== objective.id
-        && cascadeLevels.find((l) => l.id === o.cascadeLevelId)?.level_index === ownLevel.level_index - 1
+        && cascadeLevels.find((l) => l.id === o.cascadeLevelId)?.level_index === selectedLevel.level_index - 1
       )
     : [];
+  const childTitles = allObjectives.filter((o) => o.parentObjectiveId === objective.id).map((o) => o.title);
 
   if (!editing) {
     return (
@@ -198,14 +200,26 @@ function EditObjectiveForm({ objective, cascadeLevels, allObjectives, onSaved, l
     );
   }
 
+  function handleLevelChange(newLevelId) {
+    setLevelId(newLevelId);
+    // The previously-selected parent may no longer sit one level above
+    // the new selection — clear it rather than silently submit something
+    // that no longer makes sense; the server would detach it anyway if
+    // left unspecified, but making that visible in the form is clearer
+    // than letting a stale-looking selection sit there.
+    setParentObjectiveId('');
+  }
+
   async function handleSave() {
     setSaving(true);
     setError(null);
     try {
-      // Explicitly null (not omitted) so choosing "No parent" actually
-      // detaches — updateObjective treats an omitted field as "leave
-      // unchanged" and only an explicit null as "clear it".
-      const result = await objectivesApi.update(objective.id, { title, parentObjectiveId: parentObjectiveId || null });
+      // parentObjectiveId explicitly null (not omitted) so "No parent"
+      // actually detaches — updateObjective treats an omitted field as
+      // "leave unchanged" and only an explicit null as "clear it".
+      const result = await objectivesApi.update(objective.id, {
+        title, parentObjectiveId: parentObjectiveId || null, cascadeLevelId: levelId,
+      });
       onSaved(result.objective);
       setEditing(false);
     } catch (err) {
@@ -220,6 +234,22 @@ function EditObjectiveForm({ objective, cascadeLevels, allObjectives, onSaved, l
       <div>
         <label style={s.label} htmlFor="edit-objective-title">Title</label>
         <input id="edit-objective-title" style={s.formInput} value={title} onChange={(e) => setTitle(e.target.value)} />
+      </div>
+
+      <div>
+        <label style={s.label} htmlFor="edit-objective-level">Cascade level</label>
+        <select
+          id="edit-objective-level" style={s.select}
+          value={levelId} onChange={(e) => handleLevelChange(e.target.value)}
+        >
+          {sortedLevels.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+        </select>
+        {childTitles.length > 0 && (
+          <div style={{ fontSize: 12, color: colors.warn, marginTop: 4 }}>
+            Linked to {childTitles.length} child {label.toLowerCase()}{childTitles.length === 1 ? '' : 's'} ({childTitles.join(', ')}) —
+            changing the level is blocked until they're re-parented or detached.
+          </div>
+        )}
       </div>
 
       {validParents.length > 0 && (

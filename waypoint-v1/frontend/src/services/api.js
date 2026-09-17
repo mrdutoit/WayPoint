@@ -92,8 +92,8 @@ export const objectivesApi = {
   get: (id) => request(`/objectives/${id}`),
   create: ({ title, cascadeLevelId, parentObjectiveId, ownerId }) =>
     request('/objectives', { method: 'POST', body: JSON.stringify({ title, cascadeLevelId, parentObjectiveId, ownerId }) }),
-  update: (id, { title, parentObjectiveId }) =>
-    request(`/objectives/${id}`, { method: 'PATCH', body: JSON.stringify({ title, parentObjectiveId }) }),
+  update: (id, { title, parentObjectiveId, cascadeLevelId }) =>
+    request(`/objectives/${id}`, { method: 'PATCH', body: JSON.stringify({ title, parentObjectiveId, cascadeLevelId }) }),
   createKeyResult: (id, { title, weighting, rubricId }) =>
     request(`/objectives/${id}/key-results`, { method: 'POST', body: JSON.stringify({ title, weighting, rubricId }) }),
   listReflections: (id) => request(`/objectives/${id}/reflections`),
@@ -125,6 +125,30 @@ export const tenantsApi = {
   get: (id) => request(`/tenants/${id}`),
   create: ({ name, region, adminEmail, adminFirstName, adminLastName, adminPassword }) =>
     request('/tenants', { method: 'POST', body: JSON.stringify({ name, region, adminEmail, adminFirstName, adminLastName, adminPassword }) }),
+  // Bypasses request() — the response is a file (CSV zip or raw JSON
+  // text with an attachment header), not something to JSON.parse.
+  // Triggers a normal browser download rather than returning data to
+  // the caller, since that's what "Export" means here.
+  export: async (tenantId, format) => {
+    const response = await fetch(`/api/tenants/${tenantId}/export?format=${format}`, {
+      headers: _token ? { Authorization: `Bearer ${_token}` } : {},
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new ApiError(response.status, body?.error ?? 'Export failed');
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') ?? '';
+    const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? `waypoint-export.${format === 'csv' ? 'zip' : 'json'}`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 };
 
 export const usersApi = {

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRole } from '../context/RoleContext.jsx';
 import { useTerms } from '../context/TerminologyContext.jsx';
 import { useWindowSize } from '../hooks/useWindowSize.js';
-import { cascadeLevelsApi, cyclesApi, rubricApi, cadencesApi, okrElementsApi, terminologyApi } from '../services/api.js';
+import { cascadeLevelsApi, cyclesApi, rubricApi, cadencesApi, okrElementsApi, terminologyApi, tenantsApi } from '../services/api.js';
 import { s, colors } from '../styles/tokens.js';
 import DatePicker from '../components/DatePicker.jsx';
 
@@ -10,7 +10,7 @@ const SECTION_TITLE = { fontSize: 16, fontWeight: 700, marginBottom: 4, color: c
 const SECTION_NOTE = { fontSize: 13, color: colors.ink500, marginBottom: 16 };
 
 export default function OkrSettings() {
-  const { isTenantAdmin } = useRole();
+  const { isTenantAdmin, user } = useRole();
   const { isMobile } = useWindowSize();
   const pageStyle = isMobile ? s.pageMobile : s.page;
 
@@ -49,6 +49,7 @@ export default function OkrSettings() {
         <RubricSection />
         <TerminologySection />
         <OkrElementsSection />
+        <DataExportSection tenantId={user?.tenantId} />
       </div>
     </div>
   );
@@ -602,6 +603,47 @@ function OkrElementsSection() {
         </div>
       )}
       {rowError && <div style={{ ...s.chip(colors.danger, colors.dangerBg), marginTop: 12 }}>{rowError}</div>}
+    </div>
+  );
+}
+
+// FR-030 — export this tenant's full OKR data. The download itself is
+// handled by tenantsApi.export (triggers the browser's save dialog
+// directly); this component only tracks which format button is busy and
+// surfaces an error if the request itself failed before any file arrived.
+function DataExportSection({ tenantId }) {
+  const [pending, setPending] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function handleExport(format) {
+    setPending(format);
+    setError(null);
+    try {
+      await tenantsApi.export(tenantId, format);
+    } catch (err) {
+      setError(err.message ?? 'Export failed');
+    } finally {
+      setPending(null);
+    }
+  }
+
+  return (
+    <div style={s.card}>
+      <div style={SECTION_TITLE}>Data export</div>
+      <div style={SECTION_NOTE}>
+        Download your organisation's full OKR data — Objectives, Key Results, Initiatives, Check-ins,
+        Reflections, and Cycles (FR-030). JSON is one file; CSV is a zip with one file per entity, since
+        the six don't share a single table shape.
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button type="button" onClick={() => handleExport('json')} disabled={pending !== null} style={s.btnSecondary}>
+          {pending === 'json' ? 'Preparing…' : 'Export as JSON'}
+        </button>
+        <button type="button" onClick={() => handleExport('csv')} disabled={pending !== null} style={s.btnSecondary}>
+          {pending === 'csv' ? 'Preparing…' : 'Export as CSV (zip)'}
+        </button>
+      </div>
+      {error && <div style={{ ...s.chip(colors.danger, colors.dangerBg), marginTop: 10 }}>{error}</div>}
     </div>
   );
 }

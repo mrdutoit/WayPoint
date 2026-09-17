@@ -132,10 +132,19 @@ describe('objectives-router — PATCH /api/objectives/:id never accepts status (
     objectiveService.updateObjective.mockResolvedValue({ id: 'obj-1', title: 'New', status: 'Not Started' });
     const res = mockRes();
     await handler(mockReq({ method: 'PATCH', slug: ['obj-1'], body: { title: 'New', status: 'Achieved' } }), res);
-    // the router only ever destructures { title, parentObjectiveId } from the body —
-    // whatever the service was called with must not include status
+    // the router destructures { title, parentObjectiveId, cascadeLevelId } from the
+    // body — whatever the service was called with must not include status
     const callArgs = objectiveService.updateObjective.mock.calls[0];
-    expect(callArgs[4]).toEqual({ title: 'New', parentObjectiveId: undefined });
+    expect(callArgs[4]).toEqual({ title: 'New', parentObjectiveId: undefined, cascadeLevelId: undefined });
+  });
+
+  it('passes cascadeLevelId through to the service when a level move is requested', async () => {
+    getAuthenticatedUser.mockReturnValue(EMPLOYEE);
+    objectiveService.updateObjective.mockResolvedValue({ id: 'obj-1', title: 'X', cascadeLevelId: 'cl-new' });
+    const res = mockRes();
+    await handler(mockReq({ method: 'PATCH', slug: ['obj-1'], body: { cascadeLevelId: 'cl-new' } }), res);
+    const callArgs = objectiveService.updateObjective.mock.calls[0];
+    expect(callArgs[4]).toEqual({ title: undefined, parentObjectiveId: undefined, cascadeLevelId: 'cl-new' });
   });
 });
 

@@ -52,6 +52,7 @@ export default function TenantsAdmin() {
                 <th style={s.th}>Region</th>
                 <th style={s.th}>Cascade levels</th>
                 <th style={s.th}>Created</th>
+                <th style={s.th}>Data export</th>
               </tr>
             </thead>
             <tbody>
@@ -61,12 +62,53 @@ export default function TenantsAdmin() {
                   <td style={s.td}>{t.region}</td>
                   <td style={s.td}>{t.cascadeLevelCount}</td>
                   <td style={s.td}>{new Date(t.createdAt).toLocaleDateString()}</td>
+                  <td style={s.td}><TenantExportButtons tenantId={t.id} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// FR-030, Platform Administrator side — any tenant, not just their own.
+// Same tenantsApi.export as OkrSettings.jsx's DataExportSection; this is
+// just the per-row trigger for the PlatformAdmin's view across tenants.
+function TenantExportButtons({ tenantId }) {
+  const [pending, setPending] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function handleExport(format) {
+    setPending(format);
+    setError(null);
+    try {
+      await tenantsApi.export(tenantId, format);
+    } catch (err) {
+      setError(err.message ?? 'Export failed');
+    } finally {
+      setPending(null);
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button
+          type="button" onClick={() => handleExport('json')} disabled={pending !== null}
+          style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12 }}
+        >
+          {pending === 'json' ? '…' : 'JSON'}
+        </button>
+        <button
+          type="button" onClick={() => handleExport('csv')} disabled={pending !== null}
+          style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12 }}
+        >
+          {pending === 'csv' ? '…' : 'CSV'}
+        </button>
+      </div>
+      {error && <div style={{ fontSize: 11, color: colors.danger, marginTop: 4 }}>{error}</div>}
     </div>
   );
 }

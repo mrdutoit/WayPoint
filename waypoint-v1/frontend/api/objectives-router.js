@@ -73,10 +73,10 @@ async function createAction(req, res, user) {
 
 // PATCH /api/objectives/:id — Owner, Manager (FR-020). Status is never accepted — FR-004.
 async function updateAction(req, res, user, objectiveId) {
-  const { title, parentObjectiveId } = req.body ?? {};
+  const { title, parentObjectiveId, cascadeLevelId } = req.body ?? {};
 
   const objective = await withTenantContext(user.tenantId, async (client) => {
-    const updated = await updateObjective(client, user.tenantId, user, objectiveId, { title, parentObjectiveId });
+    const updated = await updateObjective(client, user.tenantId, user, objectiveId, { title, parentObjectiveId, cascadeLevelId });
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
       action: 'objective.updated', entityType: 'Objective', entityId: updated.id,

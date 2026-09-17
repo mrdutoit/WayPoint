@@ -1,7 +1,8 @@
 import { getAuthenticatedUser, requireRole } from '../api-lib/middleware/auth.js';
 import { respondToServiceError } from '../api-lib/middleware/errorResponse.js';
-import { withPlatformContext } from '../api-lib/context/tenant.js';
+import { withTenantContext, withPlatformContext } from '../api-lib/context/tenant.js';
 import { listTenants, getTenant, createTenantWithFirstAdmin } from '../api-lib/services/tenantService.js';
+import { exportTenantData, formatExportAsJson, formatExportAsCsvZip } from '../api-lib/services/exportService.js';
 import { recordAuditEvent } from '../api-lib/services/auditService.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
 
@@ -10,15 +11,26 @@ import { parseSlug } from '../api-lib/http/helpers.js';
 export default async function handler(req, res) {
   const user = getAuthenticatedUser(req);
   if (!user) return res.status(401).json({ error: 'Missing or invalid authorization token' });
-  if (!requireRole(user, 'PlatformAdmin')) return res.status(403).json({ error: 'Tenants are managed by Platform Administrator only' });
 
   const slugParts = parseSlug(req.query.slug);
-  const [tenantId] = slugParts;
+  const [tenantId, subResource] = slugParts;
 
   try {
+    // GET /api/tenants/:id/export — the one route on this file NOT
+    // restricted to PlatformAdmin (FR-030: Tenant Administrator can
+    // export their own tenant too) — checked before the blanket
+    // PlatformAdmin gate below applies to everything else.
+    if (req.method === 'GET' && tenantId && subResource === 'export') {
+      return await exportAction(req, res, user, tenantId);
+    }
+
+    if (!requireRole(user, 'PlatformAdmin')) {
+      return res.status(403).json({ error: 'Tenants are managed by Platform Administrator only' });
+    }
+
     if (req.method === 'GET' && !tenantId) return await listAction(req, res, user);
     if (req.method === 'POST' && !tenantId) return await createAction(req, res, user);
-    if (req.method === 'GET' && tenantId) return await getAction(req, res, user, tenantId);
+    if (req.method === 'GET' && tenantId && !subResource) return await getAction(req, res, user, tenantId);
     return res.status(404).json({ error: 'Not found' });
   } catch (err) {
     return respondToServiceError(res, err);
@@ -37,6 +49,45 @@ async function listAction(req, res, user) {
 async function getAction(req, res, user, tenantId) {
   const tenant = await withPlatformContext((client) => getTenant(client, tenantId));
   res.status(200).json({ tenant });
+}
+
+// GET /api/tenants/:id/export?format=json|csv — FR-030. Platform
+// Administrator: any tenant. Tenant Administrator: own tenant only.
+// Defaults to json when format is missing or unrecognised.
+async function exportAction(req, res, user, tenantId) {
+  const isPlatformAdmin = requireRole(user, 'PlatformAdmin');
+  const isOwnTenantAdmin = requireRole(user, 'TenantAdmin') && user.tenantId === tenantId;
+  if (!isPlatformAdmin && !isOwnTenantAdmin) {
+    return res.status(403).json({ error: "You can only export your own tenant's data" });
+  }
+
+  const format = req.query.format === 'csv' ? 'csv' : 'json';
+
+  // withTenantContext(tenantId, ...) is correct for both roles here —
+  // it scopes RLS to the TARGET tenant regardless of who's asking, so
+  // PlatformAdmin exporting someone else's tenant does not need
+  // withPlatformContext (that bypasses RLS entirely, which this neither
+  // needs nor wants for a request that already names exactly one tenant).
+  const data = await withTenantContext(tenantId, async (client) => {
+    const result = await exportTenantData(client, tenantId);
+    await recordAuditEvent(client, {
+      tenantId, actorId: user.id,
+      action: 'tenant.exported', entityType: 'Tenant', entityId: tenantId,
+    });
+    return result;
+  });
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  if (format === 'csv') {
+    const buffer = await formatExportAsCsvZip(data);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="waypoint-export-${stamp}.zip"`);
+    return res.status(200).send(buffer);
+  }
+
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="waypoint-export-${stamp}.json"`);
+  return res.status(200).send(formatExportAsJson(data));
 }
 
 // POST /api/tenants — creates the tenant and its first TenantAdmin

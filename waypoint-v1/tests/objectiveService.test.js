@@ -144,6 +144,61 @@ describe('updateObjective (FR-023: no cascade cycle)', () => {
   });
 });
 
+// ---------- cascade level move (2026-09-17, resolves the previously-open
+// "should this be editable" design question) ----------
+describe('updateObjective — moving an Objective to a different cascade level', () => {
+  it('rejects the move while the Objective has children, naming them', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 'obj-A', ownerId: 'u1', ownerManagerId: null, cascadeLevelId: 'cl2', title: 'A', parentObjectiveId: null }] }) // fetch existing
+      .mockResolvedValueOnce({ rows: [{ id: 'cl3' }] }) // new level exists
+      .mockResolvedValueOnce({ rows: [{ title: 'Child One' }, { title: 'Child Two' }] }); // has children
+
+    await expect(
+      updateObjective(client, 't1', { id: 'u1' }, 'obj-A', { cascadeLevelId: 'cl3' })
+    ).rejects.toThrow(/Child One.*Child Two/s);
+  });
+
+  it('rejects a cascadeLevelId that does not exist in this tenant', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 'obj-A', ownerId: 'u1', ownerManagerId: null, cascadeLevelId: 'cl2', title: 'A', parentObjectiveId: null }] })
+      .mockResolvedValueOnce({ rows: [] }); // level lookup — not found
+
+    await expect(
+      updateObjective(client, 't1', { id: 'u1' }, 'obj-A', { cascadeLevelId: 'nonexistent' })
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('auto-detaches the parent when it no longer fits the new level, rather than erroring or leaving it invalid', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 'obj-A', ownerId: 'u1', ownerManagerId: null, cascadeLevelId: 'cl2', title: 'A', parentObjectiveId: 'obj-parent' }] }) // fetch existing — has a parent
+      .mockResolvedValueOnce({ rows: [{ id: 'cl4' }] }) // new level exists
+      .mockResolvedValueOnce({ rows: [] }) // no children
+      .mockResolvedValueOnce({ rows: [{ id: 'obj-parent', parentLevelIndex: 1, childLevelIndex: 4 }] }) // assertParentIsOneLevelAbove probe against the NEW level (index 4): parent sits at index 1, needs index 3 to fit — doesn't, so this throws and is caught
+      .mockResolvedValueOnce({ rows: [{ id: 'obj-A', title: 'A', cascadeLevelId: 'cl4', parentObjectiveId: null }] }); // update — parent cleared
+
+    const updated = await updateObjective(client, 't1', { id: 'u1' }, 'obj-A', { cascadeLevelId: 'cl4' });
+    expect(updated.parentObjectiveId).toBe(null);
+    // confirms the final UPDATE was reached with a cleared parent, not that
+    // assertParentIsOneLevelAbove's internal arithmetic was exercised here —
+    // that arithmetic already has its own coverage in the FR-023 block above.
+  });
+
+  it('allows the move when there are no children and no parent to reconcile', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 'obj-A', ownerId: 'u1', ownerManagerId: null, cascadeLevelId: 'cl2', title: 'A', parentObjectiveId: null }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'cl4' }] })
+      .mockResolvedValueOnce({ rows: [] }) // no children
+      .mockResolvedValueOnce({ rows: [{ id: 'obj-A', title: 'A', cascadeLevelId: 'cl4' }] }); // update
+
+    const updated = await updateObjective(client, 't1', { id: 'u1' }, 'obj-A', { cascadeLevelId: 'cl4' });
+    expect(updated.cascadeLevelId).toBe('cl4');
+  });
+});
+
 describe('listObjectivesForCaller — tenant-wide, not scoped to owner/reports', () => {
   it('returns every Objective in the tenant regardless of who owns it, with owner names', async () => {
     const client = mockClient();

@@ -149,6 +149,14 @@ async function assertParentIsOneLevelAbove(client, tenantId, parentObjectiveId, 
   }
 }
 
+async function fetchChildTitles(client, tenantId, objectiveId) {
+  const { rows } = await client.query(
+    `SELECT title FROM okr.objective WHERE tenant_id = $1 AND parent_objective_id = $2 ORDER BY created_at`,
+    [tenantId, objectiveId]
+  );
+  return rows.map((r) => r.title);
+}
+
 /**
  * "Active" Cycle is now computed from today's date, not a manually
  * toggled flag — see cycleService.js's module comment for why. The
@@ -219,7 +227,29 @@ export async function createObjective(client, tenantId, caller, { title, cascade
  * visibility broadening above; editing was never part of that change.
  * `status` is deliberately not an accepted field — see FR-004.
  */
-export async function updateObjective(client, tenantId, caller, objectiveId, { title, parentObjectiveId }) {
+/**
+ * Owner or the owner's direct Manager only — unchanged since the
+ * visibility broadening above; editing was never part of that change.
+ * `status` is deliberately not an accepted field — see FR-004.
+ *
+ * cascadeLevelId is now editable (previously an open question, flagged
+ * rather than silently decided — resolved at Mark's direction 2026-09-17:
+ * yes, movable). Two rules protect the FR-015 invariant this could
+ * otherwise break:
+ *   1. Blocked outright if the Objective has children — moving it would
+ *      silently strand every child at the wrong relative level, and
+ *      auto-cascading the move onto them is a separate, bigger decision
+ *      (which levels do they move to? what if that pushes a descendant
+ *      past the tenant's configured max level?) than "fix which level
+ *      this one Objective sits at". Detach or move the children first.
+ *   2. If parentObjectiveId is NOT explicitly given in the same call and
+ *      the existing parent no longer sits one level above the new level,
+ *      the parent link is cleared (detached) rather than left pointing
+ *      at a now-invalid relationship, or the whole update rejected. Pass
+ *      a new parentObjectiveId in the same call to re-link atomically
+ *      instead of detaching.
+ */
+export async function updateObjective(client, tenantId, caller, objectiveId, { title, parentObjectiveId, cascadeLevelId }) {
   const existing = await fetchObjectiveRow(client, tenantId, objectiveId);
   if (!existing) throw new NotFoundError('Objective not found');
   assertCanEdit(existing, caller);
@@ -227,17 +257,46 @@ export async function updateObjective(client, tenantId, caller, objectiveId, { t
   const nextTitle = title !== undefined ? title : existing.title;
   if (!nextTitle?.trim()) throw new ValidationError('title cannot be empty');
 
-  const nextParentId = parentObjectiveId !== undefined ? parentObjectiveId : existing.parentObjectiveId;
+  const nextCascadeLevelId = cascadeLevelId !== undefined ? cascadeLevelId : existing.cascadeLevelId;
+  const levelChanging = nextCascadeLevelId !== existing.cascadeLevelId;
+
+  if (levelChanging) {
+    const { rows: levelRows } = await client.query(
+      `SELECT id FROM okr.cascade_level WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, nextCascadeLevelId]
+    );
+    if (levelRows.length === 0) throw new ValidationError('cascadeLevelId does not exist in this tenant');
+
+    const childTitles = await fetchChildTitles(client, tenantId, objectiveId);
+    if (childTitles.length > 0) {
+      throw new ValidationError(
+        `Cannot change cascade level while this Objective has ${childTitles.length} linked child Objective(s): ${childTitles.join(', ')}. Re-parent or detach them first.`
+      );
+    }
+  }
+
+  let nextParentId = parentObjectiveId !== undefined ? parentObjectiveId : existing.parentObjectiveId;
+  if (nextParentId && parentObjectiveId === undefined && levelChanging) {
+    // Parent carried over unchanged, but the level did change — check it
+    // still fits by trying the normal assertion; detach silently on
+    // failure rather than reject the whole update or leave it invalid.
+    try {
+      await assertParentIsOneLevelAbove(client, tenantId, nextParentId, nextCascadeLevelId);
+    } catch (err) {
+      if (err instanceof ValidationError) nextParentId = null;
+      else throw err;
+    }
+  }
   if (nextParentId) {
-    await assertParentIsOneLevelAbove(client, tenantId, nextParentId, existing.cascadeLevelId);
+    await assertParentIsOneLevelAbove(client, tenantId, nextParentId, nextCascadeLevelId);
     await assertNoCascadeCycle(client, tenantId, nextParentId, objectiveId);
   }
 
   const { rows } = await client.query(
-    `UPDATE okr.objective AS o SET title = $3, parent_objective_id = $4
+    `UPDATE okr.objective AS o SET title = $3, parent_objective_id = $4, cascade_level_id = $5
      WHERE tenant_id = $1 AND id = $2
      RETURNING ${OBJECTIVE_FIELDS}`,
-    [tenantId, objectiveId, nextTitle.trim(), nextParentId ?? null]
+    [tenantId, objectiveId, nextTitle.trim(), nextParentId ?? null, nextCascadeLevelId]
   );
   return rows[0];
 }

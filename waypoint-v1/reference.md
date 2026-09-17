@@ -57,6 +57,7 @@ waypoint-v1/
 │   ├── api-lib/                    <- the real logic, never deployed directly
 │   │   ├── config.js
 │   │   ├── context/tenant.js       (Row-Level Security chokepoint)
+│   │   ├── csv.js                  (dependency-free CSV writer, shared by export features)
 │   │   ├── http/helpers.js
 │   │   ├── middleware/
 │   │   │   ├── auth.js
@@ -64,9 +65,9 @@ waypoint-v1/
 │   │   └── services/
 │   │       (auditService.js, authService.js, bootstrapService.js,
 │   │        cadenceService.js, cascadeLevelService.js, checkInService.js,
-│   │        cycleService.js, dateMath.js, db.js, errors.js, flagService.js,
-│   │        initiativeService.js, keyResultService.js, logger.js,
-│   │        objectiveService.js, okrElementConfigService.js,
+│   │        cycleService.js, dateMath.js, db.js, errors.js, exportService.js,
+│   │        flagService.js, initiativeService.js, keyResultService.js,
+│   │        logger.js, objectiveService.js, okrElementConfigService.js,
 │   │        profileService.js, reflectionService.js, reportingService.js,
 │   │        scoringRubricService.js, scoringService.js, tenantService.js,
 │   │        terminologyService.js, userService.js)
@@ -155,6 +156,15 @@ waypoint-v1/
   eligible parent already exists, and can be re-parented later via edit.
   This matches how Perdoo and ClickUp both handle goal alignment — as a
   separate linking action, not a create-time gate.
+- **A test file that imports a package directly needs it in the ROOT
+  `package.json`, not just `frontend/package.json`.** Tests run from the
+  repo root (`waypoint-v1/`), and Node/Vite resolves a bare import
+  relative to the file containing it — a service file under `frontend/`
+  correctly finds `frontend/node_modules`, but a test file under
+  `tests/` (outside `frontend/`) cannot, and needs its own copy in root
+  `node_modules`. This is why `pg` and now `jszip` are root
+  devDependencies despite no service file importing either directly —
+  something under `tests/` needs them resolvable from its own location.
 
 ## Roles
 
