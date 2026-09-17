@@ -74,7 +74,8 @@ waypoint-v1/
 │   │   └── schema.sql              <- plain SQL, applied manually via Neon's console
 │   ├── src/                        <- the React app
 │   │   ├── components/ (Avatar.jsx, DatePicker.jsx, Logo.jsx,
-│   │   │   charts/ (StatCard.jsx, StatusDonut.jsx, StatusBarChart.jsx, icons.jsx))
+│   │   │   charts/ (StatCard.jsx, StatusDonut.jsx, StatusBarChart.jsx,
+│   │   │   Sparkline.jsx, icons.jsx))
 │   │   ├── constants/avatarOptions.js
 │   │   ├── context/ (FlagContext, RoleContext, TerminologyContext, ThemeContext)
 │   │   ├── hooks/ (useFetch.js, useWindowSize.js)

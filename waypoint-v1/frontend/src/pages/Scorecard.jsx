@@ -6,6 +6,7 @@ import { reportsApi } from '../services/api.js';
 import { s, colors, STATUS_META } from '../styles/tokens.js';
 import { groupByStatus } from '../utils/statusGroups.js';
 import StatusDonut from '../components/charts/StatusDonut.jsx';
+import Sparkline from '../components/charts/Sparkline.jsx';
 
 function StatusChip({ status }) {
   const meta = STATUS_META[status] ?? { color: colors.ink500, bg: colors.ink100 };
@@ -73,6 +74,12 @@ export default function Scorecard() {
                     <div key={kr.id} style={{ padding: 10, borderRadius: 8, border: `1px solid ${colors.line}` }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                         <span style={{ fontSize: 13, color: colors.ink900, flex: '1 1 auto' }}>{kr.title}</span>
+                        {kr.confidenceTrend.length > 0 && (
+                          <Sparkline
+                            values={kr.confidenceTrend.map((c) => c.confidence)}
+                            accent={STATUS_META[kr.status]?.color ?? colors.brand600}
+                          />
+                        )}
                         <StatusChip status={kr.status} />
                       </div>
                       {kr.checkInHistory.length === 0 ? (

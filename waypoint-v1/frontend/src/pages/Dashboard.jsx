@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useRole } from '../context/RoleContext.jsx';
 import { useTerms } from '../context/TerminologyContext.jsx';
 import { useWindowSize } from '../hooks/useWindowSize.js';
-import { healthApi, objectivesApi, reportsApi } from '../services/api.js';
+import { objectivesApi, reportsApi } from '../services/api.js';
 import { s, colors } from '../styles/tokens.js';
 import { groupByStatus } from '../utils/statusGroups.js';
 import StatCard from '../components/charts/StatCard.jsx';
@@ -66,14 +66,9 @@ export default function Dashboard() {
   const { isMobile } = useWindowSize();
   const pageStyle = isMobile ? s.pageMobile : s.page;
 
-  const [health, setHealth] = useState(null);
   const [objectives, setObjectives] = useState(null);
   const [teamProgress, setTeamProgress] = useState(null);
   const [compliance, setCompliance] = useState(null);
-
-  useEffect(() => {
-    healthApi.check().then(setHealth).catch(() => setHealth(null));
-  }, []);
 
   // PlatformAdmin has no tenantId — every endpoint below 403s for them
   // (see objectives-router.js/reports-router.js), so this section is
@@ -226,7 +221,7 @@ export default function Dashboard() {
             </>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 480, marginBottom: 24 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 480 }}>
             <QuickLink to="/objectives" title={tPlural('Objective')} description={`View and create your ${tPlural('Objective').toLowerCase()} for the current Cycle.`} />
             <QuickLink to={`/reports/scorecard/${user?.id}`} title="My scorecard" description="Your current Cycle's scores and check-in history." />
             <QuickLink to="/reports/alignment-map" title="Alignment map" description="The full cascade tree, company to individual." />
@@ -236,17 +231,6 @@ export default function Dashboard() {
           </div>
         </>
       )}
-
-      <div style={s.card}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: colors.ink700, marginBottom: 8 }}>API health</div>
-        {health ? (
-          <span style={s.chip(colors.success, colors.successBg)}>
-            {health.status} — database {health.database}
-          </span>
-        ) : (
-          <span style={s.chip(colors.ink500, colors.ink100)}>Checking…</span>
-        )}
-      </div>
     </div>
   );
 }
