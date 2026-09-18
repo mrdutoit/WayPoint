@@ -5,10 +5,12 @@ vi.mock('../frontend/api-lib/middleware/auth.js', () => ({
   requireRole: (user, ...roles) => !!user && roles.includes(user.role),
 }));
 vi.mock('../frontend/api-lib/context/tenant.js', () => ({
-  withPlatformContext: (fn) => fn({ query: vi.fn() }),
-  withTenantContext: (tenantId, fn) => fn({ query: vi.fn() }),
+  withPlatformContext: vi.fn((fn) => fn({ query: vi.fn() })),
+  withTenantContext: vi.fn((tenantId, fn) => fn({ query: vi.fn() })),
 }));
-vi.mock('../frontend/api-lib/services/auditService.js', () => ({ recordAuditEvent: vi.fn() }));
+vi.mock('../frontend/api-lib/services/auditService.js', () => ({
+  recordAuditEvent: vi.fn(), listAuditEvents: vi.fn(), exportAuditEvents: vi.fn(),
+}));
 vi.mock('../frontend/api-lib/services/tenantService.js', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, listTenants: vi.fn(), getTenant: vi.fn(), createTenantWithFirstAdmin: vi.fn() };
@@ -20,9 +22,10 @@ vi.mock('../frontend/api-lib/services/exportService.js', () => ({
 }));
 
 const { getAuthenticatedUser } = await import('../frontend/api-lib/middleware/auth.js');
+const { withTenantContext, withPlatformContext } = await import('../frontend/api-lib/context/tenant.js');
 const tenantService = await import('../frontend/api-lib/services/tenantService.js');
 const exportService = await import('../frontend/api-lib/services/exportService.js');
-const { recordAuditEvent } = await import('../frontend/api-lib/services/auditService.js');
+const { recordAuditEvent, listAuditEvents, exportAuditEvents } = await import('../frontend/api-lib/services/auditService.js');
 const handler = (await import('../frontend/api/tenants-router.js')).default;
 
 function mockReq({ method, slug = [], body, query = {} }) { return { method, query: { slug, ...query }, body, headers: {} }; }
@@ -192,5 +195,135 @@ describe('tenants-router — GET /api/tenants/:id/export (FR-030)', () => {
     await handler(mockReq({ method: 'GET', slug: ['t1', 'export'] }), res);
     const call = res.setHeader.mock.calls.find(([name]) => name === 'Content-Disposition');
     expect(call[1]).toMatch(/^attachment; filename="waypoint-export-\d{4}-\d{2}-\d{2}\.json"$/);
+  });
+});
+
+describe('tenants-router — GET /api/audit-log (FR-031, resource=audit-log)', () => {
+  const PLATFORM_ADMIN = { id: 'admin-1', tenantId: null, role: 'PlatformAdmin' };
+  const TENANT_ADMIN = { id: 'ta-1', tenantId: 't1', role: 'TenantAdmin' };
+  const MANAGER = { id: 'm-1', tenantId: 't1', role: 'Manager' };
+
+  function auditReq(overrides) {
+    return mockReq({ method: 'GET', query: { resource: 'audit-log' }, ...overrides });
+  }
+
+  it('rejects a Manager (and, by the same check, an Employee) outright', async () => {
+    getAuthenticatedUser.mockReturnValue(MANAGER);
+    const res = mockRes();
+    await handler(auditReq({ slug: [] }), res);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(listAuditEvents).not.toHaveBeenCalled();
+  });
+
+  it("scopes a TenantAdmin's list to their own tenant via withTenantContext, ignoring any tenantId they pass", async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    listAuditEvents.mockResolvedValue([]);
+    const res = mockRes();
+    await handler(auditReq({ slug: [], query: { resource: 'audit-log', tenantId: 'some-other-tenant' } }), res);
+    expect(withTenantContext).toHaveBeenCalledWith('t1', expect.any(Function));
+    expect(withPlatformContext).not.toHaveBeenCalled();
+  });
+
+  it("scopes a PlatformAdmin's list to every tenant (withPlatformContext) when no tenantId filter is given", async () => {
+    getAuthenticatedUser.mockReturnValue(PLATFORM_ADMIN);
+    listAuditEvents.mockResolvedValue([]);
+    const res = mockRes();
+    await handler(auditReq({ slug: [] }), res);
+    expect(withPlatformContext).toHaveBeenCalledWith(expect.any(Function));
+    expect(withTenantContext).not.toHaveBeenCalled();
+  });
+
+  it("scopes a PlatformAdmin's list to one tenant when they do pass a tenantId filter", async () => {
+    getAuthenticatedUser.mockReturnValue(PLATFORM_ADMIN);
+    listAuditEvents.mockResolvedValue([]);
+    const res = mockRes();
+    await handler(auditReq({ slug: [], query: { resource: 'audit-log', tenantId: 't2' } }), res);
+    expect(withTenantContext).toHaveBeenCalledWith('t2', expect.any(Function));
+  });
+
+  it('passes before/limit through to listAuditEvents', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    listAuditEvents.mockResolvedValue([]);
+    await handler(auditReq({ slug: [], query: { resource: 'audit-log', before: '2026-09-01T00:00:00.000Z', limit: '20' } }), mockRes());
+    expect(listAuditEvents).toHaveBeenCalledWith(expect.anything(), { before: '2026-09-01T00:00:00.000Z', limit: 20 });
+  });
+
+  it('returns nextBefore as the oldest row\'s timestamp when a full page comes back', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    const rows = Array.from({ length: 50 }, (_, i) => ({ id: `e${i}`, timestamp: `2026-09-${String(17 - i).padStart(2, '0')}` }));
+    listAuditEvents.mockResolvedValue(rows);
+    const res = mockRes();
+    await handler(auditReq({ slug: [] }), res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ nextBefore: rows[49].timestamp }));
+  });
+
+  it('returns nextBefore null when the page is short (no more pages)', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    listAuditEvents.mockResolvedValue([{ id: 'e1', timestamp: '2026-09-17' }]);
+    const res = mockRes();
+    await handler(auditReq({ slug: [] }), res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ nextBefore: null }));
+  });
+});
+
+describe('tenants-router — GET /api/audit-log/export (FR-031, resource=audit-log)', () => {
+  const PLATFORM_ADMIN = { id: 'admin-1', tenantId: null, role: 'PlatformAdmin' };
+  const TENANT_ADMIN = { id: 'ta-1', tenantId: 't1', role: 'TenantAdmin' };
+
+  function auditExportReq(overrides) {
+    return mockReq({ method: 'GET', slug: ['export'], query: { resource: 'audit-log' }, ...overrides });
+  }
+
+  it('rejects a role with neither TenantAdmin nor PlatformAdmin', async () => {
+    getAuthenticatedUser.mockReturnValue({ id: 'e-1', tenantId: 't1', role: 'Employee' });
+    const res = mockRes();
+    await handler(auditExportReq({}), res);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(exportAuditEvents).not.toHaveBeenCalled();
+  });
+
+  it('passes startDate/endDate through to exportAuditEvents', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    exportAuditEvents.mockResolvedValue([]);
+    await handler(auditExportReq({ query: { resource: 'audit-log', startDate: '2026-09-01', endDate: '2026-09-17' } }), mockRes());
+    expect(exportAuditEvents).toHaveBeenCalledWith(expect.anything(), { startDate: '2026-09-01', endDate: '2026-09-17' });
+  });
+
+  it('records an export audit event scoped to the TenantAdmin\'s own tenant', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    exportAuditEvents.mockResolvedValue([]);
+    await handler(auditExportReq({}), mockRes());
+    expect(recordAuditEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ tenantId: 't1', actorId: 'ta-1', action: 'auditLog.exported' })
+    );
+  });
+
+  it('records the export audit event with tenantId null for a true cross-tenant PlatformAdmin export (no single tenant to attribute it to)', async () => {
+    getAuthenticatedUser.mockReturnValue(PLATFORM_ADMIN);
+    exportAuditEvents.mockResolvedValue([]);
+    await handler(auditExportReq({}), mockRes());
+    expect(withPlatformContext).toHaveBeenCalled();
+    expect(recordAuditEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ tenantId: null, actorId: 'admin-1' })
+    );
+  });
+
+  it('sends CSV with the right content type for format=csv', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    exportAuditEvents.mockResolvedValue([{ id: 'e1', action: 'objective.updated', timestamp: '2026-09-17T00:00:00.000Z' }]);
+    const res = mockRes();
+    await handler(auditExportReq({ query: { resource: 'audit-log', format: 'csv' } }), res);
+    expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv');
+    expect(res.send).toHaveBeenCalledWith(expect.stringContaining('objective.updated'));
+  });
+
+  it('defaults to JSON for an unrecognised format', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    exportAuditEvents.mockResolvedValue([]);
+    const res = mockRes();
+    await handler(auditExportReq({ query: { resource: 'audit-log', format: 'xml' } }), res);
+    expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'application/json');
   });
 });

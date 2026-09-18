@@ -52,7 +52,10 @@ waypoint-v1/
 │   │   ├── objectives-router.js    (Objectives, Key Result creation, Reflections)
 │   │   ├── reports-router.js       (scorecard, team-progress, alignment-map, checkin-compliance)
 │   │   ├── settings-router.js      (cascade levels, terminology, rubric, cadences, OKR elements)
-│   │   ├── tenants-router.js       (tenant provisioning, billing mode)
+│   │   ├── tenants-router.js       (tenant provisioning, billing mode, data export;
+│   │   │                            also serves /api/audit-log/* via a
+│   │   │                            ?resource=audit-log rewrite — see vercel.json —
+│   │   │                            to stay under Vercel's 12-function Hobby ceiling)
 │   │   └── users-router.js         (user admin, invites, role changes)
 │   ├── api-lib/                    <- the real logic, never deployed directly
 │   │   ├── config.js
@@ -81,7 +84,7 @@ waypoint-v1/
 │   │   ├── context/ (FlagContext, RoleContext, TerminologyContext, ThemeContext)
 │   │   ├── hooks/ (useFetch.js, useWindowSize.js)
 │   │   ├── pages/
-│   │   │   (AlignmentMap.jsx, ChangePassword.jsx, CheckinCompliance.jsx,
+│   │   │   (AlignmentMap.jsx, AuditLog.jsx, ChangePassword.jsx, CheckinCompliance.jsx,
 │   │   │    Dashboard.jsx, FeatureFlags.jsx, KeyResultDetail.jsx, Login.jsx,
 │   │   │    ObjectiveDetail.jsx, Objectives.jsx, OkrSettings.jsx, Reports.jsx,
 │   │   │    Scorecard.jsx, Settings.jsx, TeamProgress.jsx, TenantsAdmin.jsx,

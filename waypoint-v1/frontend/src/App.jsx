@@ -19,6 +19,7 @@ import CheckinCompliance from './pages/CheckinCompliance.jsx';
 import OkrSettings from './pages/OkrSettings.jsx';
 import TenantsAdmin from './pages/TenantsAdmin.jsx';
 import UsersAdmin from './pages/UsersAdmin.jsx';
+import AuditLog from './pages/AuditLog.jsx';
 import Settings from './pages/Settings.jsx';
 import { Logo } from './components/Logo.jsx';
 import { Avatar } from './components/Avatar.jsx';
@@ -59,6 +60,11 @@ function Shell({ children }) {
                     Feature Flags
                   </Link>
                 </>
+              )}
+              {(isTenantAdmin || isPlatformAdmin) && (
+                <Link to="/audit-log" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
+                  Audit Log
+                </Link>
               )}
             </>
           )}
@@ -211,6 +217,16 @@ export default function App() {
                 <RequireAuth>
                   <RequireRole roles={['PlatformAdmin']}>
                     <Shell><TenantsAdmin /></Shell>
+                  </RequireRole>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/audit-log"
+              element={
+                <RequireAuth>
+                  <RequireRole roles={['TenantAdmin', 'PlatformAdmin']}>
+                    <Shell><AuditLog /></Shell>
                   </RequireRole>
                 </RequireAuth>
               }

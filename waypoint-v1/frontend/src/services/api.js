@@ -34,6 +34,30 @@ async function request(path, options = {}) {
   return body;
 }
 
+// Shared by any endpoint that returns a real file (an attachment header)
+// rather than JSON to parse — bypasses request() entirely and triggers
+// an actual browser download instead of returning data to the caller.
+async function downloadFile(path, fallbackFilename) {
+  const response = await fetch(`/api${path}`, {
+    headers: _token ? { Authorization: `Bearer ${_token}` } : {},
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(response.status, body?.error ?? 'Export failed');
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? fallbackFilename;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const authApi = {
   login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   requestPasswordReset: (email) => request('/auth/reset-password/request', { method: 'POST', body: JSON.stringify({ email }) }),
@@ -125,30 +149,8 @@ export const tenantsApi = {
   get: (id) => request(`/tenants/${id}`),
   create: ({ name, region, adminEmail, adminFirstName, adminLastName, adminPassword }) =>
     request('/tenants', { method: 'POST', body: JSON.stringify({ name, region, adminEmail, adminFirstName, adminLastName, adminPassword }) }),
-  // Bypasses request() — the response is a file (CSV zip or raw JSON
-  // text with an attachment header), not something to JSON.parse.
-  // Triggers a normal browser download rather than returning data to
-  // the caller, since that's what "Export" means here.
-  export: async (tenantId, format) => {
-    const response = await fetch(`/api/tenants/${tenantId}/export?format=${format}`, {
-      headers: _token ? { Authorization: `Bearer ${_token}` } : {},
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => null);
-      throw new ApiError(response.status, body?.error ?? 'Export failed');
-    }
-    const blob = await response.blob();
-    const disposition = response.headers.get('Content-Disposition') ?? '';
-    const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? `waypoint-export.${format === 'csv' ? 'zip' : 'json'}`;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  },
+  export: (tenantId, format) =>
+    downloadFile(`/tenants/${tenantId}/export?format=${format}`, `waypoint-export.${format === 'csv' ? 'zip' : 'json'}`),
 };
 
 export const usersApi = {
@@ -171,4 +173,26 @@ export const reportsApi = {
   teamProgress: () => request('/reports/team-progress'),
   alignmentMap: () => request('/reports/alignment-map'),
   checkinCompliance: () => request('/reports/checkin-compliance'),
+};
+
+export const auditLogApi = {
+  // before: a timestamp cursor (the oldest row's timestamp from the
+  // previous page) for keyset pagination. tenantId only matters for
+  // PlatformAdmin — TenantAdmin is always forced to their own on the
+  // backend regardless of what's passed here.
+  list: ({ before, limit, tenantId } = {}) => {
+    const params = new URLSearchParams();
+    if (before) params.set('before', before);
+    if (limit) params.set('limit', limit);
+    if (tenantId) params.set('tenantId', tenantId);
+    const qs = params.toString();
+    return request(`/audit-log${qs ? `?${qs}` : ''}`);
+  },
+  export: ({ format, startDate, endDate, tenantId } = {}) => {
+    const params = new URLSearchParams({ format: format === 'csv' ? 'csv' : 'json' });
+    if (startDate) params.set('startDate', startDate);
+    if (endDate) params.set('endDate', endDate);
+    if (tenantId) params.set('tenantId', tenantId);
+    return downloadFile(`/audit-log/export?${params.toString()}`, `waypoint-audit-log.${format === 'csv' ? 'csv' : 'json'}`);
+  },
 };
