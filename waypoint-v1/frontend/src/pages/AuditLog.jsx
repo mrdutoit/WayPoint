@@ -133,13 +133,14 @@ export default function AuditLog() {
       {events && events.length > 0 && (
         <>
           <div style={s.tableCard}>
-            <table style={{ ...s.table, minWidth: 560 }}>
+            <table style={{ ...s.table, minWidth: 720 }}>
               <thead>
                 <tr>
                   <th style={s.th}>Timestamp</th>
                   <th style={s.th}>Actor</th>
                   <th style={s.th}>Action</th>
                   <th style={s.th}>Entity</th>
+                  <th style={s.th}>Changes</th>
                   {isPlatformAdmin && <th style={s.th}>Tenant</th>}
                 </tr>
               </thead>
@@ -149,7 +150,28 @@ export default function AuditLog() {
                     <td style={s.td}>{new Date(e.timestamp).toLocaleString()}</td>
                     <td style={s.td}>{e.actorFirstName ? `${e.actorFirstName} ${e.actorLastName}` : '—'}</td>
                     <td style={s.td}>{e.action}</td>
-                    <td style={s.td}>{e.entityType}{e.entityId ? ` (${e.entityId})` : ''}</td>
+                    <td style={s.td}>
+                      {e.entityType}
+                      {/* entityLabel is null for events recorded before 2026-09-18 —
+                          older rows fall back to the raw id rather than showing nothing */}
+                      {e.entityLabel ? `: ${e.entityLabel}` : (e.entityId ? ` (${e.entityId})` : '')}
+                    </td>
+                    <td style={s.td}>
+                      {e.changes && e.changes.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {e.changes.map((c) => (
+                            <div key={c.field} style={{ fontSize: 12 }}>
+                              <span style={{ color: colors.ink500 }}>{c.field}:</span>{' '}
+                              <span style={{ color: colors.ink700 }}>{c.from ?? '—'}</span>
+                              <span style={{ color: colors.ink400 }}> → </span>
+                              <span style={{ color: colors.ink900, fontWeight: 600 }}>{c.to ?? '—'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ color: colors.ink400 }}>—</span>
+                      )}
+                    </td>
                     {isPlatformAdmin && <td style={s.td}>{e.tenantName ?? '—'}</td>}
                   </tr>
                 ))}

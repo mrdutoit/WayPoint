@@ -4,7 +4,7 @@ import { withTenantContext } from '../api-lib/context/tenant.js';
 import { updateKeyResult, getKeyResultById } from '../api-lib/services/keyResultService.js';
 import { listInitiativesForKeyResult, createInitiative, updateInitiative } from '../api-lib/services/initiativeService.js';
 import { listCheckInsForKeyResult, createCheckIn } from '../api-lib/services/checkInService.js';
-import { recordAuditEvent } from '../api-lib/services/auditService.js';
+import { recordAuditEvent, diffFields } from '../api-lib/services/auditService.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
 
 // No CORS opening — same-origin frontend calls only.
@@ -60,10 +60,16 @@ async function updateInitiativeAction(req, res, user, initiativeId) {
   const { title, status, dueDate } = req.body ?? {};
 
   const initiative = await withTenantContext(user.tenantId, async (client) => {
+    const { rows } = await client.query(
+      `SELECT title, status, due_date AS "dueDate" FROM okr.initiative WHERE tenant_id = $1 AND id = $2`,
+      [user.tenantId, initiativeId]
+    );
+    const before = rows[0] ?? {};
     const updated = await updateInitiative(client, user.tenantId, user, initiativeId, { title, status, dueDate });
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'initiative.updated', entityType: 'Initiative', entityId: updated.id,
+      action: 'initiative.updated', entityType: 'Initiative', entityId: updated.id, entityLabel: updated.title,
+      changes: diffFields(before, updated, ['title', 'status', 'dueDate']),
     });
     return updated;
   });
@@ -81,10 +87,12 @@ async function updateAction(req, res, user, keyResultId) {
   const { title, weighting } = req.body ?? {};
 
   const keyResult = await withTenantContext(user.tenantId, async (client) => {
+    const before = await getKeyResultById(client, user.tenantId, user, keyResultId);
     const updated = await updateKeyResult(client, user.tenantId, user, keyResultId, { title, weighting });
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'keyResult.updated', entityType: 'KeyResult', entityId: updated.id,
+      action: 'keyResult.updated', entityType: 'KeyResult', entityId: updated.id, entityLabel: updated.title,
+      changes: diffFields(before, updated, ['title', 'weighting']),
     });
     return updated;
   });
@@ -99,7 +107,7 @@ async function createInitiativeAction(req, res, user, keyResultId) {
     const created = await createInitiative(client, user.tenantId, user, keyResultId, { title, ownerId, dueDate });
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'initiative.created', entityType: 'Initiative', entityId: created.id,
+      action: 'initiative.created', entityType: 'Initiative', entityId: created.id, entityLabel: created.title,
     });
     return created;
   });
@@ -121,6 +129,7 @@ async function createCheckInAction(req, res, user, keyResultId) {
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
       action: 'checkIn.created', entityType: 'CheckIn', entityId: created.id,
+      entityLabel: `Confidence ${created.confidence}/5`,
     });
     return created;
   });

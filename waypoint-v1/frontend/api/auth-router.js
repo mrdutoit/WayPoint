@@ -140,7 +140,7 @@ async function loginAction(req, res) {
     );
     await recordAuditEvent(client, {
       tenantId: user.tenant_id, actorId: user.id,
-      action: 'user.login', entityType: 'UserAccount', entityId: user.id,
+      action: 'user.login', entityType: 'UserAccount', entityId: user.id, entityLabel: email,
     });
   });
 
@@ -193,7 +193,7 @@ async function confirmResetAction(req, res) {
   const tokenHash = createHash('sha256').update(token).digest('hex');
   const user = await withPlatformContext((client) =>
     client.query(
-      `SELECT id, tenant_id FROM okr.user_account
+      `SELECT id, tenant_id, email FROM okr.user_account
        WHERE reset_token_hash = $1 AND reset_token_expiry > now()`,
       [tokenHash]
     ).then((r) => r.rows[0] ?? null)
@@ -217,7 +217,7 @@ async function confirmResetAction(req, res) {
     );
     await recordAuditEvent(client, {
       tenantId: user.tenant_id, actorId: user.id,
-      action: 'user.password_reset', entityType: 'UserAccount', entityId: user.id,
+      action: 'user.password_reset', entityType: 'UserAccount', entityId: user.id, entityLabel: user.email,
     });
   });
 
@@ -260,13 +260,13 @@ async function changePasswordAction(req, res) {
     ? (fn) => withTenantContext(user.tenantId, fn)
     : (fn) => withPlatformContext(fn);
 
-  const currentHash = await runInContext((client) =>
-    client.query(`SELECT password_hash FROM okr.user_account WHERE id = $1`, [user.id])
-      .then((r) => r.rows[0]?.password_hash ?? null)
+  const account = await runInContext((client) =>
+    client.query(`SELECT password_hash, email FROM okr.user_account WHERE id = $1`, [user.id])
+      .then((r) => r.rows[0] ?? null)
   );
-  if (!currentHash) return res.status(404).json({ error: 'Account not found' });
+  if (!account) return res.status(404).json({ error: 'Account not found' });
 
-  const valid = await verifyPassword(currentHash, currentPassword);
+  const valid = await verifyPassword(account.password_hash, currentPassword);
   if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
 
   const newHash = await hashPassword(newPassword);
@@ -279,7 +279,7 @@ async function changePasswordAction(req, res) {
     );
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'user.password_changed', entityType: 'UserAccount', entityId: user.id,
+      action: 'user.password_changed', entityType: 'UserAccount', entityId: user.id, entityLabel: account.email,
     });
   });
 

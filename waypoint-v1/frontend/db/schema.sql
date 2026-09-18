@@ -87,13 +87,17 @@ CREATE UNIQUE INDEX feature_flag_platform_key_unique ON okr.feature_flag (flag_k
 
 -- ---------- audit_log ----------
 CREATE TABLE okr.audit_log (
-  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id    uuid REFERENCES okr.tenant(id) ON DELETE SET NULL, -- nullable: platform-level actions (e.g. tenant creation) have no tenant yet
-  actor_id     uuid REFERENCES okr.user_account(id) ON DELETE SET NULL,
-  action       text NOT NULL,
-  entity_type  text NOT NULL,
-  entity_id    text,
-  "timestamp"  timestamptz NOT NULL DEFAULT now()
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id     uuid REFERENCES okr.tenant(id) ON DELETE SET NULL, -- nullable: platform-level actions (e.g. tenant creation) have no tenant yet
+  actor_id      uuid REFERENCES okr.user_account(id) ON DELETE SET NULL,
+  action        text NOT NULL,
+  entity_type   text NOT NULL,
+  entity_id     text,
+  entity_label  text, -- human-readable name AT THE TIME of the action (e.g. an Objective's title) —
+                       -- a snapshot, not a live join, so a later rename or delete doesn't erase it
+  changes       jsonb, -- [{field, from, to}] for update-type actions; null where there's no natural
+                       -- before/after (login, export, create) — added 2026-09-18, FR-007 follow-up
+  "timestamp"   timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ON okr.audit_log (tenant_id, "timestamp");
 

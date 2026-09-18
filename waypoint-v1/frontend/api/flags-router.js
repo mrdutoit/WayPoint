@@ -1,7 +1,7 @@
 import { getAuthenticatedUser, requireRole } from '../api-lib/middleware/auth.js';
 import { withTenantContext, withPlatformContext } from '../api-lib/context/tenant.js';
 import { getFlagsForTenant, setTenantFlag } from '../api-lib/services/flagService.js';
-import { recordAuditEvent } from '../api-lib/services/auditService.js';
+import { recordAuditEvent, diffFields } from '../api-lib/services/auditService.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
 
 // No CORS opening on this file — called only by the real frontend, same
@@ -47,10 +47,12 @@ async function updateFlag(req, res, user, flagKey) {
     : (fn) => withPlatformContext(fn);
 
   await runInContext(async (client) => {
+    const before = await getFlagsForTenant(client, targetTenantId);
     await setTenantFlag(client, { tenantId: targetTenantId, flagKey, valueType, value });
     await recordAuditEvent(client, {
       tenantId: targetTenantId, actorId: user.id,
-      action: 'flag.updated', entityType: 'FeatureFlag', entityId: flagKey,
+      action: 'flag.updated', entityType: 'FeatureFlag', entityId: flagKey, entityLabel: flagKey,
+      changes: diffFields({ value: before[flagKey] }, { value }, ['value']),
     });
   });
 

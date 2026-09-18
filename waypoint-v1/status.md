@@ -5,7 +5,7 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** 2026-09-17. Originally reconstructed 2026-09-16 directly
+**Last updated:** 2026-09-18. Originally reconstructed 2026-09-16 directly
 from the GitHub repo (`mrdutoit/WayPoint`, `waypoint-v1`) rather than from a
 session log — the previous version of this file said Stage 4 hadn't
 started, which the repo contradicted (Modules 1–3 and part of Module 6
@@ -85,8 +85,10 @@ equivalent to "the module was reviewed and closed out."
 - Data export (FR-030) — JSON or a CSV-per-entity zip, Tenant Admin for
   their own tenant, Platform Admin for any tenant (see 2026-09-17 below)
 - Audit log — list (paginated) and export (JSON/CSV, date-range),
-  Tenant Admin own tenant, Platform Admin any/all tenants, new
-  `AuditLog.jsx` page (see 2026-09-17 below)
+  Tenant Administrator own tenant, Platform Administrator any/all
+  tenants, `AuditLog.jsx` page. As of 2026-09-18, every event also
+  carries a human-readable entity label and, for updates, a field-level
+  before/after diff (see below) — not just the entity type and a UUID.
 - Health check endpoint
 - Platform Administrator bootstrap, on-demand, idempotent
 
@@ -254,6 +256,67 @@ that trade-off read is wrong.
 - `npm run build` and the full `npm test` (393, up from 347 at the start
   of today) both pass.
 
+## 2026-09-18: audit log detail — entity labels and field-level diffs
+
+Mark's ask, prompted by looking at the real deployed Audit Log: the
+Entity column showed a bare UUID ("Objective (124edc9f-...)"), useless
+without knowing what that Objective was called, and no indication of
+*what* changed on an update — referencing MedBroker's audit log as the
+comparison point. I don't have visibility into MedBroker's specific
+implementation from this project's session (project-scoped memory), so
+this is an independently-designed equivalent, not a copy — flag it if
+it doesn't match what Mark had in mind.
+
+- **Schema**: `audit_log` gained `entity_label` (text) and `changes`
+  (jsonb, `[{field, from, to}]`). Both are snapshots taken *at the time
+  of the action* — an Objective's title here is what it was called when
+  the action happened, immune to a later rename or delete, deliberately
+  not a live join back to the entity table. Migration written to
+  `db/migrations/2026-09-18-audit-log-detail.sql` (apply once against
+  Neon, then delete per this project's convention) and folded into
+  `schema.sql` already.
+- **`diffFields(before, after, fields)`** added to `auditService.js` —
+  one shared helper so "what counts as changed" is decided once, not
+  wherever each of the ~27 call sites happened to need it. Caught a real
+  bug before it shipped: a naive `!==` comparison calls two different
+  array/object instances "changed" even when their contents are
+  identical (e.g. cascade level labels), which would have made *every*
+  save of an unrelated field show a false-positive diff. Fixed to
+  compare by serialised value; covered by dedicated tests.
+- **All ~27 `recordAuditEvent` call sites updated** — every one across
+  `auth-router.js`, `flags-router.js`, `key-results-router.js`,
+  `objectives-router.js`, `settings-router.js`, `tenants-router.js`, and
+  `users-router.js` now passes a human-readable `entityLabel`. Update
+  actions (Objective, Key Result, Initiative, feature flags, cascade
+  levels, scoring rubric, cadences, OKR element toggles, terminology,
+  user role, user manager) additionally pass a `changes` diff, fetching
+  a cheap "before" read where the service function doesn't already
+  expose one — a known, accepted inefficiency (one extra query on an
+  admin/settings action, not a hot path) rather than changing tested
+  service internals to return before-state too. `user.manager_changed`
+  specifically resolves manager IDs to real names for the diff, not raw
+  UUIDs — showing a UUID there would have defeated the entire point of
+  this feature for exactly the field most worth showing a name for.
+- **CSV/JSON export and the `AuditLog.jsx` table both updated** to show
+  the label and a readable "field: from → to" changes list — CSV
+  flattens the `changes` array into one string per row (a raw array
+  would render as `[object Object]` in a spreadsheet).
+- Real breakage caught by actually running the suite, not assumed
+  fixed: extending ~27 call sites broke **17 existing tests** across 4
+  files, for two distinct reasons — (1) five router files now import
+  `diffFields`, but those test files' `auditService.js` mocks only
+  stubbed `recordAuditEvent`, so the import came back `undefined` and
+  calling it threw; (2) two test files mock `withTenantContext` with a
+  bare `client.query` with no default return value, and the new
+  "before" fetches call that raw client directly — destructuring `rows`
+  off an unmocked call's `undefined` result threw. Both fixed at the
+  mock level, not by weakening what the code does. 14 new tests added
+  specifically for the new logic (`diffFields`'s edge cases including
+  the array-comparison bug, `recordAuditEvent`'s new fields, the CSV
+  flattening, and two representative router-level integrations —
+  Objective title changes and the manager-name resolution).
+- `npm run build` and the full `npm test` (407, up from 393) both pass.
+
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
 Raised when comparing WayPoint against Perdoo's UI (screenshots reviewed
@@ -287,12 +350,14 @@ silent addition, before being built:
 
 ## Next immediate step
 
-Confirmed order: the three chart candidates, in order — calendar
-heatmap, weighting treemap, cascade sunburst (see 2026-09-17 above).
-Also still open: confirm the whole 2026-09-17 delivery looks right in a
-real browser and that both exports (data, audit log) actually work end
-to end against live Neon/Vercel — everything here was verified by
-`npm run build`/`npm test` passing, not by a real deploy.
+Apply `db/migrations/2026-09-18-audit-log-detail.sql` against Neon (then
+delete it from the repo per convention) — nothing shows entity labels
+or diffs until that column exists live. After that, back to the three
+chart candidates in order: calendar heatmap, weighting treemap, cascade
+sunburst (see 2026-09-17 above). Also still open: confirm the whole
+2026-09-17/18 delivery looks right in a real browser — everything here
+was verified by `npm run build`/`npm test` passing, not by a real
+deploy.
 
 ## Open items, not yet resolved
 

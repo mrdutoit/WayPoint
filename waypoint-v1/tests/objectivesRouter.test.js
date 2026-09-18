@@ -8,7 +8,10 @@ vi.mock('../frontend/api-lib/context/tenant.js', () => ({
   withTenantContext: (tenantId, fn) => fn({ query: vi.fn() }),
   withPlatformContext: (fn) => fn({ query: vi.fn() }),
 }));
-vi.mock('../frontend/api-lib/services/auditService.js', () => ({ recordAuditEvent: vi.fn() }));
+vi.mock('../frontend/api-lib/services/auditService.js', () => ({
+  recordAuditEvent: vi.fn(),
+  diffFields: vi.fn((before, after, fields) => fields.filter((f) => before?.[f] !== after?.[f]).map((f) => ({ field: f, from: before?.[f] ?? null, to: after?.[f] ?? null }))),
+}));
 vi.mock('../frontend/api-lib/services/objectiveService.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -29,6 +32,7 @@ vi.mock('../frontend/api-lib/services/reflectionService.js', () => ({
 }));
 
 const { getAuthenticatedUser } = await import('../frontend/api-lib/middleware/auth.js');
+const { recordAuditEvent } = await import('../frontend/api-lib/services/auditService.js');
 const objectiveService = await import('../frontend/api-lib/services/objectiveService.js');
 const keyResultService = await import('../frontend/api-lib/services/keyResultService.js');
 const reflectionService = await import('../frontend/api-lib/services/reflectionService.js');
@@ -145,6 +149,24 @@ describe('objectives-router — PATCH /api/objectives/:id never accepts status (
     await handler(mockReq({ method: 'PATCH', slug: ['obj-1'], body: { cascadeLevelId: 'cl-new' } }), res);
     const callArgs = objectiveService.updateObjective.mock.calls[0];
     expect(callArgs[4]).toEqual({ title: undefined, parentObjectiveId: undefined, cascadeLevelId: 'cl-new' });
+  });
+
+  it('records a title change as a readable diff, labelled with the new title (2026-09-18 detail work)', async () => {
+    getAuthenticatedUser.mockReturnValue(EMPLOYEE);
+    objectiveService.getObjectiveForCaller.mockResolvedValue({
+      id: 'obj-1', title: 'Grow revenue', cascadeLevelId: 'cl-1', parentObjectiveId: null,
+    });
+    objectiveService.updateObjective.mockResolvedValue({
+      id: 'obj-1', title: 'Grow net revenue by 20%', cascadeLevelId: 'cl-1', parentObjectiveId: null,
+    });
+    await handler(mockReq({ method: 'PATCH', slug: ['obj-1'], body: { title: 'Grow net revenue by 20%' } }), mockRes());
+    expect(recordAuditEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        entityLabel: 'Grow net revenue by 20%',
+        changes: [{ field: 'title', from: 'Grow revenue', to: 'Grow net revenue by 20%' }],
+      })
+    );
   });
 });
 

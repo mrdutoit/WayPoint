@@ -109,6 +109,7 @@ async function auditExportAction(req, res, user) {
     await recordAuditEvent(client, {
       tenantId: exportTenantId, actorId: user.id,
       action: 'auditLog.exported', entityType: 'AuditLog', entityId: null,
+      entityLabel: startDate || endDate ? `${startDate || '…'} to ${endDate || '…'}` : 'Full history',
     });
     return result;
   }
@@ -119,9 +120,16 @@ async function auditExportAction(req, res, user) {
 
   const stamp = new Date().toISOString().slice(0, 10);
   if (format === 'csv') {
+    // rowsToCsv stringifies each value as-is; an array of {field,from,to}
+    // would come out as "[object Object],[object Object]" — flatten it
+    // to a readable "field: from → to; field2: ..." string first.
+    const rowsWithFormattedChanges = events.map((e) => ({
+      ...e,
+      changes: (e.changes ?? []).map((c) => `${c.field}: ${c.from ?? '—'} → ${c.to ?? '—'}`).join('; '),
+    }));
     const csv = rowsToCsv(
-      ['id', 'tenantId', 'tenantName', 'actorId', 'actorFirstName', 'actorLastName', 'action', 'entityType', 'entityId', 'timestamp'],
-      events
+      ['id', 'tenantId', 'tenantName', 'actorId', 'actorFirstName', 'actorLastName', 'action', 'entityType', 'entityId', 'entityLabel', 'changes', 'timestamp'],
+      rowsWithFormattedChanges
     );
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="waypoint-audit-log-${stamp}.csv"`);
@@ -166,9 +174,10 @@ async function exportAction(req, res, user, tenantId) {
   // needs nor wants for a request that already names exactly one tenant).
   const data = await withTenantContext(tenantId, async (client) => {
     const result = await exportTenantData(client, tenantId);
+    const tenant = await getTenant(client, tenantId);
     await recordAuditEvent(client, {
       tenantId, actorId: user.id,
-      action: 'tenant.exported', entityType: 'Tenant', entityId: tenantId,
+      action: 'tenant.exported', entityType: 'Tenant', entityId: tenantId, entityLabel: tenant.name,
     });
     return result;
   });
@@ -202,11 +211,11 @@ async function createAction(req, res, user) {
       );
       await recordAuditEvent(client, {
         tenantId: created.tenant.id, actorId: user.id,
-        action: 'tenant.created', entityType: 'Tenant', entityId: created.tenant.id,
+        action: 'tenant.created', entityType: 'Tenant', entityId: created.tenant.id, entityLabel: created.tenant.name,
       });
       await recordAuditEvent(client, {
         tenantId: created.tenant.id, actorId: user.id,
-        action: 'user.invited', entityType: 'UserAccount', entityId: created.tenantAdmin.id,
+        action: 'user.invited', entityType: 'UserAccount', entityId: created.tenantAdmin.id, entityLabel: created.tenantAdmin.email,
       });
       return created;
     });

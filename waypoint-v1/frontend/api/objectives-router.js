@@ -6,7 +6,7 @@ import {
 } from '../api-lib/services/objectiveService.js';
 import { listKeyResultsForObjective, createKeyResult } from '../api-lib/services/keyResultService.js';
 import { listReflectionsForObjective, createReflection } from '../api-lib/services/reflectionService.js';
-import { recordAuditEvent } from '../api-lib/services/auditService.js';
+import { recordAuditEvent, diffFields } from '../api-lib/services/auditService.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
 
 // No CORS opening — same-origin frontend calls only.
@@ -64,7 +64,7 @@ async function createAction(req, res, user) {
     const created = await createObjective(client, user.tenantId, user, { title, cascadeLevelId, parentObjectiveId, ownerId });
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'objective.created', entityType: 'Objective', entityId: created.id,
+      action: 'objective.created', entityType: 'Objective', entityId: created.id, entityLabel: created.title,
     });
     return created;
   });
@@ -76,10 +76,12 @@ async function updateAction(req, res, user, objectiveId) {
   const { title, parentObjectiveId, cascadeLevelId } = req.body ?? {};
 
   const objective = await withTenantContext(user.tenantId, async (client) => {
+    const before = await getObjectiveForCaller(client, user.tenantId, objectiveId, user);
     const updated = await updateObjective(client, user.tenantId, user, objectiveId, { title, parentObjectiveId, cascadeLevelId });
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'objective.updated', entityType: 'Objective', entityId: updated.id,
+      action: 'objective.updated', entityType: 'Objective', entityId: updated.id, entityLabel: updated.title,
+      changes: diffFields(before, updated, ['title', 'cascadeLevelId', 'parentObjectiveId']),
     });
     return updated;
   });
@@ -94,7 +96,7 @@ async function createKeyResultAction(req, res, user, objectiveId) {
     const created = await createKeyResult(client, user.tenantId, user, objectiveId, { title, weighting, rubricId });
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'keyResult.created', entityType: 'KeyResult', entityId: created.id,
+      action: 'keyResult.created', entityType: 'KeyResult', entityId: created.id, entityLabel: created.title,
     });
     return created;
   });
@@ -110,6 +112,7 @@ async function createReflectionAction(req, res, user, objectiveId) {
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
       action: 'reflection.created', entityType: 'Reflection', entityId: created.id,
+      entityLabel: created.content.length > 60 ? `${created.content.slice(0, 60)}…` : created.content,
     });
     return created;
   });

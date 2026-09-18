@@ -5,13 +5,48 @@ import { randomUUID } from 'crypto';
  * called from inside an existing withTenantContext/withPlatformContext
  * transaction so the write shares the same RLS session context and the
  * same commit/rollback boundary as the action it is recording.
+ *
+ * entityLabel and changes (added 2026-09-18) are both optional and both
+ * snapshots taken AT THE TIME of the action, not looked up later — an
+ * Objective's title here is what it was called when it happened, even
+ * if it's since been renamed or deleted. changes is an array of
+ * {field, from, to}, built by diffFields below; actions with no natural
+ * before/after (login, export, create) simply omit it.
  */
 export async function recordAuditEvent(client, entry) {
   await client.query(
-    `INSERT INTO okr.audit_log (id, tenant_id, actor_id, action, entity_type, entity_id, "timestamp")
-     VALUES ($1, $2, $3, $4, $5, $6, now())`,
-    [randomUUID(), entry.tenantId, entry.actorId, entry.action, entry.entityType, entry.entityId ?? null]
+    `INSERT INTO okr.audit_log (id, tenant_id, actor_id, action, entity_type, entity_id, entity_label, changes, "timestamp")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())`,
+    [
+      randomUUID(), entry.tenantId, entry.actorId, entry.action, entry.entityType, entry.entityId ?? null,
+      entry.entityLabel ?? null, entry.changes ? JSON.stringify(entry.changes) : null,
+    ]
   );
+}
+
+/**
+ * Compares `before` and `after` across `fields`, returning only the
+ * fields that actually differ, as [{field, from, to}]. Shared by every
+ * router that records an `.updated` audit event, so "what counts as
+ * changed" (a strict !== after normalising undefined/null) is decided
+ * once, not 11 times slightly differently. Pass the exact field list an
+ * endpoint actually accepts — comparing fields nobody could have changed
+ * just adds noise, not accuracy.
+ */
+export function diffFields(before, after, fields) {
+  const changes = [];
+  for (const field of fields) {
+    const from = before?.[field] ?? null;
+    const to = after?.[field] ?? null;
+    // Objects/arrays (e.g. cascade level labels) compare by reference
+    // with !==, which would call every field "changed" even when
+    // identical — compare their serialised form instead, but still
+    // store (and let the caller display) the real values.
+    const fromKey = from !== null && typeof from === 'object' ? JSON.stringify(from) : from;
+    const toKey = to !== null && typeof to === 'object' ? JSON.stringify(to) : to;
+    if (fromKey !== toKey) changes.push({ field, from, to });
+  }
+  return changes;
 }
 
 /**
@@ -30,7 +65,8 @@ export async function recordAuditEvent(client, entry) {
  */
 const AUDIT_LOG_FIELDS = `
   al.id, al.tenant_id AS "tenantId", al.actor_id AS "actorId", al.action,
-  al.entity_type AS "entityType", al.entity_id AS "entityId", al."timestamp",
+  al.entity_type AS "entityType", al.entity_id AS "entityId",
+  al.entity_label AS "entityLabel", al.changes, al."timestamp",
   actor.first_name AS "actorFirstName", actor.last_name AS "actorLastName",
   t.name AS "tenantName"
 `;

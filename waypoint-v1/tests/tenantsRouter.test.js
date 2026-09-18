@@ -319,6 +319,32 @@ describe('tenants-router — GET /api/audit-log/export (FR-031, resource=audit-l
     expect(res.send).toHaveBeenCalledWith(expect.stringContaining('objective.updated'));
   });
 
+  it('flattens the changes array into a readable string in CSV, not [object Object]', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    exportAuditEvents.mockResolvedValue([{
+      id: 'e1', action: 'objective.updated', timestamp: '2026-09-17T00:00:00.000Z',
+      changes: [{ field: 'title', from: 'Old title', to: 'New title' }],
+    }]);
+    const res = mockRes();
+    await handler(auditExportReq({ query: { resource: 'audit-log', format: 'csv' } }), res);
+    const csv = res.send.mock.calls[0][0];
+    expect(csv).toContain('title: Old title → New title');
+    expect(csv).not.toContain('[object Object]');
+  });
+
+  it('includes entityLabel in both JSON and CSV output', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    exportAuditEvents.mockResolvedValue([{ id: 'e1', action: 'objective.created', entityLabel: 'Grow net revenue by 20%', timestamp: '2026-09-17T00:00:00.000Z' }]);
+
+    const jsonRes = mockRes();
+    await handler(auditExportReq({ query: { resource: 'audit-log', format: 'json' } }), jsonRes);
+    expect(JSON.parse(jsonRes.send.mock.calls[0][0]).events[0].entityLabel).toBe('Grow net revenue by 20%');
+
+    const csvRes = mockRes();
+    await handler(auditExportReq({ query: { resource: 'audit-log', format: 'csv' } }), csvRes);
+    expect(csvRes.send.mock.calls[0][0]).toContain('Grow net revenue by 20%');
+  });
+
   it('defaults to JSON for an unrecognised format', async () => {
     getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
     exportAuditEvents.mockResolvedValue([]);

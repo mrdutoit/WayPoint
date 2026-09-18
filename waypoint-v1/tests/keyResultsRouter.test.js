@@ -7,7 +7,10 @@ vi.mock('../frontend/api-lib/middleware/auth.js', () => ({
 vi.mock('../frontend/api-lib/context/tenant.js', () => ({
   withTenantContext: (tenantId, fn) => fn({ query: vi.fn() }),
 }));
-vi.mock('../frontend/api-lib/services/auditService.js', () => ({ recordAuditEvent: vi.fn() }));
+vi.mock('../frontend/api-lib/services/auditService.js', () => ({
+  recordAuditEvent: vi.fn(),
+  diffFields: vi.fn((before, after, fields) => fields.filter((f) => before?.[f] !== after?.[f]).map((f) => ({ field: f, from: before?.[f] ?? null, to: after?.[f] ?? null }))),
+}));
 vi.mock('../frontend/api-lib/services/keyResultService.js', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, updateKeyResult: vi.fn(), getKeyResultById: vi.fn() };

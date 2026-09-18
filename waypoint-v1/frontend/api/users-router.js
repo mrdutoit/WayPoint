@@ -2,7 +2,7 @@ import { getAuthenticatedUser, requireRole } from '../api-lib/middleware/auth.js
 import { respondToServiceError } from '../api-lib/middleware/errorResponse.js';
 import { withTenantContext } from '../api-lib/context/tenant.js';
 import { listUsersForTenant, inviteUser, updateUserRole, updateUserManager, forcePasswordResetForUser, unlockUser } from '../api-lib/services/userService.js';
-import { recordAuditEvent } from '../api-lib/services/auditService.js';
+import { recordAuditEvent, diffFields } from '../api-lib/services/auditService.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
 
 // No CORS opening — same-origin frontend calls only.
@@ -47,7 +47,7 @@ async function inviteAction(req, res, user) {
       const invited = await inviteUser(client, user.tenantId, { role, email, firstName, lastName, password, managerId });
       await recordAuditEvent(client, {
         tenantId: user.tenantId, actorId: user.id,
-        action: 'user.invited', entityType: 'UserAccount', entityId: invited.id,
+        action: 'user.invited', entityType: 'UserAccount', entityId: invited.id, entityLabel: invited.email,
       });
       return invited;
     });
@@ -64,10 +64,13 @@ async function inviteAction(req, res, user) {
 async function roleAction(req, res, user, targetUserId) {
   const { role } = req.body ?? {};
   const updated = await withTenantContext(user.tenantId, async (client) => {
+    const { rows } = await client.query(`SELECT role FROM okr.user_account WHERE tenant_id = $1 AND id = $2`, [user.tenantId, targetUserId]);
+    const before = rows[0] ?? {};
     const result = await updateUserRole(client, user.tenantId, targetUserId, role);
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'user.role_changed', entityType: 'UserAccount', entityId: result.id,
+      action: 'user.role_changed', entityType: 'UserAccount', entityId: result.id, entityLabel: result.email,
+      changes: diffFields(before, result, ['role']),
     });
     return result;
   });
@@ -79,10 +82,28 @@ async function roleAction(req, res, user, targetUserId) {
 async function managerAction(req, res, user, targetUserId) {
   const { managerId } = req.body ?? {};
   const updated = await withTenantContext(user.tenantId, async (client) => {
+    const { rows } = await client.query(`SELECT manager_id AS "managerId" FROM okr.user_account WHERE tenant_id = $1 AND id = $2`, [user.tenantId, targetUserId]);
+    const beforeManagerId = rows[0]?.managerId ?? null;
     const result = await updateUserManager(client, user.tenantId, targetUserId, managerId);
+
+    const managerIds = [beforeManagerId, result.managerId].filter(Boolean);
+    let nameById = {};
+    if (managerIds.length > 0) {
+      const { rows: managers } = await client.query(
+        `SELECT id, first_name AS "firstName", last_name AS "lastName" FROM okr.user_account WHERE tenant_id = $1 AND id = ANY($2)`,
+        [user.tenantId, managerIds]
+      );
+      nameById = Object.fromEntries(managers.map((m) => [m.id, `${m.firstName} ${m.lastName}`]));
+    }
+
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'user.manager_changed', entityType: 'UserAccount', entityId: result.id,
+      action: 'user.manager_changed', entityType: 'UserAccount', entityId: result.id, entityLabel: result.email,
+      changes: diffFields(
+        { manager: beforeManagerId ? (nameById[beforeManagerId] ?? beforeManagerId) : null },
+        { manager: result.managerId ? (nameById[result.managerId] ?? result.managerId) : null },
+        ['manager']
+      ),
     });
     return result;
   });
@@ -99,7 +120,7 @@ async function forceResetAction(req, res, user, targetUserId) {
     const reset = await forcePasswordResetForUser(client, user.tenantId, targetUserId, password);
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'user.password_force_reset', entityType: 'UserAccount', entityId: reset.id,
+      action: 'user.password_force_reset', entityType: 'UserAccount', entityId: reset.id, entityLabel: reset.email,
     });
     return reset;
   });
@@ -114,7 +135,7 @@ async function unlockAction(req, res, user, targetUserId) {
     const unlocked = await unlockUser(client, user.tenantId, targetUserId);
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'user.unlocked', entityType: 'UserAccount', entityId: unlocked.id,
+      action: 'user.unlocked', entityType: 'UserAccount', entityId: unlocked.id, entityLabel: unlocked.email,
     });
     return unlocked;
   });

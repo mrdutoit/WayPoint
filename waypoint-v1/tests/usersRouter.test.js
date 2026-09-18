@@ -5,9 +5,12 @@ vi.mock('../frontend/api-lib/middleware/auth.js', () => ({
   requireRole: (user, ...roles) => !!user && roles.includes(user.role),
 }));
 vi.mock('../frontend/api-lib/context/tenant.js', () => ({
-  withTenantContext: (tenantId, fn) => fn({ query: vi.fn() }),
+  withTenantContext: vi.fn((tenantId, fn) => fn({ query: vi.fn().mockResolvedValue({ rows: [] }) })),
 }));
-vi.mock('../frontend/api-lib/services/auditService.js', () => ({ recordAuditEvent: vi.fn() }));
+vi.mock('../frontend/api-lib/services/auditService.js', () => ({
+  recordAuditEvent: vi.fn(),
+  diffFields: vi.fn((before, after, fields) => fields.filter((f) => before?.[f] !== after?.[f]).map((f) => ({ field: f, from: before?.[f] ?? null, to: after?.[f] ?? null }))),
+}));
 vi.mock('../frontend/api-lib/services/userService.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -22,6 +25,8 @@ vi.mock('../frontend/api-lib/services/userService.js', async (importOriginal) =>
 });
 
 const { getAuthenticatedUser } = await import('../frontend/api-lib/middleware/auth.js');
+const { withTenantContext } = await import('../frontend/api-lib/context/tenant.js');
+const { recordAuditEvent } = await import('../frontend/api-lib/services/auditService.js');
 const userService = await import('../frontend/api-lib/services/userService.js');
 const { ForbiddenError, ValidationError } = await import('../frontend/api-lib/services/errors.js');
 const handler = (await import('../frontend/api/users-router.js')).default;
@@ -137,6 +142,30 @@ describe('users-router — PATCH /api/users/:id/manager', () => {
     const res = mockRes();
     await handler(mockReq({ method: 'PATCH', slug: ['user-1', 'manager'], body: {} }), res);
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('resolves manager IDs to real names in the audit diff, not raw UUIDs — the whole point of this feature (2026-09-18)', async () => {
+    getAuthenticatedUser.mockReturnValue(TENANT_ADMIN);
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ managerId: 'mgr-old' }] }) // before-state lookup
+        .mockResolvedValueOnce({ rows: [
+          { id: 'mgr-old', firstName: 'Alice', lastName: 'Oldman' },
+          { id: 'mgr-new', firstName: 'Bob', lastName: 'Newman' },
+        ] }), // name-resolution lookup
+    };
+    withTenantContext.mockImplementationOnce((tenantId, fn) => fn(client));
+    userService.updateUserManager.mockResolvedValue({ id: 'user-1', email: 'employee@waypoint.test', managerId: 'mgr-new' });
+
+    await handler(mockReq({ method: 'PATCH', slug: ['user-1', 'manager'], body: { managerId: 'mgr-new' } }), mockRes());
+
+    expect(recordAuditEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        entityLabel: 'employee@waypoint.test',
+        changes: [{ field: 'manager', from: 'Alice Oldman', to: 'Bob Newman' }],
+      })
+    );
   });
 
   it('maps ForbiddenError (TenantAdmin target) to 403', async () => {

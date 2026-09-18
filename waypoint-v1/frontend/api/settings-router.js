@@ -4,10 +4,10 @@ import { withTenantContext } from '../api-lib/context/tenant.js';
 import { getCascadeLevelsForTenant, setCascadeLevelsForTenant } from '../api-lib/services/cascadeLevelService.js';
 import { getRubricForTenant, setRubricForTenant, DEFAULT_RUBRIC_LEVELS } from '../api-lib/services/scoringRubricService.js';
 import { listCadencesForTenant, createCadence, updateCadence, deleteCadence } from '../api-lib/services/cadenceService.js';
-import { getElementConfigForTenant, setElementEnabled } from '../api-lib/services/okrElementConfigService.js';
-import { getTerminologyForTenant, setTerminologyForTenant } from '../api-lib/services/terminologyService.js';
+import { getElementConfigForTenant, setElementEnabled, ALL_ELEMENTS } from '../api-lib/services/okrElementConfigService.js';
+import { getTerminologyForTenant, setTerminologyForTenant, TERM_KEYS } from '../api-lib/services/terminologyService.js';
 import { getCyclesForTenant, createCycle } from '../api-lib/services/cycleService.js';
-import { recordAuditEvent } from '../api-lib/services/auditService.js';
+import { recordAuditEvent, diffFields } from '../api-lib/services/auditService.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
 
 // No CORS opening — same-origin frontend calls only.
@@ -75,7 +75,7 @@ async function handleCyclesResource(req, res) {
         const created = await createCycle(client, user.tenantId, { name, cadenceId, startDate });
         await recordAuditEvent(client, {
           tenantId: user.tenantId, actorId: user.id,
-          action: 'cycle.created', entityType: 'Cycle', entityId: created.id,
+          action: 'cycle.created', entityType: 'Cycle', entityId: created.id, entityLabel: created.name,
         });
         return created;
       });
@@ -99,10 +99,12 @@ async function putCascadeLevelsAction(req, res, user) {
   const { labels } = req.body ?? {};
 
   const levels = await withTenantContext(user.tenantId, async (client) => {
+    const before = await getCascadeLevelsForTenant(client, user.tenantId);
     const updated = await setCascadeLevelsForTenant(client, user.tenantId, labels);
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'cascadeLevels.updated', entityType: 'CascadeLevel', entityId: user.tenantId,
+      action: 'cascadeLevels.updated', entityType: 'CascadeLevel', entityId: user.tenantId, entityLabel: 'Cascade levels',
+      changes: diffFields({ labels: before.map((l) => l.label) }, { labels: updated.map((l) => l.label) }, ['labels']),
     });
     return updated;
   });
@@ -126,10 +128,16 @@ async function putRubricAction(req, res, user) {
   const { name, levels } = req.body ?? {};
 
   const rubric = await withTenantContext(user.tenantId, async (client) => {
+    const before = await getRubricForTenant(client, user.tenantId);
     const updated = await setRubricForTenant(client, user.tenantId, { name, levels });
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'rubric.updated', entityType: 'ScoringRubric', entityId: updated.id,
+      action: 'rubric.updated', entityType: 'ScoringRubric', entityId: updated.id, entityLabel: updated.name,
+      changes: diffFields(
+        { name: before?.name ?? null, levels: before?.levels?.map((l) => l.label) ?? null },
+        { name: updated.name, levels: updated.levels.map((l) => l.label) },
+        ['name', 'levels']
+      ),
     });
     return updated;
   });
@@ -151,7 +159,7 @@ async function createCadenceAction(req, res, user) {
     const created = await createCadence(client, user.tenantId, { label, months });
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'cadence.created', entityType: 'Cadence', entityId: created.id,
+      action: 'cadence.created', entityType: 'Cadence', entityId: created.id, entityLabel: created.label,
     });
     return created;
   });
@@ -165,10 +173,16 @@ async function updateCadenceAction(req, res, user, cadenceId) {
   const { label, months } = req.body ?? {};
 
   const cadence = await withTenantContext(user.tenantId, async (client) => {
+    const { rows } = await client.query(
+      `SELECT label, months FROM okr.cadence WHERE tenant_id = $1 AND id = $2`,
+      [user.tenantId, cadenceId]
+    );
+    const before = rows[0] ?? {};
     const updated = await updateCadence(client, user.tenantId, cadenceId, { label, months });
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'cadence.updated', entityType: 'Cadence', entityId: updated.id,
+      action: 'cadence.updated', entityType: 'Cadence', entityId: updated.id, entityLabel: updated.label,
+      changes: diffFields(before, updated, ['label', 'months']),
     });
     return updated;
   });
@@ -181,10 +195,12 @@ async function deleteCadenceAction(req, res, user, cadenceId) {
   if (!requireRole(user, 'TenantAdmin')) return res.status(403).json({ error: 'Forbidden for this role' });
 
   await withTenantContext(user.tenantId, async (client) => {
+    const { rows } = await client.query(`SELECT label FROM okr.cadence WHERE tenant_id = $1 AND id = $2`, [user.tenantId, cadenceId]);
+    const label = rows[0]?.label ?? null;
     await deleteCadence(client, user.tenantId, cadenceId);
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'cadence.deleted', entityType: 'Cadence', entityId: cadenceId,
+      action: 'cadence.deleted', entityType: 'Cadence', entityId: cadenceId, entityLabel: label,
     });
   });
   res.status(204).end();
@@ -203,10 +219,12 @@ async function patchOkrElementAction(req, res, user, elementKey) {
   const { isEnabled } = req.body ?? {};
 
   const elements = await withTenantContext(user.tenantId, async (client) => {
+    const before = await getElementConfigForTenant(client, user.tenantId);
     const updated = await setElementEnabled(client, user.tenantId, elementKey, !!isEnabled);
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'okrElement.updated', entityType: 'OkrElementConfig', entityId: elementKey,
+      action: 'okrElement.updated', entityType: 'OkrElementConfig', entityId: elementKey, entityLabel: elementKey,
+      changes: diffFields(before, updated, ALL_ELEMENTS),
     });
     return updated;
   });
@@ -225,10 +243,12 @@ async function putTerminologyAction(req, res, user) {
   const overrides = req.body ?? {};
 
   const terms = await withTenantContext(user.tenantId, async (client) => {
+    const before = await getTerminologyForTenant(client, user.tenantId);
     const updated = await setTerminologyForTenant(client, user.tenantId, overrides);
     await recordAuditEvent(client, {
       tenantId: user.tenantId, actorId: user.id,
-      action: 'terminology.updated', entityType: 'TerminologySetting', entityId: user.tenantId,
+      action: 'terminology.updated', entityType: 'TerminologySetting', entityId: user.tenantId, entityLabel: 'Terminology',
+      changes: diffFields(before, updated, TERM_KEYS),
     });
     return updated;
   });

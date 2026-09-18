@@ -1,9 +1,77 @@
 import { describe, it, expect, vi } from 'vitest';
-import { listAuditEvents, exportAuditEvents } from '../frontend/api-lib/services/auditService.js';
+import { recordAuditEvent, diffFields, listAuditEvents, exportAuditEvents } from '../frontend/api-lib/services/auditService.js';
 
 function mockClient(rows) {
   return { query: vi.fn().mockResolvedValue({ rows }) };
 }
+
+describe('recordAuditEvent', () => {
+  it('inserts entityLabel and JSON-stringified changes when given', async () => {
+    const client = mockClient([]);
+    await recordAuditEvent(client, {
+      tenantId: 't1', actorId: 'u1', action: 'objective.updated', entityType: 'Objective', entityId: 'obj-1',
+      entityLabel: 'Grow net revenue by 20%',
+      changes: [{ field: 'title', from: 'Grow revenue', to: 'Grow net revenue by 20%' }],
+    });
+    const [, params] = client.query.mock.calls[0];
+    expect(params[6]).toBe('Grow net revenue by 20%'); // entityLabel
+    expect(JSON.parse(params[7])).toEqual([{ field: 'title', from: 'Grow revenue', to: 'Grow net revenue by 20%' }]);
+  });
+
+  it('stores null for entityLabel/changes when omitted, not undefined or "undefined"', async () => {
+    const client = mockClient([]);
+    await recordAuditEvent(client, { tenantId: 't1', actorId: 'u1', action: 'user.login', entityType: 'UserAccount', entityId: 'u1' });
+    const [, params] = client.query.mock.calls[0];
+    expect(params[6]).toBeNull();
+    expect(params[7]).toBeNull();
+  });
+});
+
+describe('diffFields', () => {
+  it('returns only the fields that actually changed', () => {
+    const changes = diffFields({ title: 'A', weighting: 2 }, { title: 'B', weighting: 2 }, ['title', 'weighting']);
+    expect(changes).toEqual([{ field: 'title', from: 'A', to: 'B' }]);
+  });
+
+  it('returns an empty array when nothing in the field list changed', () => {
+    expect(diffFields({ title: 'A' }, { title: 'A' }, ['title'])).toEqual([]);
+  });
+
+  it('treats missing/undefined values as null on both sides', () => {
+    const changes = diffFields({}, { title: 'New' }, ['title']);
+    expect(changes).toEqual([{ field: 'title', from: null, to: 'New' }]);
+  });
+
+  it('handles before being null entirely (first-time configuration, e.g. a rubric that did not exist yet)', () => {
+    const changes = diffFields(null, { name: 'Default' }, ['name']);
+    expect(changes).toEqual([{ field: 'name', from: null, to: 'Default' }]);
+  });
+
+  // The actual bug caught and fixed while building this: array/object
+  // fields (e.g. cascade level labels) are never === across two
+  // separate arrays even when their contents are identical, so a naive
+  // !== comparison would call every save "changed". diffFields compares
+  // the serialised form instead.
+  it('compares array fields by value, not by reference', () => {
+    const changes = diffFields({ labels: ['Company', 'Team'] }, { labels: ['Company', 'Team'] }, ['labels']);
+    expect(changes).toEqual([]);
+  });
+
+  it('still detects a real change within an array field', () => {
+    const changes = diffFields({ labels: ['Company', 'Team'] }, { labels: ['Company', 'Division'] }, ['labels']);
+    expect(changes).toEqual([{ field: 'labels', from: ['Company', 'Team'], to: ['Company', 'Division'] }]);
+  });
+
+  it('compares object fields by value too', () => {
+    expect(diffFields({ meta: { a: 1 } }, { meta: { a: 1 } }, ['meta'])).toEqual([]);
+    expect(diffFields({ meta: { a: 1 } }, { meta: { a: 2 } }, ['meta'])).toEqual([{ field: 'meta', from: { a: 1 }, to: { a: 2 } }]);
+  });
+
+  it('ignores fields outside the given list even if they differ', () => {
+    const changes = diffFields({ title: 'A', secret: 'x' }, { title: 'A', secret: 'y' }, ['title']);
+    expect(changes).toEqual([]);
+  });
+});
 
 describe('listAuditEvents', () => {
   it('orders by timestamp descending and defaults to a limit of 50', async () => {
