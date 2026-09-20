@@ -22,8 +22,19 @@ export async function listKeyResultsForObjective(client, tenantId, objectiveId) 
   // broadening). Never held back by not restricting this earlier —
   // this was already tenant-wide before that change, just effectively
   // hidden by the fact its parent Objective wasn't reachable either.
+  //
+  // lastCheckInAt (added 2026-09-20) — the Objective page needs this to
+  // show Check-in status inline, not just KEY_RESULT_FIELDS' static
+  // columns. Scoped to this one query rather than the shared
+  // KEY_RESULT_FIELDS constant: that constant is also used inside
+  // updateKeyResult/createKeyResult's RETURNING clauses, and a
+  // correlated subquery added there would need to be verified against
+  // each statement's own table alias — not worth the risk for a field
+  // only this list view needs.
   const { rows } = await client.query(
-    `SELECT ${KEY_RESULT_FIELDS} FROM okr.key_result kr
+    `SELECT ${KEY_RESULT_FIELDS},
+       (SELECT MAX(ci.submitted_at) FROM okr.check_in ci WHERE ci.key_result_id = kr.id) AS "lastCheckInAt"
+     FROM okr.key_result kr
      WHERE kr.tenant_id = $1 AND kr.objective_id = $2
      ORDER BY kr.created_at ASC`,
     [tenantId, objectiveId]

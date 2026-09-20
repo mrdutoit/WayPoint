@@ -4,8 +4,7 @@ import { useWindowSize } from '../hooks/useWindowSize.js';
 import { useTerms } from '../context/TerminologyContext.jsx';
 import { reportsApi } from '../services/api.js';
 import { s, colors, STATUS_META } from '../styles/tokens.js';
-import { groupByStatus } from '../utils/statusGroups.js';
-import StatusDonut from '../components/charts/StatusDonut.jsx';
+import WeightingTreemap from '../components/charts/WeightingTreemap.jsx';
 import Sparkline from '../components/charts/Sparkline.jsx';
 
 function StatusChip({ status }) {
@@ -51,13 +50,17 @@ export default function Scorecard() {
           )}
 
           {data.objectives.length > 0 && (
-            <div style={{ ...s.card, maxWidth: 360, marginBottom: 20 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: colors.ink900, marginBottom: 12 }}>
-                {tPlural('KeyResult')} by status
+            <div style={{ ...s.card, maxWidth: 560, marginBottom: 20 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: colors.ink900, marginBottom: 4 }}>
+                {tPlural('KeyResult')} by weighting
               </div>
-              <StatusDonut
-                data={groupByStatus(data.objectives.flatMap((o) => o.keyResults))}
-                centerLabel={tPlural('KeyResult').toLowerCase()}
+              <div style={{ fontSize: 12, color: colors.ink500, marginBottom: 12 }}>
+                Size = weighting (FR-016), colour = status — bigger blocks matter more to the {t('Objective').toLowerCase()}'s score.
+              </div>
+              <WeightingTreemap
+                data={data.objectives.flatMap((o) => o.keyResults).map((kr) => ({
+                  name: kr.title, size: Number(kr.weighting), status: kr.status,
+                }))}
               />
             </div>
           )}

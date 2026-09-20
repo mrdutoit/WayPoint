@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useWindowSize } from '../hooks/useWindowSize.js';
 import { useTerms } from '../context/TerminologyContext.jsx';
-import { objectivesApi, keyResultsApi, cascadeLevelsApi } from '../services/api.js';
+import { objectivesApi, keyResultsApi, cascadeLevelsApi, rubricApi } from '../services/api.js';
 import { s, colors, STATUS_META } from '../styles/tokens.js';
+import SubmitCheckInForm from '../components/SubmitCheckInForm.jsx';
 
 function StatusChip({ status }) {
   const meta = STATUS_META[status] ?? { color: colors.ink500, bg: colors.ink100 };
@@ -21,25 +22,29 @@ export default function ObjectiveDetail() {
   const [reflectionsRestricted, setReflectionsRestricted] = useState(false);
   const [cascadeLevels, setCascadeLevels] = useState([]);
   const [allObjectives, setAllObjectives] = useState([]);
+  const [rubric, setRubric] = useState(null);
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [forbidden, setForbidden] = useState(false);
 
   function load() {
-    // cascadeLevels/allObjectives are only used to populate the parent-Objective
-    // selector below — each caught independently so a failure there can never
-    // masquerade as the primary Objective fetch failing (which drives the
-    // notFound/forbidden branches below); it just leaves re-parenting unavailable.
+    // cascadeLevels/allObjectives/rubric are only used for the parent-Objective
+    // selector and the inline Check-in form below — each caught independently
+    // so a failure there can never masquerade as the primary Objective fetch
+    // failing (which drives the notFound/forbidden branches below); it just
+    // leaves re-parenting or check-in submission unavailable.
     return Promise.all([
       objectivesApi.get(id),
       cascadeLevelsApi.list().catch(() => ({ levels: [] })),
       objectivesApi.list().catch(() => ({ objectives: [] })),
+      rubricApi.get().catch(() => ({ rubric: null })),
     ])
-      .then(([result, levelResult, objResult]) => {
+      .then(([result, levelResult, objResult, rubricResult]) => {
         setObjective(result.objective);
         setKeyResults(result.keyResults ?? []);
         setCascadeLevels(levelResult?.levels ?? []);
         setAllObjectives(objResult?.objectives ?? []);
+        setRubric(rubricResult?.rubric ?? null);
       })
       .then(() =>
         // Fetched separately from the Objective itself — Reflections stay
@@ -114,13 +119,18 @@ export default function ObjectiveDetail() {
                   <th style={s.th}>Title</th>
                   <th style={s.th}>Weighting</th>
                   <th style={s.th}>Status</th>
+                  <th style={s.th}>{t('CheckIn')}</th>
                 </tr>
               </thead>
               <tbody>
                 {keyResults.map((kr) => (
-                  <KeyResultRow key={kr.id} keyResult={kr} canEdit={objective.canEdit} onSaved={(updated) => {
-                    setKeyResults((prev) => prev.map((k) => (k.id === kr.id ? { ...k, ...updated } : k)));
-                  }} />
+                  <KeyResultRow
+                    key={kr.id} keyResult={kr} canEdit={objective.canEdit} rubric={rubric} label={t('CheckIn')}
+                    onSaved={(updated) => {
+                      setKeyResults((prev) => prev.map((k) => (k.id === kr.id ? { ...k, ...updated } : k)));
+                    }}
+                    onCheckInCreated={load}
+                  />
                 ))}
               </tbody>
             </table>
@@ -274,8 +284,9 @@ function EditObjectiveForm({ objective, cascadeLevels, allObjectives, onSaved, l
   );
 }
 
-function KeyResultRow({ keyResult, canEdit, onSaved }) {
+function KeyResultRow({ keyResult, canEdit, rubric, label, onSaved, onCheckInCreated }) {
   const [editing, setEditing] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
   const [title, setTitle] = useState(keyResult.title);
   const [weighting, setWeighting] = useState(String(keyResult.weighting));
   const [saving, setSaving] = useState(false);
@@ -307,24 +318,59 @@ function KeyResultRow({ keyResult, canEdit, onSaved }) {
           </div>
           {error && <div style={{ ...s.chip(colors.danger, colors.dangerBg), marginTop: 6 }}>{error}</div>}
         </td>
+        <td style={s.td} />
       </tr>
     );
   }
 
   return (
-    <tr>
-      <td style={s.td}>{keyResult.title}</td>
-      <td style={s.td}>{Number(keyResult.weighting)}</td>
-      <td style={s.td}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <StatusChip status={keyResult.status} />
-          <Link to={`/key-results/${keyResult.id}`} style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12, textDecoration: 'none', display: 'inline-block' }}>View</Link>
-          {canEdit && (
-            <button type="button" onClick={() => setEditing(true)} style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12 }}>Edit</button>
-          )}
-        </div>
-      </td>
-    </tr>
+    <>
+      <tr>
+        <td style={s.td}>{keyResult.title}</td>
+        <td style={s.td}>{Number(keyResult.weighting)}</td>
+        <td style={s.td}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <StatusChip status={keyResult.status} />
+            <Link to={`/key-results/${keyResult.id}`} style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12, textDecoration: 'none', display: 'inline-block' }}>View</Link>
+            {canEdit && (
+              <button type="button" onClick={() => setEditing(true)} style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12 }}>Edit</button>
+            )}
+          </div>
+        </td>
+        <td style={s.td}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {keyResult.lastCheckInAt ? (
+              <span style={{ fontSize: 12, color: colors.ink500 }}>{new Date(keyResult.lastCheckInAt).toLocaleDateString()}</span>
+            ) : (
+              <span style={s.chip(colors.warn, colors.warnBg)}>No {label.toLowerCase()}s yet</span>
+            )}
+            {canEdit && (
+              <button type="button" onClick={() => setCheckingIn((v) => !v)} style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12 }}>
+                {checkingIn ? 'Cancel' : `Check in`}
+              </button>
+            )}
+          </div>
+        </td>
+      </tr>
+      {checkingIn && (
+        <tr>
+          <td style={{ ...s.td, borderTop: 'none' }} colSpan={4}>
+            {rubric ? (
+              <div style={{ maxWidth: 420 }}>
+                <SubmitCheckInForm
+                  keyResultId={keyResult.id} rubric={rubric} label={label}
+                  onCreated={() => { setCheckingIn(false); onCheckInCreated(); }}
+                />
+              </div>
+            ) : (
+              <div style={s.chip(colors.warn, colors.warnBg)}>
+                No Scoring Rubric configured for this tenant yet — ask a Tenant Administrator to set one up under OKR Settings.
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 

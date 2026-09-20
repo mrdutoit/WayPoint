@@ -1,10 +1,35 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createKeyResult, updateKeyResult, getKeyResultById } from '../frontend/api-lib/services/keyResultService.js';
+import { createKeyResult, updateKeyResult, getKeyResultById, listKeyResultsForObjective } from '../frontend/api-lib/services/keyResultService.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../frontend/api-lib/services/objectiveService.js';
 
 function mockClient() {
   return { query: vi.fn() };
 }
+
+describe('listKeyResultsForObjective', () => {
+  it('scopes the query to the given tenant and objective', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({ rows: [] });
+    await listKeyResultsForObjective(client, 't1', 'obj-1');
+    const [, params] = client.query.mock.calls[0];
+    expect(params).toEqual(['t1', 'obj-1']);
+  });
+
+  it('includes lastCheckInAt per row, for showing check-in status on the Objective page without navigating away (2026-09-20)', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({
+      rows: [
+        { id: 'kr-1', title: 'A', lastCheckInAt: '2026-09-15T10:00:00.000Z' },
+        { id: 'kr-2', title: 'B', lastCheckInAt: null },
+      ],
+    });
+    const rows = await listKeyResultsForObjective(client, 't1', 'obj-1');
+    expect(rows[0].lastCheckInAt).toBe('2026-09-15T10:00:00.000Z');
+    expect(rows[1].lastCheckInAt).toBeNull();
+    const [sql] = client.query.mock.calls[0];
+    expect(sql).toMatch(/MAX\(ci\.submitted_at\)/);
+  });
+});
 
 // Every createKeyResult test needs this as its FIRST mocked query now —
 // isElementEnabled('KeyResult') is checked before anything else. Empty

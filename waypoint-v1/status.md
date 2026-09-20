@@ -5,7 +5,7 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** 2026-09-18. Originally reconstructed 2026-09-16 directly
+**Last updated:** 2026-09-20. Originally reconstructed 2026-09-16 directly
 from the GitHub repo (`mrdutoit/WayPoint`, `waypoint-v1`) rather than from a
 session log — the previous version of this file said Stage 4 hadn't
 started, which the repo contradicted (Modules 1–3 and part of Module 6
@@ -72,16 +72,22 @@ equivalent to "the module was reviewed and closed out."
   2026-09-17 below), and a collapsible hierarchy view on the Objectives
   list itself (toggle against the existing flat table), matching
   Alignment Map's tree
-- Check-in submission driving Key Result and Objective status roll-up
+- Check-in submission driving Key Result and Objective status roll-up —
+  submittable either on the Key Result's own page or, as of 2026-09-20,
+  inline right on the Objective page's Key Results table (last
+  check-in date/warning chip shown per row, "Check in" expands the form
+  in place — no navigation required for the common case)
 - Initiatives and Reflections against Key Results/Objectives
 - Reporting: Scorecard, Team Progress, Alignment Map (collapsible tree,
-  not a visual canvas), Check-in Compliance — Dashboard, Scorecard, Team
-  Progress, and Check-in Compliance now lead with a Recharts-based chart
-  (status donut/bar) above the existing table/list detail, not replacing
-  it (see Corrections below); Check-in Compliance additionally has a
-  per-person GitHub-style cadence heatmap (2026-09-18); Alignment Map is
-  unchanged (tree, by design — see the Backlog note on the visual
-  strategy map, still open)
+  not a visual canvas), Check-in Compliance — Dashboard, Team Progress,
+  and Check-in Compliance lead with a Recharts-based chart (status
+  donut/bar) above the existing table/list detail, not replacing it
+  (see Corrections below); Scorecard's Key-Result-by-status donut was
+  replaced (not supplemented) by a weighting treemap on 2026-09-20 —
+  see that section; Check-in Compliance additionally has a per-person
+  GitHub-style cadence heatmap (2026-09-18); Alignment Map is unchanged
+  (tree, by design — see the Backlog note on the visual strategy map,
+  still open)
 - Cascade level, terminology, scoring rubric, and OKR element
   configuration (Tenant Admin)
 - Data export (FR-030) — JSON or a CSV-per-entity zip, Tenant Admin for
@@ -348,6 +354,57 @@ it doesn't match what Mark had in mind.
 - Next: weighting treemap, then the cascade sunburst, per the confirmed
   order — not started yet.
 
+## 2026-09-20: Check-in discoverability fixed, weighting treemap (second of three)
+
+Prompted by Mark's report that Check-in Compliance's heatmap wasn't
+visible and Check-ins seemed to not exist at all. Root cause, confirmed
+before changing anything: neither was a bug. Mark was testing signed in
+as Fred Steinberg (Manager), and Check-in Compliance has always been
+Tenant Administrator only (`Reports.jsx` correctly gates that card on
+`isTenantAdmin` — matches the original Stage 2 scope, not something
+this week's work changed). The GitHub commit confirmed the delta had
+landed. But the report surfaced a real, separate problem worth fixing
+on its own merits:
+
+- **Check-in submission was a full extra navigation away from where
+  you're most likely to be looking.** Reflections sit right on the
+  Objective page; Check-ins required clicking "View" through to a
+  separate Key Result page, with nothing on the Objective page hinting
+  that's where the actual scoring happens.
+- **Fixed**: the Objective page's Key Results table now shows each
+  Key Result's last check-in date (or a "No check-ins yet" warning
+  chip) directly, plus an inline "Check in" button that expands the
+  real submission form in place — no navigation required for the most
+  common case. `listKeyResultsForObjective` (keyResultService.js)
+  extended with a `lastCheckInAt` correlated subquery, scoped to that
+  one query rather than the shared `KEY_RESULT_FIELDS` constant (that
+  constant also backs `updateKeyResult`/`createKeyResult`'s `RETURNING`
+  clauses, and a correlated subquery there would need re-verifying
+  against each statement's own table alias — not worth the risk for a
+  field only the list view needs).
+- `SubmitCheckInForm` (and `CONFIDENCE_LABELS`) extracted out of
+  `KeyResultDetail.jsx` into `components/SubmitCheckInForm.jsx` so both
+  pages use the identical form — this is now used in two places, and a
+  second copy was exactly the kind of thing that drifts.
+- Permission check reused, not reinvented: a Key Result has no owner of
+  its own (only `objective_id` — ownership is entirely inherited from
+  its Objective), so `objective.canEdit` — already computed and already
+  driving the Edit button — is the correct gate for the inline Check-in
+  button too, same rule as FR-018 (owner or their Manager).
+- 2 new tests for `listKeyResultsForObjective` (previously zero
+  coverage existed for that function at all, not just for this change).
+- **Weighting treemap built** — `WeightingTreemap.jsx`, recharts'
+  native `Treemap` with a custom cell renderer for status colouring
+  (fixed fill colours needed a dark text outline rather than a flat
+  white, since "Not Started"'s grey doesn't contrast as reliably as the
+  danger/warn/success colours do). Replaced the Key-Result-by-status
+  donut on Scorecard rather than sitting alongside it — a treemap sized
+  by weighting is strictly more informative than a count-based donut
+  for the same set of Key Results, and stacking both would have been
+  two charts saying overlapping things.
+- `npm run build` and `npm test` (411, up from 409) both pass.
+- Next: the cascade sunburst, last of the three.
+
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
 Raised when comparing WayPoint against Perdoo's UI (screenshots reviewed
@@ -382,12 +439,14 @@ silent addition, before being built:
 ## Next immediate step
 
 Apply `db/migrations/2026-09-18-audit-log-detail.sql` against Neon (then
-delete it from the repo per convention) — nothing shows entity labels
-or diffs until that column exists live. Weighting treemap next, then
-the cascade sunburst. Also still open: confirm the whole 2026-09-17/18
-delivery (including the new heatmap) looks right in a real browser —
-everything here was verified by `npm run build`/`npm test` passing, not
-by a real deploy.
+delete it from the repo per convention) if that hasn't happened yet —
+nothing shows entity labels or diffs until that column exists live.
+Cascade sunburst next, the last of the three chart candidates. Also
+still open: confirm this delivery (inline Check-in on the Objective
+page, the weighting treemap) looks right in a real browser, signed in
+as an actual Tenant Administrator this time so Check-in Compliance and
+its heatmap are reachable — everything here was verified by
+`npm run build`/`npm test` passing, not by a real deploy.
 
 ## Open items, not yet resolved
 
