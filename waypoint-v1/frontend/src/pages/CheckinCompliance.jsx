@@ -5,6 +5,7 @@ import { useTerms } from '../context/TerminologyContext.jsx';
 import { reportsApi } from '../services/api.js';
 import { s, colors } from '../styles/tokens.js';
 import StatusDonut from '../components/charts/StatusDonut.jsx';
+import CalendarHeatmap from '../components/charts/CalendarHeatmap.jsx';
 
 export default function CheckinCompliance() {
   const { isMobile } = useWindowSize();
@@ -55,6 +56,21 @@ export default function CheckinCompliance() {
                 />
               </div>
 
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, fontSize: 12, color: colors.ink500 }}>
+                <span>Cadence:</span>
+                <span>Less</span>
+                {[0, 1, 2, 3].map((n) => (
+                  <span key={n} style={{
+                    width: 11, height: 11, borderRadius: 2,
+                    background: n === 0 ? colors.ink100
+                      : n === 1 ? `color-mix(in srgb, ${colors.success} 40%, ${colors.ink100})`
+                      : n === 2 ? `color-mix(in srgb, ${colors.success} 70%, ${colors.ink100})`
+                      : colors.success,
+                  }} />
+                ))}
+                <span>More</span>
+              </div>
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {data.byOwner.map((owner) => {
                   const total = owner.keyResults.length;
@@ -67,6 +83,15 @@ export default function CheckinCompliance() {
                           {done}/{total} checked in
                         </span>
                       </div>
+
+                      <div style={{ marginBottom: 12, overflowX: 'auto' }}>
+                        <CalendarHeatmap
+                          startDate={data.cycle.startDate}
+                          endDate={data.cycle.endDate}
+                          checkInsByDate={owner.checkInsByDate}
+                        />
+                      </div>
+
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {owner.keyResults.map((kr) => (
                           <div key={kr.keyResultId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

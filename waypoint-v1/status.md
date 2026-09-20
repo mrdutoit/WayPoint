@@ -78,8 +78,10 @@ equivalent to "the module was reviewed and closed out."
   not a visual canvas), Check-in Compliance — Dashboard, Scorecard, Team
   Progress, and Check-in Compliance now lead with a Recharts-based chart
   (status donut/bar) above the existing table/list detail, not replacing
-  it (see Corrections below); Alignment Map is unchanged (tree, by
-  design — see the Backlog note on the visual strategy map, still open)
+  it (see Corrections below); Check-in Compliance additionally has a
+  per-person GitHub-style cadence heatmap (2026-09-18); Alignment Map is
+  unchanged (tree, by design — see the Backlog note on the visual
+  strategy map, still open)
 - Cascade level, terminology, scoring rubric, and OKR element
   configuration (Tenant Admin)
 - Data export (FR-030) — JSON or a CSV-per-entity zip, Tenant Admin for
@@ -317,6 +319,35 @@ it doesn't match what Mark had in mind.
   Objective title changes and the manager-name resolution).
 - `npm run build` and the full `npm test` (407, up from 393) both pass.
 
+## Later the same day: calendar heatmap for Check-in Compliance (first of the three chart candidates)
+
+- **`getCheckinCompliance` (reportingService.js) extended** with a second
+  query returning per-day Check-in counts per employee
+  (`checkInsByDate: [{date, count}]`) — the existing query only ever
+  computed a boolean `hasCheckedIn` per Key Result, which can't show
+  cadence (whether checking in is a steady habit or a last-week
+  scramble), only whether it happened at all. Kept as a separate query
+  rather than folded into the existing one — that one groups by Key
+  Result, this groups by day, and forcing both into one query would
+  have meant an awkward double-aggregation.
+- **New `components/charts/CalendarHeatmap.jsx`** — a real
+  GitHub-contributions-style grid (weeks as columns, days-of-week as
+  rows via CSS Grid's `grid-auto-flow: column`, not just a wrapped row
+  of cells), one per person on the Check-in Compliance report, above
+  the existing ✓/✗ Key Result list rather than replacing it — the two
+  answer different questions. Future days (the Cycle hasn't reached
+  them yet) render as a dashed empty outline, deliberately distinct
+  from a past day with no Check-in, since those mean different things.
+  Verified the date/padding math with a standalone trace before
+  trusting it, not just "the build didn't fail" — this codebase has no
+  frontend component test harness to catch a date-logic bug otherwise.
+- Existing `reportingService.test.js` had one test break from the new
+  second query (a sequential mock missing its third `mockResolvedValueOnce`)
+  — fixed, plus 2 new tests added for the day-grouping logic itself.
+- `npm run build` and `npm test` (409, up from 407) both pass.
+- Next: weighting treemap, then the cascade sunburst, per the confirmed
+  order — not started yet.
+
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
 Raised when comparing WayPoint against Perdoo's UI (screenshots reviewed
@@ -352,12 +383,11 @@ silent addition, before being built:
 
 Apply `db/migrations/2026-09-18-audit-log-detail.sql` against Neon (then
 delete it from the repo per convention) — nothing shows entity labels
-or diffs until that column exists live. After that, back to the three
-chart candidates in order: calendar heatmap, weighting treemap, cascade
-sunburst (see 2026-09-17 above). Also still open: confirm the whole
-2026-09-17/18 delivery looks right in a real browser — everything here
-was verified by `npm run build`/`npm test` passing, not by a real
-deploy.
+or diffs until that column exists live. Weighting treemap next, then
+the cascade sunburst. Also still open: confirm the whole 2026-09-17/18
+delivery (including the new heatmap) looks right in a real browser —
+everything here was verified by `npm run build`/`npm test` passing, not
+by a real deploy.
 
 ## Open items, not yet resolved
 

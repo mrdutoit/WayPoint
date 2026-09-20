@@ -145,11 +145,41 @@ describe('getCheckinCompliance', () => {
         { employeeId: 'emp-1', employeeFirstName: 'Ada', employeeLastName: 'L', keyResultId: 'kr-2', keyResultTitle: 'B', hasCheckedIn: false },
         { employeeId: 'emp-2', employeeFirstName: 'Bob', employeeLastName: 'M', keyResultId: 'kr-3', keyResultTitle: 'C', hasCheckedIn: true },
       ],
-    });
+    }).mockResolvedValueOnce({ rows: [] });
     const result = await getCheckinCompliance(client, 't1', TENANT_ADMIN);
     expect(result.byOwner).toHaveLength(2);
     expect(result.byOwner[0].keyResults).toHaveLength(2);
     expect(result.byOwner[1].keyResults).toHaveLength(1);
+  });
+
+  it('attaches per-day check-in counts to the matching owner, for the cadence heatmap (2026-09-18)', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce(CYCLE)
+      .mockResolvedValueOnce({
+        rows: [{ employeeId: 'emp-1', employeeFirstName: 'Ada', employeeLastName: 'L', keyResultId: 'kr-1', keyResultTitle: 'A', hasCheckedIn: true }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          { employeeId: 'emp-1', date: '2026-07-02', count: 2 },
+          { employeeId: 'emp-1', date: '2026-07-05', count: 1 },
+        ],
+      });
+    const result = await getCheckinCompliance(client, 't1', TENANT_ADMIN);
+    expect(result.byOwner[0].checkInsByDate).toEqual([
+      { date: '2026-07-02', count: 2 },
+      { date: '2026-07-05', count: 1 },
+    ]);
+  });
+
+  it('ignores a daily-count row for an owner with no Key Results this Cycle rather than crashing (defensive — should not happen given the queries share a WHERE clause, but does not assume it)', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce(CYCLE)
+      .mockResolvedValueOnce({ rows: [] }) // no owners with Key Results
+      .mockResolvedValueOnce({ rows: [{ employeeId: 'ghost', date: '2026-07-02', count: 1 }] });
+    const result = await getCheckinCompliance(client, 't1', TENANT_ADMIN);
+    expect(result.byOwner).toEqual([]);
   });
 
   it('returns an empty list with no active Cycle', async () => {

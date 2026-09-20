@@ -201,6 +201,23 @@ export async function getCheckinCompliance(client, tenantId, caller) {
     [tenantId, cycle.id]
   );
 
+  // Cadence over the Cycle (calendar heatmap) needs *when* each
+  // Check-in happened, not just whether one exists — a second, separate
+  // query rather than folding into the one above, since this groups by
+  // day instead of by Key Result and would otherwise force an awkward
+  // double-grouping in one query.
+  const { rows: dailyRows } = await client.query(
+    `SELECT u.id AS "employeeId", ci.submitted_at::date AS "date", COUNT(*)::int AS "count"
+     FROM okr.check_in ci
+     JOIN okr.key_result kr ON kr.id = ci.key_result_id
+     JOIN okr.objective o ON o.id = kr.objective_id
+     JOIN okr.user_account u ON u.id = o.owner_id
+     WHERE ci.tenant_id = $1 AND o.cycle_id = $2
+     GROUP BY u.id, ci.submitted_at::date
+     ORDER BY u.id, date`,
+    [tenantId, cycle.id]
+  );
+
   const byOwnerMap = new Map();
   for (const row of rows) {
     if (!byOwnerMap.has(row.employeeId)) {
@@ -209,11 +226,20 @@ export async function getCheckinCompliance(client, tenantId, caller) {
         employeeFirstName: row.employeeFirstName,
         employeeLastName: row.employeeLastName,
         keyResults: [],
+        checkInsByDate: [],
       });
     }
     byOwnerMap.get(row.employeeId).keyResults.push({
       keyResultId: row.keyResultId, keyResultTitle: row.keyResultTitle, hasCheckedIn: row.hasCheckedIn,
     });
+  }
+  for (const row of dailyRows) {
+    // An owner can only have a daily count here if they own at least one
+    // Key Result this Cycle, which the loop above already guarantees an
+    // entry for — but guard anyway rather than assume query order.
+    if (byOwnerMap.has(row.employeeId)) {
+      byOwnerMap.get(row.employeeId).checkInsByDate.push({ date: row.date, count: row.count });
+    }
   }
 
   return { cycle, byOwner: [...byOwnerMap.values()] };
