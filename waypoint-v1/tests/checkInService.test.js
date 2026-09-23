@@ -157,6 +157,20 @@ describe('listCheckInsForKeyResult — restricted to owner, Manager, TenantAdmin
     expect(result).toEqual([{ id: 'ci-2' }, { id: 'ci-1' }]);
   });
 
+  it('joins the submitter\'s name into each row (2026-09-23 — was previously stored but never surfaced anywhere)', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [KEY_RESULT_ROW] })
+      .mockResolvedValueOnce({
+        rows: [{ id: 'ci-1', submittedById: 'mgr-1', submittedByFirstName: 'Fred', submittedByLastName: 'Steinberg' }],
+      });
+    const result = await listCheckInsForKeyResult(client, 't1', OWNER, 'kr-1');
+    expect(result[0].submittedByFirstName).toBe('Fred');
+    expect(result[0].submittedByLastName).toBe('Steinberg');
+    const [sql] = client.query.mock.calls[1];
+    expect(sql).toMatch(/JOIN okr\.user_account submitter/);
+  });
+
   it('allows the owner\'s Manager', async () => {
     const client = mockClient();
     client.query

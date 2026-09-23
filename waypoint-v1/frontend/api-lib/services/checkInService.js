@@ -38,7 +38,10 @@ export async function listCheckInsForKeyResult(client, tenantId, caller, keyResu
   if (!allowed) throw new ForbiddenError('Only the Key Result owner, their Manager, or a Tenant Administrator can view Check-ins');
 
   const { rows } = await client.query(
-    `SELECT ${CHECK_IN_FIELDS} FROM okr.check_in ci
+    `SELECT ${CHECK_IN_FIELDS},
+       submitter.first_name AS "submittedByFirstName", submitter.last_name AS "submittedByLastName"
+     FROM okr.check_in ci
+     JOIN okr.user_account submitter ON submitter.id = ci.submitted_by_id
      WHERE ci.tenant_id = $1 AND ci.key_result_id = $2
      ORDER BY ci.submitted_at DESC`,
     [tenantId, keyResultId]

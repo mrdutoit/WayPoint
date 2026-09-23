@@ -21,17 +21,18 @@
  *    Results, its child Objectives, or both, is never stated — FR-019
  *    just says "Roll-up to the cascade level above uses the same
  *    method against linked child Objectives" as if it were an
- *    additional step. Implemented as: an Objective with no children
- *    scores from its own Key Results (the base case, unambiguous); an
- *    Objective *with* children scores from its children instead of its
- *    own Key Results — not both combined, since there's no specified
- *    way to weight "a child Objective" against "a Key Result" in the
- *    same average. This matches the common OKR pattern where only
- *    leaf-level Objectives carry Key Results directly and higher
- *    cascade levels exist to aggregate, but WayPoint's schema doesn't
- *    actually enforce that — an Objective can have both children and
- *    its own Key Results, and this resolution means the latter would be
- *    ignored for roll-up purposes in that case. Flag if that's wrong.
+ *    additional step. Originally implemented as either/or (children if
+ *    any existed, else own Key Results), on the assumption that only
+ *    leaf-level Objectives carry Key Results directly. Real usage
+ *    (2026-09-23) proved that assumption false — WayPoint's schema
+ *    doesn't enforce it, and a Company-level Objective with both its
+ *    own checked-in Key Results and a Division child scored from the
+ *    child alone, silently discarding Check-ins submitted right on it.
+ *    Corrected to combine both: an Objective's own Key Results are
+ *    weighted-averaged among themselves first, then that result counts
+ *    as one more equally-weighted item alongside each child Objective —
+ *    an Objective's own work counts for as much as any single child
+ *    branch, not discarded the moment it has any children at all.
  *
  * Both functions round to the nearest of the tenant's *current* rubric
  * levels (not whatever rubric was active when a given Check-in was
@@ -87,34 +88,35 @@ export async function recomputeKeyResultStatus(client, tenantId, keyResultId) {
 }
 
 /**
- * FR-019 (Objective half) + FR-024, including the cascade-upward roll-up
- * — see the module comment for the two resolved ambiguities. Recomputes
- * `objectiveId`, persists it, then recurses to its parent (if any) so a
- * single Check-in correctly propagates status changes all the way up
- * the cascade, not just one level. FR-023 already guarantees the parent
- * chain has no cycles, so this recursion is guaranteed to terminate.
+ * FR-019 (Objective half) + FR-024, including the cascade-upward roll-up.
+ * Recomputes `objectiveId`, persists it, then recurses to its parent
+ * (if any) so a single Check-in correctly propagates status changes all
+ * the way up the cascade, not just one level. FR-023 already guarantees
+ * the parent chain has no cycles, so this recursion is guaranteed to
+ * terminate.
+ *
+ * 2026-09-23 correction: this used to score EITHER from child Objectives
+ * OR from the Objective's own Key Results — never both, on the
+ * assumption (flagged explicitly in this file's history as an
+ * unresolved ambiguity, "flag if wrong") that only leaf-level Objectives
+ * carry their own Key Results. Real usage proved that assumption false:
+ * a Company-level Objective with both its own Key Results (checked in
+ * directly) AND a Division-level child scored from the child alone,
+ * silently ignoring Check-ins submitted right on it — status stuck at
+ * "Not Started" despite an Achieved and an On Track Key Result
+ * underneath it. Fixed to combine both: the Objective's own Key Results
+ * are first weighted-averaged among themselves (unchanged from before),
+ * then that result is treated as one more equally-weighted item
+ * alongside each child Objective — an Objective's own work counts for
+ * as much as any single child branch, rather than being discarded the
+ * moment it has any children at all.
  */
 export async function recomputeObjectiveStatus(client, tenantId, objectiveId) {
-  const { rows: children } = await client.query(
-    `SELECT status FROM okr.objective WHERE tenant_id = $1 AND parent_objective_id = $2`,
-    [tenantId, objectiveId]
-  );
-
-  let status = 'Not Started';
   const levels = await getTenantRubricLevels(client, tenantId);
+  const scoredIndexes = []; // one level_index per scored input — own Key Results (as one combined item) and each scored child Objective
 
-  if (children.length > 0) {
-    if (levels.length > 0) {
-      const scored = children
-        .map((c) => levels.find((l) => l.label === c.status))
-        .filter(Boolean); // drop children whose status is 'Not Started' or otherwise doesn't match a current level
-      if (scored.length > 0) {
-        const averageIndex = scored.reduce((sum, l) => sum + l.level_index, 0) / scored.length;
-        status = closestLevel(levels, averageIndex).label;
-      }
-    }
-  } else {
-    const { rows: scored } = await client.query(
+  if (levels.length > 0) {
+    const { rows: ownKeyResults } = await client.query(
       `SELECT kr.weighting, latest.level_index
        FROM okr.key_result kr
        JOIN LATERAL (
@@ -128,12 +130,25 @@ export async function recomputeObjectiveStatus(client, tenantId, objectiveId) {
        WHERE kr.tenant_id = $1 AND kr.objective_id = $2`,
       [tenantId, objectiveId]
     );
-    if (scored.length > 0 && levels.length > 0) {
-      const totalWeight = scored.reduce((sum, r) => sum + Number(r.weighting), 0);
-      const weightedSum = scored.reduce((sum, r) => sum + Number(r.weighting) * r.level_index, 0);
-      status = closestLevel(levels, weightedSum / totalWeight).label;
+    if (ownKeyResults.length > 0) {
+      const totalWeight = ownKeyResults.reduce((sum, r) => sum + Number(r.weighting), 0);
+      const weightedSum = ownKeyResults.reduce((sum, r) => sum + Number(r.weighting) * r.level_index, 0);
+      if (totalWeight > 0) scoredIndexes.push(weightedSum / totalWeight);
+    }
+
+    const { rows: children } = await client.query(
+      `SELECT status FROM okr.objective WHERE tenant_id = $1 AND parent_objective_id = $2`,
+      [tenantId, objectiveId]
+    );
+    for (const child of children) {
+      const level = levels.find((l) => l.label === child.status);
+      if (level) scoredIndexes.push(level.level_index); // a child still 'Not Started' (or an unrecognised status) contributes nothing, same as before
     }
   }
+
+  const status = scoredIndexes.length > 0
+    ? closestLevel(levels, scoredIndexes.reduce((sum, idx) => sum + idx, 0) / scoredIndexes.length).label
+    : 'Not Started';
 
   await client.query(
     `UPDATE okr.objective SET status = $3 WHERE tenant_id = $1 AND id = $2`,

@@ -5,7 +5,7 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** 2026-09-20. Originally reconstructed 2026-09-16 directly
+**Last updated:** 2026-09-23. Originally reconstructed 2026-09-16 directly
 from the GitHub repo (`mrdutoit/WayPoint`, `waypoint-v1`) rather than from a
 session log — the previous version of this file said Stage 4 hadn't
 started, which the repo contradicted (Modules 1–3 and part of Module 6
@@ -404,6 +404,57 @@ on its own merits:
   two charts saying overlapping things.
 - `npm run build` and `npm test` (411, up from 409) both pass.
 - Next: the cascade sunburst, last of the three.
+
+## 2026-09-23: real roll-up bug fixed — this one matters, read it
+
+Mark's own testing (adding/checking in Key Results, watching Objective
+status stay "Not Started" regardless) surfaced a genuine bug, not a
+misunderstanding — confirmed by reading the code, not assumed.
+
+- **The bug:** `recomputeObjectiveStatus` (scoringService.js) decided
+  EITHER children OR own Key Results, never both — an Objective with a
+  child Objective scored from that child alone, silently discarding
+  Check-ins submitted directly on its own Key Results. This was a known,
+  explicitly-flagged ambiguity from when this module was first built
+  ("an Objective can have both children and its own Key Results... flag
+  if that's wrong" — it was wrong). Mark's real data hit it exactly: a
+  Company-level Objective with two directly checked-in Key Results
+  (Achieved, On Track) AND a Division-level child stayed "Not Started"
+  because the child hadn't been scored yet, and the code never looked
+  at the Company objective's own Key Results once it saw it had a child.
+- **Fixed:** own Key Results are weighted-averaged among themselves
+  first (unchanged), then treated as one more equally-weighted item
+  alongside each child Objective, rather than the two being mutually
+  exclusive. 12 tests rewritten to match the corrected query order and
+  behaviour, including a new test reproducing the exact bug shape.
+- **This does NOT retroactively fix already-stored statuses.** Every
+  Objective currently showing a stale status in the live database will
+  keep showing it until something re-triggers `recomputeObjectiveStatus`
+  for it — submitting any new Check-in on an affected Key Result cascades
+  correctly under the fixed logic and will correct that Objective (and
+  everything above it) as a side effect. There is no bulk "recompute
+  everything" tool yet — say if you want one; it wasn't built here
+  because a full audit of every place that could need it wasn't in
+  scope for this pass.
+- **Check-in submitter was genuinely missing, not just under-displayed**
+  — `submitted_by_id` was already stored and already selected by
+  `listCheckInsForKeyResult`, but never joined to a name, and the
+  frontend never rendered even the raw ID. Fixed: the list query now
+  joins `user_account` for the submitter's name, shown on every
+  Check-in row. Matters specifically because a Manager can submit on a
+  report's Key Result (FR-018) — without this, there was no way to tell
+  whose check-in you were looking at.
+- **On whether a Manager should be able to update a direct report's Key
+  Result at all** — yes, by design: FR-018 explicitly allows "an
+  Objective or Key Result owner, and where applicable their Manager."
+  The permission check itself is correct (verified in code — owner OR
+  owner's Manager, nothing looser). What I can't verify from here is
+  whether Fred is actually *configured* as Joe's manager in the live
+  tenant data — worth a quick look at Users Admin if you want to confirm
+  that specific relationship is intentional, since the rule being
+  correct doesn't guarantee the org chart data matches what you meant
+  to set up.
+- `npm run build` and `npm test` (415, up from 411) both pass.
 
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
