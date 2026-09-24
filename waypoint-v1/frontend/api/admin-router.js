@@ -1,6 +1,8 @@
 import { config } from '../api-lib/config.js';
 import { seedPlatformDefaults } from '../api-lib/services/bootstrapService.js';
 import { parseSlug } from '../api-lib/http/helpers.js';
+import { withPlatformContext } from '../api-lib/context/tenant.js';
+import { recomputeTenantStatuses } from '../api-lib/services/scoringService.js';
 
 // CORS open — needed for tools/bootstrap-admin.html, opened via file://.
 // Safe here specifically because this route is already protected by
@@ -33,7 +35,7 @@ export default async function handler(req, res) {
   const slugParts = parseSlug(req.query.slug);
   const action = slugParts.join('/');
 
-  if (req.method !== 'GET' || action !== 'bootstrap') {
+  if (req.method !== 'GET' || !['bootstrap', 'recompute-statuses'].includes(action)) {
     return res.status(404).json({ error: 'Not found' });
   }
 
@@ -42,6 +44,27 @@ export default async function handler(req, res) {
   }
   if (req.headers['x-bootstrap-secret'] !== config.bootstrapSecret) {
     return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  // GET /api/admin/recompute-statuses — one-off repair after a roll-up
+  // RULE change (2026-09-24 completion gate): recomputes every Key Result
+  // and Objective status in every tenant. Idempotent — safe to re-run.
+  // Same secret gate as bootstrap; see scoringService.recomputeTenantStatuses.
+  if (action === 'recompute-statuses') {
+    try {
+      const tenants = await withPlatformContext(async (client) => {
+        const { rows } = await client.query(`SELECT id, name FROM okr.tenant ORDER BY name`);
+        const out = [];
+        for (const tenant of rows) {
+          out.push({ tenant: tenant.name, ...(await recomputeTenantStatuses(client, tenant.id)) });
+        }
+        return out;
+      });
+      return res.status(200).json({ message: 'Statuses recomputed', tenants });
+    } catch (err) {
+      console.error('Recompute failed', err);
+      return res.status(500).json({ error: 'Recompute failed', detail: err.message });
+    }
   }
 
   try {

@@ -16,7 +16,6 @@ const describeIfDb = hasRealDb ? describe : describe.skip;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const schemaPath = join(__dirname, '../../frontend/db/schema.sql');
-const module3MigrationPath = join(__dirname, '../../frontend/db/migrations/07-initiative-checkin-reflection.sql');
 
 let client, pool;
 
@@ -30,7 +29,6 @@ describeIfDb('reporting queries against real Postgres', () => {
     client = await pool.connect();
     await client.query('DROP SCHEMA IF EXISTS okr CASCADE');
     await client.query(readFileSync(schemaPath, 'utf8'));
-    await client.query(readFileSync(module3MigrationPath, 'utf8'));
 
     async function inTenantContext(fn) {
       await client.query('BEGIN');

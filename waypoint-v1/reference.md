@@ -35,7 +35,7 @@ verified working pattern (checked directly against another production
 codebase) rather than the two-project split an earlier iteration of this
 scaffold used.
 
-Tree below reflects the repo as of 2026-09-16 (Stage 4, Modules 1–3, 4,
+Tree below reflects the repo as of 2026-09-24 (Stage 4, Modules 1–3, 4,
 6 partial, and 7 built — see `status.md`). Re-verify against the repo
 before trusting this for anything precision-sensitive; file lists are
 exactly the kind of thing that drifts fastest.
@@ -44,7 +44,7 @@ exactly the kind of thing that drifts fastest.
 waypoint-v1/
 ├── frontend/                       <- the one Vercel project
 │   ├── api/                        <- thin router files, each its own Vercel Function
-│   │   ├── admin-router.js         (on-demand bootstrap)
+│   │   ├── admin-router.js         (on-demand bootstrap; one-off status recompute)
 │   │   ├── auth-router.js          (login, password reset/change)
 │   │   ├── flags-router.js         (list/update feature flags)
 │   │   ├── health.js
@@ -77,7 +77,7 @@ waypoint-v1/
 │   ├── db/
 │   │   └── schema.sql              <- plain SQL, applied manually via Neon's console
 │   ├── src/                        <- the React app
-│   │   ├── components/ (Avatar.jsx, DatePicker.jsx, Logo.jsx,
+│   │   ├── components/ (Avatar.jsx, DatePicker.jsx, ErrorBoundary.jsx, Logo.jsx,
 │   │   │   SubmitCheckInForm.jsx,
 │   │   │   charts/ (StatCard.jsx, StatusDonut.jsx, StatusBarChart.jsx,
 │   │   │   Sparkline.jsx, CalendarHeatmap.jsx, WeightingTreemap.jsx, icons.jsx))
@@ -89,16 +89,16 @@ waypoint-v1/
 │   │   │    Dashboard.jsx, FeatureFlags.jsx, KeyResultDetail.jsx, Login.jsx,
 │   │   │    ObjectiveDetail.jsx, Objectives.jsx, OkrSettings.jsx, Reports.jsx,
 │   │   │    Scorecard.jsx, Settings.jsx, TeamProgress.jsx, TenantsAdmin.jsx,
-│   │   │    UsersAdmin.jsx)
+│   │   │    UsersAdmin.jsx, dashboard.css — Dashboard's own stylesheet)
 │   │   ├── services/api.js
 │   │   ├── styles/tokens.js        <- design tokens, incl. brand colours, CHART_PALETTE
-│   │   ├── utils/ (dateFormat.js, statusGroups.js, objectiveTree.js, jwt.js)
+│   │   ├── utils/ (cycleMath.js, dateFormat.js, statusGroups.js, objectiveTree.js, jwt.js)
 │   │   └── App.jsx
 │   ├── public/                     <- favicon.png, favicon.svg, apple-touch-icon.png, waypoint-icon.png
 │   ├── vercel.json                 <- routes friendly paths to the router files
 │   └── package.json
 ├── tools/                          <- standalone local HTML admin utilities
-│   ├── bootstrap-admin.html        (seeds flags + PlatformAdmin, on demand)
+│   ├── bootstrap-admin.html        (seeds flags + PlatformAdmin; recomputes all OKR statuses)
 │   └── login-test.html             (verifies sign-in end to end)
 ├── tests/                          <- vitest, run from repo root; includes tests/integration/
 └── README.md                       <- setup, deployment, env vars
@@ -107,7 +107,15 @@ waypoint-v1/
 ## Tech stack
 
 - **Frontend:** React 18 + Vite, React Router. No external UI library —
-  hand-rolled design tokens in `tokens.js`.
+  hand-rolled design tokens in `tokens.js`. Typefaces (2026-09-24):
+  Instrument Sans for all UI text, Bricolage Grotesque for display
+  moments (`--font-display` in `index.css`), both from Google Fonts in
+  `index.html`. Pages are mostly inline-styled from `tokens.js`; the
+  Dashboard uses its own plain stylesheet (`dashboard.css`) because it
+  needs hover states, media queries and a keyframed animation.
+- **Error handling in the UI:** every page renders inside
+  `ErrorBoundary` (in `App.jsx`'s `Shell`, keyed by pathname) — a render
+  crash shows an error panel with the nav intact, never a blank page.
 - **API:** Node.js, deployed as individual Vercel Functions (one file per
   domain area under `frontend/api/`), not a monolithic Express app.
 - **Database:** PostgreSQL via Neon, with Row-Level Security as the
@@ -163,6 +171,16 @@ waypoint-v1/
   restricted to owner/Manager/TenantAdmin, since that's where genuinely
   sensitive personal commentary lives. See `objectiveService.js`'s
   module comment for the full reasoning.
+- **Score roll-up rule (FR-019, `scoringService.js`).** An Objective's
+  inputs are its own Key Results (weighted-averaged into one item) plus
+  each child Objective (one item each), averaged and rounded to the
+  nearest rubric level. Unscored inputs (no Check-in / child "Not
+  Started") are excluded from the average but block the top level: the
+  rubric's highest level ("Achieved") is reached only when every input
+  is scored and at that level, otherwise capped one below. Changing
+  these rules leaves stored statuses stale — run "Recompute all OKR
+  statuses" (`tools/bootstrap-admin.html` →
+  `GET /api/admin/recompute-statuses`) after any such change.
 - **Cascade linking is optional at creation (FR-015 as written), not
   enforced.** An Objective can be created without a parent even when an
   eligible parent already exists, and can be re-parented later via edit.
@@ -204,6 +222,10 @@ waypoint-v1/
 - Icon: a real cropped/processed image (`public/waypoint-icon.png`),
   not hand-coded SVG — a compass ring + centre point + navigation arrow,
   on a navy tile.
+- Dashboard hero palette derives from the mark itself: the icon tile's
+  navy (`#0b1b3a`) as the panel, the wordmark gradient (`#6FE8FF` →
+  `#2E8CF0`) as the course line. Reuse these for any future "signature"
+  surface rather than inventing new accents.
 - Wordmark: real coded text, Baloo 2 (loaded via `index.html`), "Way" in
   dark ink, "Point" with a CSS gradient (`#6FE8FF` to `#1A5FD0`).
 - Brand colours (`tokens.js`): `brand500 #2E8CF0`, `brand600 #1A5FD0`,

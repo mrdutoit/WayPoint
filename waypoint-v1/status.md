@@ -5,7 +5,8 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** 2026-09-24. Originally reconstructed 2026-09-16 directly
+**Last updated:** 2026-09-24 (second entry that day — Dashboard redesign,
+roll-up completion gate, Scorecard crash). Originally reconstructed 2026-09-16 directly
 from the GitHub repo (`mrdutoit/WayPoint`, `waypoint-v1`) rather than from a
 session log — the previous version of this file said Stage 4 hadn't
 started, which the repo contradicted. This file was condensed on
@@ -36,7 +37,8 @@ this — that's true of every version of this file, not just this one.
     Objective/Key Result score roll-up, FR-019): built —
     `scoringService.js`, called from `checkInService.js`, and (as of
     2026-09-23) also from `objectiveService.js`/`keyResultService.js`
-    wherever weighting or cascade position changes.
+    wherever weighting or cascade position changes. Roll-up rule revised
+    2026-09-24 (completion gate — see below).
   - Module 5 (Integrations): none identified in Stage 1 scope — N/A.
   - Module 6 (Reporting & dashboards): partially built. Four of the
     eight report types listed in the Stage 2 doc's section 5 are built
@@ -103,8 +105,11 @@ equivalent to "the module was reviewed and closed out."
 - Health check endpoint (no longer a Dashboard UI card, which was dead
   Stage 3 leftover — the endpoint itself is untouched)
 - Platform Administrator bootstrap, on-demand, idempotent
-- Dashboard given a real design pass (2026-09-16, extended 2026-09-24)
-  rather than left as generic identical-card styling — see History
+- Dashboard rebuilt from scratch 2026-09-24 around a "course line" hero
+  (see the 2026-09-24 redesign entry below) — replaces both earlier
+  passes, which Mark rejected as not studio-grade
+- Every page wrapped in an error boundary — a render crash now shows a
+  readable error with the nav intact, never a blank white screen
 
 ## What's explicitly NOT built yet
 
@@ -303,6 +308,90 @@ both pass.
   Settings, Users, Tenants) has not had this treatment yet.
 - `npm run build` and `npm test` (421) both pass.
 
+## 2026-09-24 (later): Dashboard redesign, completion gate, Scorecard crash
+
+Supersedes the Dashboard pass recorded in the entry above — Mark
+rejected it outright ("just adding a shadow behind the graphs is not
+high-end"), and he was right: it restyled the same card-and-donut
+layout rather than rethinking it.
+
+- **Reports "missing menu items" — clarified, not a bug.** Neither of
+  the last two report deliveries added a menu item. The heatmap is
+  inside Check-in Compliance (TenantAdmin only — Mark was testing as
+  Fred, a Manager); the treemap is inside Scorecard, which was crashing
+  (next bullet). An earlier explanation attributed this to missing
+  Check-ins; that was wrong.
+- **Blank Scorecard page — root cause fixed.** Recharts' `Treemap` calls
+  its `content` renderer for the ROOT node too (depth 0, no `name`);
+  `WeightingTreemap`'s cell read `name.length` unconditionally and threw.
+  With no error boundary anywhere, one throw unmounted the whole app.
+  Reproduced in a headless browser against the old file before fixing
+  (`TypeError: Cannot read properties of undefined (reading 'length')`),
+  confirmed rendering after. Cell now renders leaves only.
+- **New `components/ErrorBoundary.jsx`**, wrapped around page content in
+  `App.jsx`'s `Shell`, keyed by pathname so navigating away clears it.
+  Verified it catches the original crash with the nav still usable.
+- **Roll-up completion gate (`scoringService.recomputeObjectiveStatus`).**
+  Mark's live data: Team "Achieved" over an Individual child that hadn't
+  started, rolling "Achieved" up to Division and Company. Cause:
+  unscored inputs (Key Result with no Check-in, child "Not Started")
+  dropped out of the average entirely, so a parent averaged only what
+  had been reported. Now: unscored inputs still don't drag the average
+  down (a fresh Cycle would otherwise read Off Track on day one), but
+  the rubric's TOP level is a completion state — reachable only when
+  every input is scored and every input is itself at the top level;
+  otherwise capped one level below ("On Track"). Own Key Results query
+  switched to `LEFT JOIN LATERAL` so un-checked-in Key Results count as
+  inputs.
+- **Stored statuses need a one-off repair.** New
+  `scoringService.recomputeTenantStatuses` (every Key Result, then every
+  leaf Objective cascading upward), exposed as
+  `GET /api/admin/recompute-statuses` on `admin-router.js` behind the
+  same `BOOTSTRAP_SECRET` gate as bootstrap, and a **"Recompute all OKR
+  statuses"** button in `tools/bootstrap-admin.html`. Idempotent. Also
+  the manual remedy for the rubric-label-rename staleness (Open items).
+- **Dashboard rebuilt** (`pages/Dashboard.jsx` + new `pages/dashboard.css`,
+  plain CSS for hover/media queries/one keyframed moment). Concept: the
+  Cycle is a passage, each Check-in a waypoint. Hero is a chart panel in
+  the logo's navy with the Cycle drawn as a course line in the
+  wordmark's cyan-to-blue gradient — sailed course solid, remaining
+  dashed, every Check-in plotted where it happened coloured by score, a
+  confidence profile above, "Day N of M" headline and a one-sentence
+  position summary. Below: "Your objectives" rows with a
+  weighting-proportional status strip; "Check in next" queue (never
+  checked in first, then 14+ days stale — a fixed, labelled threshold
+  since no per-Key-Result schedule exists); "Your team" (Managers);
+  "Across the organisation" by cascade level (+ compliance figure for
+  TenantAdmin). Hero sets `data-theme="dark"` on itself so tokens
+  resolve to on-dark values in either theme. No new endpoints — built on
+  scorecard(self), alignmentMap, teamProgress, checkinCompliance.
+- **Correctness fix inside the old Dashboard:** its headline used
+  `objectivesApi.list()` — every Objective in the tenant, every Cycle —
+  while labelling it the caller's own "this Cycle". New version uses the
+  caller's own active-Cycle scorecard.
+- **"Add check-in" deep link:** `ObjectiveDetail` opens a Key Result's
+  inline check-in form when reached via `?checkin=<keyResultId>`.
+- **Typography, app-wide:** Instrument Sans for all UI text, Bricolage
+  Grotesque for display (`--font-display`), loaded in `index.html`.
+  This changes every page's look, not just Dashboard's.
+- **New `utils/cycleMath.js`** (day-of-Cycle, positions, month ticks,
+  check-in queue ordering) with 10 unit tests — date logic kept out of
+  the component precisely because there's no component test harness.
+- **Integration suite was silently broken** — both files still read
+  `db/migrations/07-initiative-checkin-reflection.sql`, deleted when it
+  was folded into `schema.sql` on 2026-09-16, so neither could run at
+  all; and one assertion still encoded the pre-2026-09-23 children-only
+  roll-up. Neither was noticed because the suite skips without
+  `TEST_DATABASE_URL`. Both fixed, one real-Postgres completion-gate
+  test added. Run this time against a real local Postgres 16: 31/31.
+- **Verification this time went beyond build/test:** every Dashboard
+  state (Manager with data, TenantAdmin with no Objectives, no active
+  Cycle, dark theme, 390px mobile) and the Scorecard were rendered in a
+  headless Chromium against mocked API responses and reviewed as
+  screenshots. That harness lives in the sandbox, not the repo.
+- `npm run build`, `npm test` (440, up from 421), and the integration
+  suite (31) all pass.
+
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
 Raised when comparing WayPoint against Perdoo's UI (screenshots reviewed
@@ -335,21 +424,23 @@ silent addition, before being built:
 
 ## Next immediate step
 
-Three threads open, none blocking the others:
-
-1. **The design pass, continuing.** Dashboard now has real materiality
-   (2026-09-24). The rest of the app — Objective Detail (the original
-   pilot proposal), Objectives list, Key Result Detail, Settings,
-   Users, Tenants — hasn't had this treatment. Awaiting direction on
-   which page next, or whether to move through them systematically.
-2. **Verification catch-up.** `db/migrations/2026-09-18-audit-log-detail.sql`
-   still needs applying against Neon if that hasn't happened (nothing
-   shows entity labels/diffs until it does), and a long run of
-   deliveries now have only been verified by `npm run build`/`npm test`
-   passing, not by real browser use signed in as an actual Tenant
-   Administrator.
-3. **Cascade sunburst** — last of the three chart candidates, not
-   started.
+1. **Deploy this delta, then run "Recompute all OKR statuses"** from
+   `tools/bootstrap-admin.html` once (needs `BOOTSTRAP_SECRET` set in
+   Vercel). Until then, every stored status still reflects the old
+   roll-up rule — e.g. the Company/Division/Team "Achieved" chain.
+2. **Review the new Dashboard as Fred (Manager) and as the Tenant
+   Administrator**, and the fixed Scorecard.
+3. **Open question to Mark:** should Managers get the check-in cadence
+   heatmap for their own direct reports (on Team Progress)? Currently
+   only TenantAdmin sees it.
+4. **Design pass across the rest of the app** — the Dashboard sets the
+   direction (typography, navy chart panel, row-based layout over card
+   grids). Objective Detail, Objectives list, Key Result Detail,
+   Reports hub and the Settings/admin pages haven't had it.
+5. **Cascade sunburst** — last of the three chart candidates, not started.
+6. Still outstanding from earlier: apply
+   `db/migrations/2026-09-18-audit-log-detail.sql` against Neon if not
+   done.
 
 ## Open items, not yet resolved
 
@@ -360,9 +451,12 @@ Three threads open, none blocking the others:
   (see "Where things actually stand" above) — worth deciding how that
   should be tracked going forward so this kind of drift is caught sooner.
 - Renaming a scoring rubric level's label doesn't trigger a status
-  recompute (see 2026-09-23 above) — a lower-frequency version of the
-  same staleness class as the weighting/re-parent gaps already closed.
-  Not fixed yet; flagged here rather than silently dropped.
+  recompute (see 2026-09-23 above). Still not automatic, but there is
+  now a manual remedy: "Recompute all OKR statuses" in
+  `tools/bootstrap-admin.html` (2026-09-24).
+- A roll-up status is a health reading of what's been reported so far;
+  the UI doesn't yet show *how much* has been reported (e.g. "2 of 3
+  inputs scored"). Worth considering alongside the design pass.
 - This codebase has no frontend component test harness — a real,
   standing gap, not just a one-off. The refresh-logout and sign-out
   bugs (2026-09-23) are exactly the class of bug that gap allows

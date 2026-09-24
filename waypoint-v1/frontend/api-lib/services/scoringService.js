@@ -95,31 +95,47 @@ export async function recomputeKeyResultStatus(client, tenantId, keyResultId) {
  * the parent chain has no cycles, so this recursion is guaranteed to
  * terminate.
  *
- * 2026-09-23 correction: this used to score EITHER from child Objectives
- * OR from the Objective's own Key Results — never both, on the
- * assumption (flagged explicitly in this file's history as an
- * unresolved ambiguity, "flag if wrong") that only leaf-level Objectives
- * carry their own Key Results. Real usage proved that assumption false:
- * a Company-level Objective with both its own Key Results (checked in
- * directly) AND a Division-level child scored from the child alone,
- * silently ignoring Check-ins submitted right on it — status stuck at
- * "Not Started" despite an Achieved and an On Track Key Result
- * underneath it. Fixed to combine both: the Objective's own Key Results
- * are first weighted-averaged among themselves (unchanged from before),
- * then that result is treated as one more equally-weighted item
- * alongside each child Objective — an Objective's own work counts for
- * as much as any single child branch, rather than being discarded the
- * moment it has any children at all.
+ * Inputs to the roll-up: the Objective's own Key Results (weighted-
+ * averaged among themselves into ONE item — 2026-09-23 fix) plus each
+ * child Objective (one equally-weighted item each).
+ *
+ * 2026-09-24 — completion gate. Until now an unscored input (a Key
+ * Result with no Check-in, a child still "Not Started") simply dropped
+ * out of the average, which produced exactly what Mark saw live: a Team
+ * Objective reading "Achieved" while its Individual child hadn't
+ * started, and that "Achieved" then rolling straight up to Division and
+ * Company. The average answers "how healthy is the work reported so
+ * far"; it cannot answer "is this done". Two rules now apply:
+ *
+ *   1. Unscored inputs still don't drag the average down — penalising
+ *      them would make every fresh Cycle read Off Track on day one, which
+ *      is noise, not signal.
+ *   2. The rubric's top level (highest level_index — "Achieved" in the
+ *      default rubric) is a completion state, not an average. An
+ *      Objective reaches it only when EVERY input is scored AND every
+ *      input is itself at the top level. Otherwise the result is capped
+ *      one level below the top ("On Track"): healthy, not finished.
+ *
+ * So a parent can never read "Achieved" while anything beneath it is
+ * unstarted or merely on track — and because the cap applies at every
+ * level, it propagates up the whole cascade.
  */
 export async function recomputeObjectiveStatus(client, tenantId, objectiveId) {
   const levels = await getTenantRubricLevels(client, tenantId);
-  const scoredIndexes = []; // one level_index per scored input — own Key Results (as one combined item) and each scored child Objective
+  const scoredIndexes = []; // one level_index per scored input
+  let inputCount = 0; // every input, scored or not
+  let allInputsComplete = true; // every input scored AND at the top level
 
   if (levels.length > 0) {
+    const topIndex = levels[levels.length - 1].level_index; // levels are ORDER BY level_index ASC
+
+    // LEFT JOIN, not JOIN: a Key Result with no Check-in comes back with
+    // level_index NULL. It's excluded from the average but still counts
+    // as an input, which is what blocks the top level (rule 2 above).
     const { rows: ownKeyResults } = await client.query(
       `SELECT kr.weighting, latest.level_index
        FROM okr.key_result kr
-       JOIN LATERAL (
+       LEFT JOIN LATERAL (
          SELECT rl.level_index
          FROM okr.check_in ci
          JOIN okr.rubric_level rl ON rl.id = ci.rubric_level_id
@@ -131,9 +147,14 @@ export async function recomputeObjectiveStatus(client, tenantId, objectiveId) {
       [tenantId, objectiveId]
     );
     if (ownKeyResults.length > 0) {
-      const totalWeight = ownKeyResults.reduce((sum, r) => sum + Number(r.weighting), 0);
-      const weightedSum = ownKeyResults.reduce((sum, r) => sum + Number(r.weighting) * r.level_index, 0);
+      inputCount += 1;
+      const scored = ownKeyResults.filter((r) => r.level_index !== null && r.level_index !== undefined);
+      if (scored.length < ownKeyResults.length) allInputsComplete = false;
+      if (scored.some((r) => r.level_index !== topIndex)) allInputsComplete = false;
+      const totalWeight = scored.reduce((sum, r) => sum + Number(r.weighting), 0);
+      const weightedSum = scored.reduce((sum, r) => sum + Number(r.weighting) * r.level_index, 0);
       if (totalWeight > 0) scoredIndexes.push(weightedSum / totalWeight);
+      else if (scored.length > 0) scoredIndexes.push(scored.reduce((sum, r) => sum + r.level_index, 0) / scored.length); // all weightings 0 — fall back to a plain average rather than silently dropping them
     }
 
     const { rows: children } = await client.query(
@@ -141,15 +162,29 @@ export async function recomputeObjectiveStatus(client, tenantId, objectiveId) {
       [tenantId, objectiveId]
     );
     for (const child of children) {
+      inputCount += 1;
       const level = levels.find((l) => l.label === child.status);
-      if (level) scoredIndexes.push(level.level_index); // a child still 'Not Started' (or an unrecognised status) contributes nothing, same as before
+      if (level) {
+        scoredIndexes.push(level.level_index);
+        if (level.level_index !== topIndex) allInputsComplete = false;
+      } else {
+        allInputsComplete = false; // 'Not Started' (or an unrecognised label) — excluded from the average, blocks completion
+      }
+    }
+
+    if (scoredIndexes.length > 0) {
+      let level = closestLevel(levels, scoredIndexes.reduce((sum, idx) => sum + idx, 0) / scoredIndexes.length);
+      if (level.level_index === topIndex && !(allInputsComplete && inputCount > 0) && levels.length > 1) {
+        level = levels[levels.length - 2];
+      }
+      return persistAndCascade(client, tenantId, objectiveId, level.label);
     }
   }
 
-  const status = scoredIndexes.length > 0
-    ? closestLevel(levels, scoredIndexes.reduce((sum, idx) => sum + idx, 0) / scoredIndexes.length).label
-    : 'Not Started';
+  return persistAndCascade(client, tenantId, objectiveId, 'Not Started');
+}
 
+async function persistAndCascade(client, tenantId, objectiveId, status) {
   await client.query(
     `UPDATE okr.objective SET status = $3 WHERE tenant_id = $1 AND id = $2`,
     [tenantId, objectiveId, status]
@@ -165,4 +200,37 @@ export async function recomputeObjectiveStatus(client, tenantId, objectiveId) {
   }
 
   return status;
+}
+
+/**
+ * One-off repair: recomputes every Key Result and Objective status for
+ * a tenant from scratch. Needed whenever the roll-up RULES change (as
+ * on 2026-09-24) — stored statuses were computed under the old rules
+ * and nothing re-triggers them until a new Check-in lands. Also the
+ * manual remedy for the rubric-label-rename staleness in status.md's
+ * open items. Not wired to any user-facing screen — run from
+ * tools/bootstrap-admin.html, gated by BOOTSTRAP_SECRET.
+ *
+ * Order matters: Key Results first (Objectives read their latest
+ * Check-in level directly, but child Objective *statuses* are read from
+ * the stored column), then every leaf Objective — recomputeObjectiveStatus
+ * cascades upward from each, and a parent's final recompute always runs
+ * after its last child's, so every ancestor ends up correct.
+ */
+export async function recomputeTenantStatuses(client, tenantId) {
+  const { rows: keyResults } = await client.query(
+    `SELECT id FROM okr.key_result WHERE tenant_id = $1`,
+    [tenantId]
+  );
+  for (const kr of keyResults) await recomputeKeyResultStatus(client, tenantId, kr.id);
+
+  const { rows: leaves } = await client.query(
+    `SELECT o.id FROM okr.objective o
+     WHERE o.tenant_id = $1
+       AND NOT EXISTS (SELECT 1 FROM okr.objective c WHERE c.tenant_id = $1 AND c.parent_objective_id = o.id)`,
+    [tenantId]
+  );
+  for (const leaf of leaves) await recomputeObjectiveStatus(client, tenantId, leaf.id);
+
+  return { keyResults: keyResults.length, leafObjectives: leaves.length };
 }

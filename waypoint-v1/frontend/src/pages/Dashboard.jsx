@@ -1,265 +1,560 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useRole } from '../context/RoleContext.jsx';
 import { useTerms } from '../context/TerminologyContext.jsx';
-import { useWindowSize } from '../hooks/useWindowSize.js';
-import { objectivesApi, reportsApi } from '../services/api.js';
-import { s, colors, radius } from '../styles/tokens.js';
-import { groupByStatus } from '../utils/statusGroups.js';
-import StatCard from '../components/charts/StatCard.jsx';
-import StatusDonut from '../components/charts/StatusDonut.jsx';
-import StatusBarChart from '../components/charts/StatusBarChart.jsx';
+import { reportsApi } from '../services/api.js';
+import { STATUS_META, colors } from '../styles/tokens.js';
+import { Avatar } from '../components/Avatar.jsx';
+import { formatDate } from '../utils/dateFormat.js';
 import {
-  TargetIcon, AlertIcon, TrophyIcon, UsersIcon, CheckCircleIcon, ClipboardIcon, SitemapIcon,
-} from '../components/charts/icons.jsx';
+  cycleProgress, positionInCycle, monthTicks, daysSince, checkInQueue, relativeDays, STALE_AFTER_DAYS,
+} from '../utils/cycleMath.js';
+import './dashboard.css';
 
-// Real landing content, replacing the Stage 3 scaffold placeholder that
-// sat here unchanged through every module built since.
-//
-// 2026-09-16: rebuilt as a role-aware analytics dashboard, moving away
-// from the generic "SaaS-card kit" pattern (identical boxes, ALL-CAPS
-// labels, no hierarchy) toward one hero with real visual weight and
-// everything else demoted beneath it.
-//
-// 2026-09-24: second pass, explicitly instructed rather than assumed —
-// the first pass was a genuine improvement in structure but still read
-// flat: same card treatment everywhere, no depth, nothing interactive.
-// This pass adds actual materiality (a soft radial glow behind the
-// hero, not just a flat card), a real hover response on every
-// clickable surface (`.wp-lift` in index.css — transform-only, see its
-// own comment for why box-shadow wasn't usable here), and reworks the
-// quick-links list to share the same icon-led visual language as the
-// stat row above it, rather than two different card idioms on one
-// page. Still no new backend — same three endpoints as before.
+/*
+ * Dashboard — 2026-09-24 redesign, replacing the card-and-donut layout
+ * entirely (see dashboard.css for the design concept).
+ *
+ * Data: no new endpoints. Everything comes from reports the caller can
+ * already read —
+ *   scorecard(self)   the caller's own Objectives, Key Results and
+ *                     Check-in history for the active Cycle (hero,
+ *                     objective rows, check-in queue)
+ *   teamProgress      Managers only — their direct reports
+ *   alignmentMap      any tenant member — the organisation strip
+ *   checkinCompliance TenantAdmin only — one figure in the org strip
+ *
+ * This also fixes a correctness problem in the previous version: it
+ * built its headline from objectivesApi.list(), which returns every
+ * Objective in the tenant across every Cycle, while labelling the
+ * result "this Cycle" and presenting it as the caller's own.
+ */
 
-function QuickLink({ to, icon: Icon, title, description }) {
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const ATTENTION = ['Off Track', 'At Risk'];
+const ON_COURSE = ['On Track', 'Achieved'];
+
+function statusColor(status) {
+  return STATUS_META[status]?.color ?? colors.ink400;
+}
+
+function greetingFor(date) {
+  const h = date.getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function plural(n, one, many) {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function StatusLabel({ status }) {
   return (
-    <Link
-      to={to} className="wp-lift"
-      style={{
-        ...s.card, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 14,
-      }}
-    >
-      <div style={{
-        width: 40, height: 40, borderRadius: radius.sm, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: colors.brand600, background: `color-mix(in srgb, ${colors.brand600} 12%, transparent)`,
-      }}>
-        <Icon size={19} />
-      </div>
-      <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: colors.ink900 }}>{title}</div>
-        <div style={{ fontSize: 13, color: colors.ink500 }}>{description}</div>
-      </div>
-      <div style={{ color: colors.ink400, fontSize: 18, flexShrink: 0 }}>&rarr;</div>
-    </Link>
+    <span className="db-status" style={{ color: statusColor(status) }}>
+      <span className="db-dot" style={{ background: statusColor(status) }} />
+      {status}
+    </span>
   );
 }
 
-// Thin circular progress ring for the one hero number on the page —
-// deliberately the only place on this screen that gets this treatment.
-function ProgressRing({ pct, size = 108, stroke = 10, accent }) {
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const offset = c - (Math.max(0, Math.min(100, pct)) / 100) * c;
+// ---------------------------------------------------------------------
+// Hero course line
+// ---------------------------------------------------------------------
+
+const W = 1000;
+const H = 150;
+const COURSE_Y = 122;
+const PROFILE_TOP = 22;
+const PROFILE_BOTTOM = 92;
+
+function confidenceY(value) {
+  const clamped = Math.min(5, Math.max(1, Number(value) || 1));
+  return PROFILE_BOTTOM - ((clamped - 1) / 4) * (PROFILE_BOTTOM - PROFILE_TOP);
+}
+
+function CourseLine({ cycle, progress, checkIns }) {
+  const todayX = progress.fraction * W;
+  const ticks = monthTicks(cycle.startDate, cycle.endDate);
+
+  const points = checkIns
+    .map((ci) => ({ ...ci, x: (positionInCycle(ci.submittedAt, cycle.startDate, cycle.endDate) ?? 0) * W }))
+    .sort((a, b) => a.x - b.x);
+
+  // Confidence profile: one point per day with Check-ins (the day's mean),
+  // joined into a line and softly filled — the "altitude" of the passage.
+  const byDay = new Map();
+  for (const p of points) {
+    const key = Math.round(p.x);
+    const entry = byDay.get(key) ?? { x: p.x, sum: 0, n: 0 };
+    entry.sum += Number(p.confidence) || 0;
+    entry.n += 1;
+    byDay.set(key, entry);
+  }
+  const profile = [...byDay.values()].map((d) => ({ x: d.x, y: confidenceY(d.sum / d.n) }));
+  const profilePath = profile.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const areaPath = profile.length > 1
+    ? `${profilePath} L${profile[profile.length - 1].x.toFixed(1)},${PROFILE_BOTTOM} L${profile[0].x.toFixed(1)},${PROFILE_BOTTOM} Z`
+    : null;
+
+  // Waypoints sharing (nearly) the same x stack upward slightly rather
+  // than hiding each other.
+  const stackCount = new Map();
+  const waypoints = points.map((p) => {
+    const key = Math.round(p.x / 6);
+    const n = stackCount.get(key) ?? 0;
+    stackCount.set(key, n + 1);
+    return { ...p, y: COURSE_Y - n * 11 };
+  });
+
+  const label = `${cycle.name}: day ${progress.dayNumber} of ${progress.totalDays}, ${plural(checkIns.length, 'check-in', 'check-ins')} recorded so far.`;
+
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0, filter: `drop-shadow(0 2px 6px color-mix(in srgb, ${accent} 35%, transparent))` }}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size / 2} cy={size / 2} r={r} stroke={colors.ink200} strokeWidth={stroke} fill="none" />
-        <circle
-          cx={size / 2} cy={size / 2} r={r} stroke={accent} strokeWidth={stroke} fill="none"
-          strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
-        />
+    <div className="db-course">
+      {!progress.afterEnd && !progress.beforeStart && (
+        <span className="db-today" style={{ left: `${progress.fraction * 100}%` }}>Today</span>
+      )}
+      <div className="db-course-plot">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="db-course-grad" gradientUnits="userSpaceOnUse" x1="0" x2={W} y1="0" y2="0">
+            <stop offset="0%" stopColor="#6fe8ff" />
+            <stop offset="100%" stopColor="#2e8cf0" />
+          </linearGradient>
+          <linearGradient id="db-profile-grad" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#6fe8ff" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="#6fe8ff" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Month boundaries */}
+        {ticks.map((t) => (
+          <g key={t.date.toISOString()}>
+            <line x1={t.fraction * W} x2={t.fraction * W} y1={PROFILE_TOP - 6} y2={COURSE_Y + 8} stroke="rgba(148,163,184,0.22)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+          </g>
+        ))}
+
+        {/* Confidence profile */}
+        {areaPath && <path className="db-course-profile" d={areaPath} fill="url(#db-profile-grad)" />}
+        {profile.length > 1 && (
+          <path className="db-course-profile" d={profilePath} fill="none" stroke="#6fe8ff" strokeOpacity="0.7" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+        )}
+
+        {/* Remaining course */}
+        <line x1={todayX} x2={W} y1={COURSE_Y} y2={COURSE_Y} stroke="rgba(148,163,184,0.45)" strokeWidth="2" strokeDasharray="2 7" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        {/* Course sailed */}
+        {todayX > 0 && (
+          <g className="db-course-elapsed">
+            <rect x="0" y={COURSE_Y - 2} width={todayX} height="4" rx="2" fill="url(#db-course-grad)" />
+          </g>
+        )}
+
+        {/* Today */}
+        {!progress.afterEnd && (
+          <line x1={todayX} x2={todayX} y1={PROFILE_TOP - 8} y2={COURSE_Y + 10} stroke="#ffffff" strokeOpacity="0.85" strokeWidth="1.25" vectorEffect="non-scaling-stroke" />
+        )}
+
       </svg>
-      <div style={{
-        position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 28, fontWeight: 800, color: colors.ink900, fontVariantNumeric: 'tabular-nums',
-      }}>
-        {pct}%
+
+      {/* Buoys and waypoints are HTML, positioned in % over the SVG: the
+          SVG stretches to fill the width (preserveAspectRatio="none"), so
+          circles drawn inside it would squash into ellipses on a phone. */}
+      <span className="db-buoy db-buoy-start" style={{ left: 0, top: `${(COURSE_Y / H) * 100}%` }} />
+      <span className="db-buoy db-buoy-end" style={{ left: '100%', top: `${(COURSE_Y / H) * 100}%` }} />
+      {waypoints.map((p, i) => (
+        <span
+          key={i} className="db-waypoint"
+          style={{ left: `${(p.x / W) * 100}%`, top: `${(p.y / H) * 100}%`, background: statusColor(p.scoreLabel) }}
+          title={`${p.keyResultTitle}: ${p.scoreLabel}, confidence ${p.confidence}/5 (${formatDate(String(p.submittedAt).slice(0, 10))})`}
+        />
+      ))}
       </div>
+
+      <CourseAxis cycle={cycle} progress={progress} ticks={ticks} />
     </div>
   );
 }
 
-const ATTENTION_STATUSES = ['Off Track', 'At Risk'];
+// Axis labels live in HTML, not SVG text, so they don't stretch with the
+// preserveAspectRatio="none" course and stay crisp at any width.
+function CourseAxis({ cycle, progress, ticks }) {
+  const monthName = (d) => MONTHS[d.getMonth()];
+  return (
+    <div style={{ position: 'relative', height: 20, marginTop: 4, fontSize: 12, color: 'var(--ink500)', fontVariantNumeric: 'tabular-nums' }}>
+      <span style={{ position: 'absolute', left: 0 }}>{formatDate(cycle.startDate)}</span>
+      {ticks.filter((t) => t.fraction > 0.14 && t.fraction < 0.86).map((t) => (
+        <span key={t.date.toISOString()} style={{ position: 'absolute', left: `${t.fraction * 100}%`, transform: 'translateX(-50%)' }}>
+          {monthName(t.date)}
+        </span>
+      ))}
+      <span style={{ position: 'absolute', right: 0 }}>{formatDate(cycle.endDate)}</span>
+    </div>
+  );
+}
+
+function Hero({ user, scorecard, queue, isTenantAdmin, terms }) {
+  const { t, tPlural } = terms;
+  const now = new Date();
+  const firstName = user?.firstName ?? '';
+  const greeting = `${greetingFor(now)}${firstName ? `, ${firstName}` : ''}`;
+  const cycle = scorecard?.cycle;
+  const progress = cycle ? cycleProgress(cycle.startDate, cycle.endDate, now) : null;
+
+  if (!cycle || !progress) {
+    return (
+      <section className="db-hero" data-theme="dark">
+        <p className="db-greeting">{greeting}</p>
+        <h1 className="db-day db-display" style={{ fontSize: 'clamp(32px, 4.5vw, 48px)' }}>No active {t('Cycle').toLowerCase()}</h1>
+        <p className="db-summary">
+          {isTenantAdmin
+            ? <>Nothing is being tracked right now. Create a {t('Cycle').toLowerCase()} in OKR settings and it will appear here as a course from its first day to its last.</>
+            : <>Nothing is being tracked right now. Your administrator opens each {t('Cycle').toLowerCase()}; it will appear here as soon as one starts.</>}
+        </p>
+        {isTenantAdmin && <Link className="db-link" style={{ color: 'var(--brand700)', display: 'inline-block', marginTop: 16 }} to="/okr-settings">Open OKR settings</Link>}
+      </section>
+    );
+  }
+
+  const objectives = scorecard.objectives;
+  const keyResults = objectives.flatMap((o) => o.keyResults);
+  const checkIns = objectives.flatMap((o) => o.keyResults.flatMap((kr) => kr.checkInHistory.map((ci) => ({ ...ci, keyResultTitle: kr.title }))));
+  const onCourse = objectives.filter((o) => ON_COURSE.includes(o.status)).length;
+  const attention = objectives.filter((o) => ATTENTION.includes(o.status)).length;
+  const neverCheckedIn = queue.filter((k) => k.daysSinceCheckIn === null).length;
+  const stale = queue.filter((k) => k.due && k.daysSinceCheckIn !== null).length;
+  const objWord = (n) => (n === 1 ? t('Objective') : tPlural('Objective')).toLowerCase();
+  const krWord = (n) => (n === 1 ? t('KeyResult') : tPlural('KeyResult')).toLowerCase();
+
+  let summary;
+  if (objectives.length === 0) {
+    summary = <>You don&apos;t own any {tPlural('Objective').toLowerCase()} this {t('Cycle').toLowerCase()}.</>;
+  } else {
+    summary = (
+      <>
+        <strong>{onCourse} of {objectives.length}</strong> {objWord(objectives.length)} on track or achieved
+        {attention > 0 && <>, <strong>{attention}</strong> off track or at risk</>}.{' '}
+        {keyResults.length === 0
+          ? <>None of them has a {t('KeyResult').toLowerCase()} yet.</>
+          : neverCheckedIn + stale === 0
+            ? <>Every {t('KeyResult').toLowerCase()} has a {t('CheckIn').toLowerCase()} from the last two weeks.</>
+            : <>
+                {neverCheckedIn > 0 && <><strong>{neverCheckedIn}</strong> {krWord(neverCheckedIn)} {neverCheckedIn === 1 ? 'has' : 'have'} never been checked in</>}
+                {neverCheckedIn > 0 && stale > 0 && ' and '}
+                {stale > 0 && <><strong>{stale}</strong> {stale === 1 ? 'hasn\u2019t' : 'haven\u2019t'} been updated in {STALE_AFTER_DAYS}+ days</>}.
+              </>}
+      </>
+    );
+  }
+
+  const closing = progress.afterEnd
+    ? `Closed ${formatDate(cycle.endDate)}`
+    : progress.beforeStart
+      ? `Opens ${formatDate(cycle.startDate)}`
+      : `Closes ${formatDate(cycle.endDate)}, ${plural(progress.daysLeft, 'day', 'days')} left`;
+
+  return (
+    <section className="db-hero" data-theme="dark">
+      <div className="db-hero-top">
+        <div>
+          <p className="db-greeting">{greeting}</p>
+          <h1 className="db-day db-display">
+            Day {progress.dayNumber} <span className="db-day-of">of {progress.totalDays}</span>
+          </h1>
+        </div>
+        <div className="db-cycle-meta">
+          <span className="db-cycle-name">{cycle.name}</span>
+          {closing}
+        </div>
+      </div>
+      <p className="db-summary">{summary}</p>
+
+      <CourseLine cycle={cycle} progress={progress} checkIns={checkIns} />
+
+      <div className="db-course-legend">
+        <span><span className="db-dot" style={{ background: 'linear-gradient(90deg,#6fe8ff,#2e8cf0)', width: 16, borderRadius: 2, height: 4 }} />Course so far</span>
+        <span><span className="db-dot" style={{ background: statusColor('On Track') }} />Each dot is one of your {tPlural('CheckIn').toLowerCase()}, coloured by its score</span>
+        {checkIns.length > 1 && <span><span className="db-dot" style={{ background: '#6fe8ff', opacity: 0.6, width: 16, borderRadius: 2, height: 2 }} />Confidence</span>}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Body sections
+// ---------------------------------------------------------------------
+
+function ObjectiveRows({ objectives, terms }) {
+  const { t, tPlural } = terms;
+  if (objectives.length === 0) {
+    return (
+      <div className="db-empty">
+        Nothing is assigned to you this {t('Cycle').toLowerCase()}. Create an {t('Objective').toLowerCase()} of your own, or see what the rest of the organisation is working towards.
+        <br />
+        <Link className="db-link" to="/objectives">Go to {tPlural('Objective').toLowerCase()}</Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="db-objectives">
+      {objectives.map((obj) => {
+        const totalWeight = obj.keyResults.reduce((sum, kr) => sum + (Number(kr.weighting) || 0), 0);
+        const lastCheckIn = obj.keyResults
+          .flatMap((kr) => kr.checkInHistory.map((ci) => ci.submittedAt))
+          .sort()
+          .at(-1);
+        const needAttention = obj.keyResults.filter((kr) => ATTENTION.includes(kr.status)).length;
+        return (
+          <Link key={obj.id} to={`/objectives/${obj.id}`} className="db-objective">
+            <div className="db-objective-head">
+              <span className="db-objective-title">{obj.title}</span>
+              <StatusLabel status={obj.status} />
+            </div>
+            {obj.keyResults.length === 0 ? (
+              <div className="db-strip-empty" aria-hidden="true" />
+            ) : (
+              <div className="db-strip" role="img" aria-label={obj.keyResults.map((kr) => `${kr.title}: ${kr.status}`).join('; ')}>
+                {obj.keyResults.map((kr) => (
+                  <span
+                    key={kr.id} title={`${kr.title}: ${kr.status} (weighting ${kr.weighting})`}
+                    style={{ flexGrow: totalWeight > 0 ? Number(kr.weighting) || 0.01 : 1, flexBasis: 0, background: statusColor(kr.status) }}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="db-objective-meta">
+              <span>{plural(obj.keyResults.length, t('KeyResult').toLowerCase(), tPlural('KeyResult').toLowerCase())}</span>
+              {needAttention > 0 && <span style={{ color: 'var(--warn)' }}>{needAttention} need{needAttention === 1 ? 's' : ''} attention</span>}
+              <span>Last {t('CheckIn').toLowerCase()}: {relativeDays(daysSince(lastCheckIn)).toLowerCase()}</span>
+            </div>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+function CheckInQueue({ queue, terms }) {
+  const { t, tPlural } = terms;
+  const due = queue.filter((k) => k.due);
+  if (queue.length === 0) {
+    return <div className="db-empty">No {tPlural('KeyResult').toLowerCase()} of yours to check in on yet.</div>;
+  }
+  if (due.length === 0) {
+    return (
+      <div className="db-calm">
+        You&apos;re up to date. Every {t('KeyResult').toLowerCase()} has a {t('CheckIn').toLowerCase()} from the last {STALE_AFTER_DAYS} days; the oldest was {relativeDays(queue[0].daysSinceCheckIn).toLowerCase()}.
+      </div>
+    );
+  }
+  const shown = due.slice(0, 6);
+  return (
+    <div className="db-queue">
+      {shown.map((kr) => (
+        <div key={kr.id} className="db-queue-item">
+          <span className="db-queue-title">{kr.title}</span>
+          <Link className="db-queue-btn" to={`/objectives/${kr.objectiveId}?checkin=${kr.id}`}>Add {t('CheckIn').toLowerCase()}</Link>
+          <span className="db-queue-sub">
+            <span className="db-queue-age-due">{kr.daysSinceCheckIn === null ? 'Never checked in' : `Last ${relativeDays(kr.daysSinceCheckIn).toLowerCase()}`}</span>
+            {' in '}{kr.objectiveTitle}
+          </span>
+        </div>
+      ))}
+      {due.length > shown.length && (
+        <div className="db-section-note" style={{ paddingTop: 12 }}>and {due.length - shown.length} more</div>
+      )}
+    </div>
+  );
+}
+
+function TeamSection({ teamProgress, terms }) {
+  const { t, tPlural } = terms;
+  const people = useMemo(() => {
+    const map = new Map();
+    for (const row of teamProgress?.rows ?? []) {
+      if (!map.has(row.employeeId)) {
+        map.set(row.employeeId, { id: row.employeeId, firstName: row.employeeFirstName, lastName: row.employeeLastName, keyResults: [] });
+      }
+      map.get(row.employeeId).keyResults.push(row);
+    }
+    // Rows arrive risk-sorted (reportingService.getTeamProgress), so
+    // first-seen order already puts the person with the worst result first.
+    return [...map.values()];
+  }, [teamProgress]);
+
+  if (!teamProgress) return null;
+
+  return (
+    <section className="db-wide">
+      <div className="db-section-head">
+        <h2 className="db-section-title db-display">Your team</h2>
+        <Link className="db-link" to="/reports/team-progress">Team progress</Link>
+      </div>
+      {people.length === 0 ? (
+        <div className="db-empty">None of your direct reports has a {t('KeyResult').toLowerCase()} this {t('Cycle').toLowerCase()} yet.</div>
+      ) : (
+        <div className="db-people">
+          {people.map((p) => {
+            const attention = p.keyResults.filter((kr) => ATTENTION.includes(kr.status)).length;
+            const notStarted = p.keyResults.filter((kr) => kr.status === 'Not Started').length;
+            const parts = [plural(p.keyResults.length, t('KeyResult').toLowerCase(), tPlural('KeyResult').toLowerCase())];
+            if (attention) parts.push(`${attention} need${attention === 1 ? 's' : ''} attention`);
+            if (notStarted) parts.push(`${notStarted} not started`);
+            return (
+              <Link key={p.id} to={`/reports/scorecard/${p.id}`} className="db-person">
+                <Avatar firstName={p.firstName} lastName={p.lastName} size={34} />
+                <div>
+                  <div className="db-person-name">{p.firstName} {p.lastName}</div>
+                  <div className="db-person-sub">{parts.join(', ')}</div>
+                </div>
+                <div className="db-ticks" aria-hidden="true">
+                  {p.keyResults.map((kr) => <span key={kr.keyResultId} title={`${kr.keyResultTitle}: ${kr.status}`} style={{ background: statusColor(kr.status) }} />)}
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+const BAR_ORDER = ['Achieved', 'On Track', 'At Risk', 'Off Track', 'Not Started'];
+
+function OrganisationSection({ alignment, compliance, isTenantAdmin, terms }) {
+  const { t, tPlural } = terms;
+  if (!alignment?.cycle || alignment.objectives.length === 0) return null;
+
+  const levels = new Map();
+  for (const o of alignment.objectives) {
+    if (!levels.has(o.cascadeLevelIndex)) levels.set(o.cascadeLevelIndex, { label: o.cascadeLevel, items: [] });
+    levels.get(o.cascadeLevelIndex).items.push(o);
+  }
+  const ordered = [...levels.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+
+  let done = 0, total = 0;
+  for (const owner of compliance?.byOwner ?? []) {
+    total += owner.keyResults.length;
+    done += owner.keyResults.filter((kr) => kr.hasCheckedIn).length;
+  }
+  const onCourse = alignment.objectives.filter((o) => ON_COURSE.includes(o.status)).length;
+
+  return (
+    <section className="db-wide">
+      <div className="db-section-head">
+        <h2 className="db-section-title db-display">Across the organisation</h2>
+        <Link className="db-link" to="/reports/alignment-map">Alignment map</Link>
+      </div>
+      <div className="db-levels">
+        {ordered.map((level) => {
+          const counts = new Map();
+          for (const o of level.items) counts.set(o.status, (counts.get(o.status) ?? 0) + 1);
+          const segments = [...BAR_ORDER.filter((s) => counts.has(s)), ...[...counts.keys()].filter((s) => !BAR_ORDER.includes(s))];
+          return (
+            <div key={level.label} className="db-level">
+              <span className="db-level-name">{level.label}</span>
+              <div className="db-bar" role="img" aria-label={segments.map((s) => `${counts.get(s)} ${s}`).join(', ')}>
+                {segments.map((s) => (
+                  <span key={s} title={`${counts.get(s)} ${s}`} style={{ width: `${(counts.get(s) / level.items.length) * 100}%`, background: statusColor(s) }} />
+                ))}
+              </div>
+              <span className="db-level-count">{plural(level.items.length, t('Objective').toLowerCase(), tPlural('Objective').toLowerCase())}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="db-org-foot">
+        <span><span className="db-org-figure">{onCourse}/{alignment.objectives.length}</span>{tPlural('Objective').toLowerCase()} on track or achieved</span>
+        {isTenantAdmin && total > 0 && (
+          <span>
+            <span className="db-org-figure">{Math.round((done / total) * 100)}%</span>
+            of {tPlural('KeyResult').toLowerCase()} checked in this {t('Cycle').toLowerCase()}{' '}
+            <Link className="db-link" to="/reports/checkin-compliance">Compliance</Link>
+          </span>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------
 
 export default function Dashboard() {
   const { user, isManager, isTenantAdmin, isPlatformAdmin } = useRole();
-  const { t, tPlural } = useTerms();
-  const { isMobile } = useWindowSize();
-  const pageStyle = isMobile ? s.pageMobile : s.page;
+  const terms = useTerms();
+  const { t } = terms;
 
-  const [objectives, setObjectives] = useState(null);
+  const [scorecard, setScorecard] = useState(null);
+  const [scorecardError, setScorecardError] = useState(null);
   const [teamProgress, setTeamProgress] = useState(null);
+  const [alignment, setAlignment] = useState(null);
   const [compliance, setCompliance] = useState(null);
 
-  // PlatformAdmin has no tenantId — every endpoint below 403s for them
-  // (see objectives-router.js/reports-router.js), so this section is
-  // skipped entirely rather than firing requests that can only fail.
+  // PlatformAdmin has no tenant — every endpoint below would 403.
   useEffect(() => {
-    if (isPlatformAdmin) return;
-    objectivesApi.list().then((r) => setObjectives(r?.objectives ?? [])).catch(() => setObjectives([]));
+    if (isPlatformAdmin || !user?.id) return;
+    reportsApi.scorecard(user.id).then(setScorecard).catch((err) => setScorecardError(err.message ?? 'Failed to load'));
+    reportsApi.alignmentMap().then(setAlignment).catch(() => setAlignment(null));
     if (isManager) reportsApi.teamProgress().then(setTeamProgress).catch(() => setTeamProgress(null));
     if (isTenantAdmin) reportsApi.checkinCompliance().then(setCompliance).catch(() => setCompliance(null));
-  }, [isPlatformAdmin, isManager, isTenantAdmin]);
+  }, [isPlatformAdmin, isManager, isTenantAdmin, user?.id]);
 
-  const displayName = user?.firstName ? `${user.firstName} ${user.lastName ?? ''}`.trim() : user?.email;
+  const queue = useMemo(() => {
+    if (!scorecard?.objectives) return [];
+    return checkInQueue(scorecard.objectives.flatMap((o) => o.keyResults.map((kr) => ({
+      id: kr.id, title: kr.title, weighting: kr.weighting,
+      objectiveId: o.id, objectiveTitle: o.title,
+      lastCheckInAt: kr.checkInHistory.at(-1)?.submittedAt ?? null,
+    }))));
+  }, [scorecard]);
 
-  const objectiveStatusData = objectives ? groupByStatus(objectives) : [];
-  const attentionCount = objectives ? objectives.filter((o) => ATTENTION_STATUSES.includes(o.status)).length : 0;
-  const achievedCount = objectives ? objectives.filter((o) => o.status === 'Achieved').length : 0;
-  const healthyCount = objectives ? objectives.filter((o) => o.status === 'On Track' || o.status === 'Achieved').length : 0;
-  const healthPct = objectives && objectives.length > 0 ? Math.round((healthyCount / objectives.length) * 100) : null;
-
-  const teamStatusData = teamProgress?.rows ? groupByStatus(teamProgress.rows) : [];
-  const teamAttentionCount = teamProgress?.rows ? teamProgress.rows.filter((r) => ATTENTION_STATUSES.includes(r.status)).length : 0;
-
-  let complianceDone = 0, complianceTotal = 0;
-  if (compliance?.byOwner) {
-    for (const owner of compliance.byOwner) {
-      complianceTotal += owner.keyResults.length;
-      complianceDone += owner.keyResults.filter((kr) => kr.hasCheckedIn).length;
-    }
+  if (isPlatformAdmin) {
+    return (
+      <div className="db">
+        <section className="db-hero" data-theme="dark">
+          <p className="db-greeting">{greetingFor(new Date())}{user?.firstName ? `, ${user.firstName}` : ''}</p>
+          <h1 className="db-day db-display" style={{ fontSize: 'clamp(32px, 4.5vw, 48px)' }}>Platform administration</h1>
+          <p className="db-summary">Tenants, feature flags and the audit trail for every organisation on WayPoint. Platform staff don&apos;t hold {t('Objective').toLowerCase()}s of their own.</p>
+        </section>
+        <div className="db-admin-links">
+          <Link className="db-admin-link" to="/tenants"><strong>Tenants</strong><span>Provision organisations, set billing mode, export data.</span></Link>
+          <Link className="db-admin-link" to="/admin/flags"><strong>Feature flags</strong><span>Switch platform capabilities on or off without a deployment.</span></Link>
+          <Link className="db-admin-link" to="/audit-log"><strong>Audit log</strong><span>Every significant change, across every tenant.</span></Link>
+        </div>
+      </div>
+    );
   }
-  const compliancePct = complianceTotal > 0 ? Math.round((complianceDone / complianceTotal) * 100) : null;
 
   return (
-    <div style={pageStyle}>
-      <h1 style={{ fontSize: 23, fontWeight: 700, marginBottom: 4, color: colors.ink900, letterSpacing: '-0.01em' }}>
-        Welcome{displayName ? `, ${displayName}` : ''}
-      </h1>
-      <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 24 }}>
-        Signed in as {user?.role}.
-      </p>
-
-      {isPlatformAdmin ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 480, marginBottom: 24 }}>
-          <QuickLink to="/tenants" icon={UsersIcon} title="Tenants" description="Provision new tenants and manage billing mode." />
-          <QuickLink to="/admin/flags" icon={TargetIcon} title="Feature flags" description="Enable or disable platform-wide capabilities." />
-        </div>
+    <div className="db">
+      {scorecardError ? (
+        <div className="db-empty">Your dashboard couldn&apos;t load ({scorecardError}). Reload the page to try again.</div>
+      ) : !scorecard ? (
+        <div className="db-skeleton" aria-label="Loading" />
       ) : (
         <>
-          {objectives === null ? (
-            <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 24 }}>Loading…</p>
-          ) : objectives.length === 0 ? (
-            <div style={{ ...s.card, marginBottom: 24 }}>
-              <div style={{ fontSize: 14, color: colors.ink500 }}>
-                No {tPlural('Objective').toLowerCase()} this Cycle yet — create one to see it here.
-              </div>
+          <Hero user={user} scorecard={scorecard} queue={queue} isTenantAdmin={isTenantAdmin} terms={terms} />
+
+          {scorecard.cycle && (
+            <div className="db-body">
+              <section>
+                <div className="db-section-head">
+                  <h2 className="db-section-title db-display">Your {terms.tPlural('Objective').toLowerCase()}</h2>
+                  <Link className="db-link" to={`/reports/scorecard/${user.id}`}>Scorecard</Link>
+                </div>
+                <ObjectiveRows objectives={scorecard.objectives} terms={terms} />
+              </section>
+              <aside>
+                <div className="db-section-head">
+                  <h2 className="db-section-title db-display">Check in next</h2>
+                </div>
+                <CheckInQueue queue={queue} terms={terms} />
+              </aside>
             </div>
-          ) : (
-            <>
-              {/* Hero — the one place this page spends visual weight. A soft
-                  radial glow behind the ring (not a flat card) gives it real
-                  depth rather than just being a bigger version of every
-                  other box on the page. */}
-              <div style={{ ...s.card, padding: 28, position: 'relative', overflow: 'hidden', marginBottom: 16 }}>
-                <div style={{
-                  position: 'absolute', top: 0, left: 0, right: 0, height: 3,
-                  background: `linear-gradient(90deg, ${colors.brand500}, ${colors.brand700})`,
-                }} />
-                <div style={{
-                  position: 'absolute', top: '-30%', left: '-10%', width: 360, height: 360,
-                  background: `radial-gradient(circle, color-mix(in srgb, ${colors.brand500} 14%, transparent) 0%, transparent 70%)`,
-                  pointerEvents: 'none',
-                }} />
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
-                  <ProgressRing pct={healthPct ?? 0} accent={colors.brand600} />
-                  <div style={{ minWidth: 180 }}>
-                    <div style={{ fontSize: 17, fontWeight: 700, color: colors.ink900 }}>On track or achieved</div>
-                    <div style={{ fontSize: 13, color: colors.ink500 }}>
-                      {healthyCount} of {objectives.length} {tPlural('Objective').toLowerCase()} this Cycle
-                    </div>
-                  </div>
-                  <div style={{ flex: '1 1 200px', minWidth: 200 }}>
-                    <StatusDonut data={objectiveStatusData} height={140} />
-                  </div>
-                </div>
-
-                <div style={{
-                  position: 'relative', display: 'flex', flexWrap: 'wrap', gap: '20px 32px',
-                  marginTop: 24, paddingTop: 20, borderTop: `1px solid ${colors.line}`,
-                }}>
-                  <StatCard icon={TargetIcon} label={tPlural('Objective')} value={objectives.length} accent={colors.brand600} />
-                  <StatCard icon={AlertIcon} label="Off track or at risk" value={attentionCount} accent={colors.warn} />
-                  <StatCard icon={TrophyIcon} label="Achieved" value={achievedCount} accent={colors.success} />
-                  {isTenantAdmin && compliancePct !== null && (
-                    <StatCard
-                      icon={CheckCircleIcon}
-                      label={`${tPlural('CheckIn')} compliance`}
-                      value={`${compliancePct}%`}
-                      accent={compliancePct === 100 ? colors.success : colors.warn}
-                    />
-                  )}
-                </div>
-              </div>
-
-              {(isManager || isTenantAdmin) && (
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))',
-                  gap: 16, marginBottom: 24,
-                }}>
-                  {isManager && (
-                    <div className="wp-lift" style={s.card}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <UsersIcon size={16} />
-                          <span style={{ fontSize: 14, fontWeight: 700, color: colors.ink900 }}>Team {t('KeyResult').toLowerCase()} status</span>
-                        </div>
-                        <Link to="/reports/team-progress" style={{ fontSize: 12, color: colors.brand600, textDecoration: 'none' }}>View all &rarr;</Link>
-                      </div>
-                      {teamProgress === null ? (
-                        <div style={{ fontSize: 13, color: colors.ink500, padding: '32px 0', textAlign: 'center' }}>Loading…</div>
-                      ) : (
-                        <>
-                          <StatusBarChart data={teamStatusData} height={180} />
-                          {teamAttentionCount > 0 && (
-                            <div style={{ fontSize: 12, color: colors.warn, marginTop: 8 }}>
-                              {teamAttentionCount} {teamAttentionCount === 1 ? 'result needs' : 'results need'} attention
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {isTenantAdmin && (
-                    <div className="wp-lift" style={s.card}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <CheckCircleIcon size={16} />
-                          <span style={{ fontSize: 14, fontWeight: 700, color: colors.ink900 }}>{tPlural('CheckIn')} compliance</span>
-                        </div>
-                        <Link to="/reports/checkin-compliance" style={{ fontSize: 12, color: colors.brand600, textDecoration: 'none' }}>View all &rarr;</Link>
-                      </div>
-                      {compliance === null ? (
-                        <div style={{ fontSize: 13, color: colors.ink500, padding: '32px 0', textAlign: 'center' }}>Loading…</div>
-                      ) : (
-                        <StatusDonut
-                          data={[
-                            { status: 'Checked in', count: complianceDone },
-                            { status: 'Missing', count: complianceTotal - complianceDone },
-                          ]}
-                          centerLabel={tPlural('KeyResult').toLowerCase()}
-                          colorFor={(status) => (status === 'Checked in' ? colors.success : colors.warn)}
-                        />
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 480 }}>
-            <QuickLink to="/objectives" icon={TargetIcon} title={tPlural('Objective')} description={`View and create your ${tPlural('Objective').toLowerCase()} for the current Cycle.`} />
-            <QuickLink to={`/reports/scorecard/${user?.id}`} icon={ClipboardIcon} title="My scorecard" description="Your current Cycle's scores and check-in history." />
-            <QuickLink to="/reports/alignment-map" icon={SitemapIcon} title="Alignment map" description="The full cascade tree, company to individual." />
-            {isTenantAdmin && (
-              <QuickLink to="/users" icon={UsersIcon} title="Users" description="Invite, manage roles, and reset passwords." />
-            )}
-          </div>
+          {isManager && <TeamSection teamProgress={teamProgress} terms={terms} />}
+          <OrganisationSection alignment={alignment} compliance={compliance} isTenantAdmin={isTenantAdmin} terms={terms} />
         </>
       )}
     </div>

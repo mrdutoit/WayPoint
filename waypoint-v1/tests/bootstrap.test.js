@@ -48,4 +48,13 @@ describe('admin-router bootstrap auth guard', () => {
     await handler(mockReq({ headers: { 'x-bootstrap-secret': 'wrong-secret' } }), res);
     expect(res.status).toHaveBeenCalledWith(403);
   });
+
+  it('recompute-statuses is behind the same secret gate as bootstrap', async () => {
+    process.env.BOOTSTRAP_SECRET = 'correct-secret';
+    vi.resetModules();
+    const handler = (await import('../frontend/api/admin-router.js')).default;
+    const res = mockRes();
+    await handler(mockReq({ query: { slug: ['recompute-statuses'] }, headers: { 'x-bootstrap-secret': 'wrong' } }), res);
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { recomputeKeyResultStatus, recomputeObjectiveStatus } from '../frontend/api-lib/services/scoringService.js';
+import { recomputeKeyResultStatus, recomputeObjectiveStatus, recomputeTenantStatuses } from '../frontend/api-lib/services/scoringService.js';
 
 function mockClient() {
   return { query: vi.fn() };
@@ -166,9 +166,12 @@ describe('recomputeObjectiveStatus — own Key Results AND children combined (th
     expect(updateCall[1]).toEqual(['t1', 'obj-1', 'On Track']);
   });
 
-  it('still scores from its own Key Results alone when its only child is "Not Started"', async () => {
-    // Own average = level 4 ("Achieved"); the one child contributes nothing
-    // (still "Not Started"), so the combined average is just the own score.
+  it('scores from its own Key Results when its only child is "Not Started" — but capped below Achieved', async () => {
+    // Own average = level 4 ("Achieved"); the child is excluded from the
+    // average (still "Not Started"), but its existence blocks completion
+    // (2026-09-24 completion gate) — so "On Track", not "Achieved".
+    // This is the exact shape Mark hit live: Team Achieved over an
+    // Individual child that hadn't started.
     const client = mockClient();
     client.query
       .mockResolvedValueOnce({ rows: RUBRIC_LEVELS })
@@ -178,7 +181,7 @@ describe('recomputeObjectiveStatus — own Key Results AND children combined (th
       .mockResolvedValueOnce({ rows: [{ parentId: null }] });
 
     const status = await recomputeObjectiveStatus(client, 't1', 'obj-1');
-    expect(status).toBe('Achieved');
+    expect(status).toBe('On Track');
   });
 });
 
@@ -205,5 +208,71 @@ describe('recomputeObjectiveStatus — cascades upward to the parent Objective',
     expect(client.query).toHaveBeenCalledTimes(10);
     const parentUpdateCall = client.query.mock.calls[8];
     expect(parentUpdateCall[1]).toEqual(['t1', 'parent-obj', 'Achieved']);
+  });
+});
+
+describe('recomputeObjectiveStatus — completion gate (2026-09-24)', () => {
+  function run(ownKeyResults, children) {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: RUBRIC_LEVELS })
+      .mockResolvedValueOnce({ rows: ownKeyResults })
+      .mockResolvedValueOnce({ rows: children })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ parentId: null }] });
+    return recomputeObjectiveStatus(client, 't1', 'obj-1');
+  }
+
+  it('an un-checked-in Key Result blocks Achieved even when every checked-in one is Achieved', async () => {
+    expect(await run([{ weighting: '1', level_index: 4 }, { weighting: '1', level_index: null }], [])).toBe('On Track');
+  });
+
+  it('an un-checked-in Key Result is still excluded from the average (does not drag it down)', async () => {
+    // Scored KR at On Track (3) + an unscored one -> average stays 3, not pulled towards Off Track
+    expect(await run([{ weighting: '1', level_index: 3 }, { weighting: '5', level_index: null }], [])).toBe('On Track');
+  });
+
+  it('reaches Achieved only when every Key Result and every child is Achieved', async () => {
+    expect(await run([{ weighting: '2', level_index: 4 }, { weighting: '1', level_index: 4 }], [{ status: 'Achieved' }, { status: 'Achieved' }])).toBe('Achieved');
+  });
+
+  it('caps an average that rounds to Achieved when one child is only On Track', async () => {
+    // Own Achieved (4) + children 4, 4, 3 -> average 3.75 rounds to Achieved; capped to On Track
+    expect(await run([{ weighting: '1', level_index: 4 }], [{ status: 'Achieved' }, { status: 'Achieved' }, { status: 'On Track' }])).toBe('On Track');
+  });
+
+  it('does not lift a genuinely poor average — the cap only ever lowers the top level', async () => {
+    expect(await run([{ weighting: '1', level_index: 1 }], [{ status: 'Not Started' }])).toBe('Off Track');
+  });
+
+  it('with no checked-in Key Results and every child Not Started, stays Not Started', async () => {
+    expect(await run([{ weighting: '1', level_index: null }], [{ status: 'Not Started' }])).toBe('Not Started');
+  });
+
+  it('children-only parent whose children are all Achieved reaches Achieved', async () => {
+    expect(await run([], [{ status: 'Achieved' }, { status: 'Achieved' }])).toBe('Achieved');
+  });
+});
+
+describe('recomputeTenantStatuses', () => {
+  it('recomputes every Key Result first, then cascades up from every leaf Objective', async () => {
+    const client = { query: vi.fn(async (sql) => {
+      if (sql.includes('SELECT id FROM okr.key_result')) return { rows: [{ id: 'kr-1' }] };
+      if (sql.includes('NOT EXISTS')) return { rows: [{ id: 'leaf-1' }] };
+      if (sql.includes('FROM okr.check_in ci') && sql.includes('LIMIT 1') && !sql.includes('LATERAL')) return { rows: [{ label: 'Achieved' }] };
+      if (sql.includes('okr.rubric_level rl') && sql.includes('scoring_rubric')) return { rows: RUBRIC_LEVELS };
+      if (sql.includes('LATERAL')) return { rows: [{ weighting: '1', level_index: 4 }] };
+      if (sql.includes('parent_objective_id = $2')) return { rows: [] };
+      if (sql.includes('parent_objective_id AS "parentId"')) return { rows: [{ parentId: null }] };
+      return { rows: [] };
+    }) };
+
+    const result = await recomputeTenantStatuses(client, 't1');
+    expect(result).toEqual({ keyResults: 1, leafObjectives: 1 });
+    const updates = client.query.mock.calls.filter(([sql]) => sql.startsWith('UPDATE'));
+    expect(updates[0][0]).toContain('okr.key_result');
+    expect(updates[0][1]).toEqual(['t1', 'kr-1', 'Achieved']);
+    expect(updates[1][0]).toContain('okr.objective');
+    expect(updates[1][1]).toEqual(['t1', 'leaf-1', 'Achieved']);
   });
 });

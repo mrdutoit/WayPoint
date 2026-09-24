@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <title>WayPoint — Bootstrap Admin</title>
 <style>
-  :root { --ink900:#0f172a; --ink500:#64748b; --ink200:#e2e8f0; --brand600:#4338ca;
+  :root { --ink900:#0f172a; --ink500:#64748b; --ink200:#e2e8f0; --brand600:#1a5fd0;
           --success:#16a34a; --successBg:#f0fdf4; --danger:#dc2626; --dangerBg:#fef2f2; }
   * { box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -40,10 +40,13 @@
     <input id="secret" type="password" placeholder="BOOTSTRAP_SECRET value" />
 
     <button id="runBtn">Run Bootstrap</button>
+    <button id="recomputeBtn" style="margin-top:10px;background:#fff;color:var(--brand600);border:1px solid var(--ink200)">Recompute all OKR statuses</button>
 
     <div id="result" class="result"></div>
 
     <p class="hint">
+      <strong>Recompute</strong> re-runs the score roll-up for every Key Result and Objective in every
+      tenant — run it once after a roll-up rule change. Safe to repeat.<br><br>
       Remembers the site URL between uses. The secret is never saved — set
       <code>BOOTSTRAP_SECRET</code> in Vercel's environment variables first, or this fails with 503.
     </p>
@@ -86,6 +89,34 @@
     } finally {
       runBtn.disabled = false;
       runBtn.textContent = 'Run Bootstrap';
+    }
+  });
+
+  // Same secret gate as bootstrap — /api/admin/recompute-statuses.
+  const recomputeBtn = document.getElementById('recomputeBtn');
+  recomputeBtn.addEventListener('click', async () => {
+    const siteUrl = siteUrlInput.value.trim().replace(/\/$/, '');
+    const secret = secretInput.value.trim();
+    resultEl.className = 'result';
+    if (!siteUrl || !secret) {
+      resultEl.className = 'result err';
+      resultEl.textContent = 'Enter both the site URL and the bootstrap secret.';
+      return;
+    }
+    localStorage.setItem('waypoint_site_url', siteUrl);
+    recomputeBtn.disabled = true;
+    recomputeBtn.textContent = 'Recomputing…';
+    try {
+      const res = await fetch(`${siteUrl}/api/admin/recompute-statuses`, { headers: { 'x-bootstrap-secret': secret } });
+      const body = await res.json();
+      resultEl.className = res.ok ? 'result ok' : 'result err';
+      resultEl.textContent = JSON.stringify(body, null, 2);
+    } catch (err) {
+      resultEl.className = 'result err';
+      resultEl.textContent = `Network error: ${err.message}`;
+    } finally {
+      recomputeBtn.disabled = false;
+      recomputeBtn.textContent = 'Recompute all OKR statuses';
     }
   });
 </script>

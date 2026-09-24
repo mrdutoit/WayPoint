@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useWindowSize } from '../hooks/useWindowSize.js';
 import { useTerms } from '../context/TerminologyContext.jsx';
 import { objectivesApi, keyResultsApi, cascadeLevelsApi, rubricApi } from '../services/api.js';
@@ -13,6 +13,10 @@ function StatusChip({ status }) {
 
 export default function ObjectiveDetail() {
   const { id } = useParams();
+  // ?checkin=<keyResultId> — the Dashboard's "Check in" buttons land here
+  // with that Key Result's inline form already open.
+  const [searchParams] = useSearchParams();
+  const autoCheckInId = searchParams.get('checkin');
   const { isMobile } = useWindowSize();
   const { t, tPlural } = useTerms();
   const pageStyle = isMobile ? s.pageMobile : s.page;
@@ -126,6 +130,7 @@ export default function ObjectiveDetail() {
                 {keyResults.map((kr) => (
                   <KeyResultRow
                     key={kr.id} keyResult={kr} canEdit={objective.canEdit} rubric={rubric} label={t('CheckIn')}
+                    autoOpen={autoCheckInId === kr.id}
                     onSaved={(updated) => {
                       setKeyResults((prev) => prev.map((k) => (k.id === kr.id ? { ...k, ...updated } : k)));
                     }}
@@ -284,9 +289,9 @@ function EditObjectiveForm({ objective, cascadeLevels, allObjectives, onSaved, l
   );
 }
 
-function KeyResultRow({ keyResult, canEdit, rubric, label, onSaved, onCheckInCreated }) {
+function KeyResultRow({ keyResult, canEdit, rubric, label, autoOpen = false, onSaved, onCheckInCreated }) {
   const [editing, setEditing] = useState(false);
-  const [checkingIn, setCheckingIn] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(Boolean(autoOpen && canEdit));
   const [title, setTitle] = useState(keyResult.title);
   const [weighting, setWeighting] = useState(String(keyResult.weighting));
   const [saving, setSaving] = useState(false);

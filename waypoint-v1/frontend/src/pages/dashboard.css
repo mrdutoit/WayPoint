@@ -1,0 +1,510 @@
+/*
+ * Dashboard — 2026-09-24 redesign.
+ *
+ * Concept: the Cycle is a passage and every Check-in is a waypoint on it.
+ * The hero is a chart panel in the logo's own navy (the icon tile) with
+ * the Cycle drawn as a course line in the wordmark's cyan-to-blue
+ * gradient — elapsed course solid, remaining course dashed, every
+ * Check-in plotted where it happened and coloured by its score, with a
+ * confidence profile traced above it. That one panel is where the page
+ * spends its boldness; everything beneath it is quiet, typographic and
+ * row-based rather than a grid of identical cards.
+ *
+ * Plain CSS (not inline styles) because the page needs hover states,
+ * media queries and one keyframed moment, none of which inline styles
+ * can express. Colours come from the theme variables in themes.css; the
+ * hero sets data-theme="dark" on itself so every token inside it
+ * resolves to its on-dark value regardless of the user's chosen theme.
+ */
+
+.db {
+  --db-navy: #0b1b3a;
+  --db-navy-2: #10264f;
+  --db-cyan: #6fe8ff;
+  --db-blue: #2e8cf0;
+  padding: 28px 32px 56px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.db-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.02em;
+}
+
+/* ---------- Hero: the chart panel ---------- */
+
+.db-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  color: var(--ink900);
+  background:
+    radial-gradient(120% 140% at 100% 0%, var(--db-navy-2) 0%, var(--db-navy) 58%);
+  border: 1px solid rgba(111, 232, 255, 0.10);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 20px 40px -24px rgba(11, 27, 58, 0.55);
+  padding: 32px 36px 22px;
+}
+
+/* Chart-table graticule — faint lat/long hairlines, masked so it fades
+   out toward the text rather than sitting under it at full strength. */
+.db-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(111, 232, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(111, 232, 255, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(180deg, transparent 0%, #000 55%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 55%);
+  pointer-events: none;
+}
+
+.db-hero > * { position: relative; }
+
+.db-hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.db-greeting {
+  font-size: 15px;
+  color: var(--ink500);
+  margin: 0 0 6px;
+}
+
+.db-day {
+  font-size: clamp(40px, 6vw, 64px);
+  line-height: 0.95;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.db-day-of {
+  color: var(--ink500);
+  font-weight: 500;
+}
+
+.db-summary {
+  margin: 14px 0 0;
+  max-width: 58ch;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink700);
+}
+
+.db-summary strong { color: #fff; font-weight: 600; }
+
+.db-cycle-meta {
+  text-align: right;
+  font-size: 13px;
+  color: var(--ink500);
+  line-height: 1.6;
+}
+
+.db-cycle-name {
+  display: block;
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* ---------- The course line ---------- */
+
+.db-course {
+  margin-top: 30px;
+}
+
+.db-course svg {
+  display: block;
+  width: 100%;
+  height: 150px;
+  overflow: visible;
+}
+
+.db-course-plot { position: relative; }
+
+.db-waypoint,
+.db-buoy {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px var(--db-navy);
+}
+
+.db-waypoint {
+  opacity: 0;
+  animation: db-fade 500ms ease forwards;
+  animation-delay: 900ms;
+  cursor: default;
+}
+
+.db-buoy-start { background: var(--db-cyan); }
+.db-buoy-end { background: var(--db-navy); box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.8); }
+
+.db-course { position: relative; }
+
+/* The one orchestrated moment on the page: the course sailed so far
+   draws out from the start buoy on load, then the waypoints and
+   confidence profile settle in behind it. */
+.db-course-elapsed {
+  transform-box: fill-box;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  animation: db-draw 1100ms cubic-bezier(0.65, 0, 0.35, 1) 150ms forwards;
+}
+
+.db-today {
+  position: absolute;
+  top: -20px;
+  transform: translateX(-50%);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.db-course-profile {
+  opacity: 0;
+  animation: db-fade 500ms ease forwards;
+  animation-delay: 900ms;
+}
+
+@keyframes db-draw { to { transform: scaleX(1); } }
+@keyframes db-fade { to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .db-course-elapsed { animation: none; transform: none; }
+  .db-waypoint, .db-course-profile { animation: none; opacity: 1; }
+}
+
+.db-course-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink500);
+}
+
+.db-course-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.db-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* ---------- Body layout ---------- */
+
+.db-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr);
+  gap: 40px;
+  margin-top: 40px;
+  align-items: start;
+}
+
+.db-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.db-section-title {
+  font-size: 21px;
+  font-weight: 650;
+  color: var(--ink900);
+  margin: 0;
+}
+
+.db-section-note {
+  font-size: 13px;
+  color: var(--ink500);
+}
+
+.db-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand600);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.db-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---------- Objective rows ---------- */
+
+.db-objectives {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.db-objective {
+  display: block;
+  padding: 18px 20px;
+  text-decoration: none;
+  color: inherit;
+  border-top: 1px solid var(--line);
+  transition: background-color 120ms ease;
+}
+.db-objective:first-child { border-top: none; border-radius: 14px 14px 0 0; }
+.db-objective:last-child { border-radius: 0 0 14px 14px; }
+.db-objective:only-child { border-radius: 14px; }
+.db-objective:hover { background: var(--ink50); }
+
+.db-objective-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.db-objective-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink900);
+  line-height: 1.35;
+}
+
+.db-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Weighted strip: one segment per Key Result, width = weighting,
+   colour = status. The same encoding as Scorecard's treemap, compressed
+   to a line so it can sit on every row. */
+.db-strip {
+  display: flex;
+  gap: 3px;
+  height: 8px;
+  margin: 14px 0 10px;
+}
+
+.db-strip > span {
+  border-radius: 3px;
+  min-width: 6px;
+}
+
+.db-strip-empty {
+  height: 8px;
+  margin: 14px 0 10px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--ink200) 0 6px, transparent 6px 10px);
+}
+
+.db-objective-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  font-size: 13px;
+  color: var(--ink500);
+}
+
+/* ---------- Check-in rail ---------- */
+
+.db-queue { display: flex; flex-direction: column; }
+
+.db-queue-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.db-queue-item:first-child { border-top: none; padding-top: 4px; }
+
+.db-queue-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink900);
+  line-height: 1.35;
+}
+
+.db-queue-sub {
+  grid-column: 1;
+  font-size: 12.5px;
+  color: var(--ink500);
+}
+
+.db-queue-age-due { color: var(--warn); font-weight: 600; }
+
+.db-queue-btn {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand600);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--brand600) 35%, transparent);
+  border-radius: 999px;
+  padding: 6px 14px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.db-queue-btn:hover { background: var(--brand600); color: #fff; }
+
+.db-calm {
+  font-size: 14px;
+  color: var(--ink600);
+  line-height: 1.55;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--success-bg);
+  border: 1px solid color-mix(in srgb, var(--success) 25%, transparent);
+}
+
+/* ---------- Team and organisation ---------- */
+
+.db-wide { margin-top: 48px; }
+
+.db-people {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 0 40px;
+}
+
+.db-person {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  text-decoration: none;
+  color: inherit;
+}
+.db-person:hover .db-person-name { color: var(--brand600); }
+
+.db-person-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink900);
+  transition: color 120ms ease;
+}
+
+.db-person-sub { font-size: 12.5px; color: var(--ink500); }
+
+.db-ticks { display: flex; gap: 3px; flex-wrap: wrap; justify-content: flex-end; max-width: 120px; }
+.db-ticks > span { width: 10px; height: 10px; border-radius: 3px; }
+
+.db-levels { display: flex; flex-direction: column; }
+
+.db-level {
+  display: grid;
+  grid-template-columns: 140px 1fr 90px;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.db-level:first-child { border-top: none; }
+
+.db-level-name { font-size: 14px; font-weight: 600; color: var(--ink900); }
+.db-level-count { font-size: 13px; color: var(--ink500); text-align: right; font-variant-numeric: tabular-nums; }
+
+.db-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--ink100); }
+.db-bar > span { height: 100%; }
+
+.db-org-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  align-items: baseline;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--ink500);
+}
+
+.db-org-figure {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ink900);
+  letter-spacing: -0.02em;
+  margin-right: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Empty and loading ---------- */
+
+.db-empty {
+  padding: 28px;
+  border: 1px dashed var(--ink300);
+  border-radius: 14px;
+  font-size: 14px;
+  color: var(--ink600);
+  line-height: 1.55;
+}
+
+.db-empty .db-link { display: inline-block; margin-top: 10px; }
+
+.db-skeleton {
+  border-radius: 20px;
+  height: 280px;
+  background: linear-gradient(100deg, var(--ink100) 30%, var(--ink50) 50%, var(--ink100) 70%);
+  background-size: 300% 100%;
+  animation: db-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes db-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+/* ---------- Platform administrator ---------- */
+
+.db-admin-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-top: 28px; }
+
+.db-admin-link {
+  display: block;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  text-decoration: none;
+  color: inherit;
+}
+.db-admin-link:hover { border-color: var(--brand500); }
+.db-admin-link strong { display: block; font-size: 16px; color: var(--ink900); margin-bottom: 4px; }
+.db-admin-link span { font-size: 13.5px; color: var(--ink500); }
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 900px) {
+  .db-body { grid-template-columns: 1fr; gap: 36px; }
+}
+
+@media (max-width: 640px) {
+  .db { padding: 16px 16px 40px; }
+  .db-course svg { height: 120px; }
+  .db-hero { padding: 24px 20px 18px; border-radius: 16px; }
+  .db-cycle-meta { text-align: left; }
+  .db-level { grid-template-columns: 1fr auto; }
+  .db-level .db-bar { grid-column: 1 / -1; grid-row: 2; }
+}

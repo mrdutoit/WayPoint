@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { RoleProvider, useRole, ROLES } from './context/RoleContext.jsx';
 import { clearAuthToken } from './services/api.js';
 import { FlagProvider } from './context/FlagContext.jsx';
@@ -30,6 +31,7 @@ function Shell({ children }) {
   const { user, setUser, role, isPlatformAdmin, isTenantAdmin } = useRole();
   const { isMobile } = useWindowSize();
   const { tPlural } = useTerms();
+  const { pathname } = useLocation();
   const previewMode = !user;
 
   return (
@@ -92,7 +94,7 @@ function Shell({ children }) {
           </div>
         )}
       </nav>
-      {children}
+      <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
     </div>
   );
 }

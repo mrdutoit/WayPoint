@@ -34,11 +34,6 @@ const describeIfDb = hasRealDb ? describe : describe.skip;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const schemaPath = join(__dirname, '../../frontend/db/schema.sql');
-// Not yet folded into schema.sql (not confirmed applied to Neon yet) —
-// applied here too so this suite tests against the full intended
-// current-state schema, not a stale snapshot. Remove this once it's
-// folded in for real.
-const module3MigrationPath = join(__dirname, '../../frontend/db/migrations/07-initiative-checkin-reflection.sql');
 
 let client, pool;
 
@@ -59,7 +54,6 @@ describeIfDb('write paths against real Postgres', () => {
     await client.query('DROP SCHEMA IF EXISTS okr CASCADE');
     const schemaSql = readFileSync(schemaPath, 'utf8');
     await client.query(schemaSql);
-    await client.query(readFileSync(module3MigrationPath, 'utf8'));
   });
 
   afterAll(async () => {
@@ -288,7 +282,7 @@ describeIfDb('write paths against real Postgres', () => {
     ).rejects.toThrow(/owner, their Manager, or a Tenant Administrator/i);
   });
 
-  it('scoringService — multi-level cascade: a child Objective\'s Check-in updates the parent too, and the parent then scores from children, not its own Key Result', async () => {
+  it('scoringService — multi-level cascade: a child Objective\'s Check-in updates the parent too, combined with the parent\'s own Key Result', async () => {
     const { createObjective } = await import('../../frontend/api-lib/services/objectiveService.js');
     const { createKeyResult } = await import('../../frontend/api-lib/services/keyResultService.js');
     const { createCheckIn } = await import('../../frontend/api-lib/services/checkInService.js');
@@ -318,14 +312,60 @@ describeIfDb('write paths against real Postgres', () => {
     const { rows: childRows } = await client.query(`SELECT status FROM okr.objective WHERE id = $1`, [child.id]);
     expect(childRows[0].status).toBe('Off Track');
 
-    // The parent (objectiveId) now has exactly one child, scored "Off
-    // Track" — per the resolved ambiguity in scoringService.js, a
-    // parent with children scores from children only, ignoring its own
-    // Key Result (which is itself "On Track"). If this assertion ever
-    // reads "On Track" instead, the parent is wrongly still scoring
-    // from its own Key Result after gaining a child.
+    // The parent (objectiveId) combines its own Key Result ("On Track",
+    // level 3) with its one child ("Off Track", level 1): (3 + 1) / 2 = 2
+    // -> "At Risk". This used to assert "Off Track" (children-only
+    // scoring) — that was the either/or rule replaced on 2026-09-23. The
+    // assertion went stale then without anyone noticing, because this
+    // suite skips wherever TEST_DATABASE_URL isn't set; caught 2026-09-24
+    // when it was next run against a real Postgres.
     const { rows: parentRows } = await client.query(`SELECT status FROM okr.objective WHERE id = $1`, [objectiveId]);
-    expect(parentRows[0].status).toBe('Off Track');
+    expect(parentRows[0].status).toBe('At Risk');
+  });
+
+  it('scoringService — completion gate (2026-09-24): Achieved Key Results over an unstarted child read On Track, not Achieved; recomputeTenantStatuses repairs stored values', async () => {
+    const { createObjective } = await import('../../frontend/api-lib/services/objectiveService.js');
+    const { createKeyResult } = await import('../../frontend/api-lib/services/keyResultService.js');
+    const { createCheckIn } = await import('../../frontend/api-lib/services/checkInService.js');
+    const { recomputeTenantStatuses } = await import('../../frontend/api-lib/services/scoringService.js');
+
+    const { rows: levels } = await client.query(
+      `SELECT id, label FROM okr.cascade_level WHERE tenant_id = $1 ORDER BY level_index ASC`,
+      [tenantId]
+    );
+    const { rows: achieved } = await client.query(
+      `SELECT id FROM okr.rubric_level WHERE rubric_id = $1 AND label = 'Achieved'`,
+      [rubricId]
+    );
+
+    const parent = await inTenantContext(() =>
+      createObjective(client, tenantId, { id: employeeId, role: 'Employee' },
+        { title: 'Completion-gate parent', cascadeLevelId: levels[0].id })
+    );
+    const parentKr = await inTenantContext(() =>
+      createKeyResult(client, tenantId, { id: employeeId }, parent.id, { title: 'Done already' })
+    );
+    const child = await inTenantContext(() =>
+      createObjective(client, tenantId, { id: employeeId, role: 'Employee' },
+        { title: 'Completion-gate child, never started', cascadeLevelId: levels[1].id, parentObjectiveId: parent.id })
+    );
+    await inTenantContext(() =>
+      createKeyResult(client, tenantId, { id: employeeId }, child.id, { title: 'Not begun' })
+    );
+
+    await inTenantContext(() =>
+      createCheckIn(client, tenantId, { id: employeeId }, parentKr.id, { rubricLevelId: achieved[0].id, confidence: 5 })
+    );
+
+    const statusOf = async (id) => (await client.query(`SELECT status FROM okr.objective WHERE id = $1`, [id])).rows[0].status;
+    expect(await statusOf(child.id)).toBe('Not Started');
+    expect(await statusOf(parent.id)).toBe('On Track'); // old rule: 'Achieved'
+
+    // Simulate a status stored under the old rule, then repair it.
+    await client.query(`UPDATE okr.objective SET status = 'Achieved' WHERE id = $1`, [parent.id]);
+    const result = await inTenantContext(() => recomputeTenantStatuses(client, tenantId));
+    expect(result.leafObjectives).toBeGreaterThan(0);
+    expect(await statusOf(parent.id)).toBe('On Track');
   });
 
   it('okrElementConfigService.setElementEnabled — real dependency-graph update', async () => {

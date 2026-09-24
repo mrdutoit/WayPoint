@@ -9,8 +9,15 @@ const defaultColorFor = (status, idx) =>
 // text colour would read poorly against some of those, so the label
 // gets a dark outline via paintOrder rather than a flat colour, which
 // stays legible regardless of the fill underneath it.
-function TreemapCell({ x, y, width, height, name, status, index, colorFor }) {
+function TreemapCell({ x, y, width, height, name, status, index, depth, colorFor }) {
+  // Recharts calls `content` for the ROOT node as well (depth 0, no
+  // name, no status) — not just the leaves. The original version read
+  // name.length unconditionally, threw on the root, and with no error
+  // boundary anywhere that unmounted the whole app: the blank Scorecard
+  // page (2026-09-24). Render leaves only.
+  if (depth === 0 || !width || !height) return null;
   const fill = colorFor(status, index);
+  name = name ?? '';
   const showLabel = width > 46 && height > 22;
   const maxChars = Math.max(0, Math.floor((width - 10) / 6.2));
   const label = name.length > maxChars ? `${name.slice(0, Math.max(0, maxChars - 1))}…` : name;
