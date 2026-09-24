@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { RoleProvider, useRole, ROLES } from './context/RoleContext.jsx';
+import { clearAuthToken } from './services/api.js';
 import { FlagProvider } from './context/FlagContext.jsx';
 import { TerminologyProvider, useTerms } from './context/TerminologyContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
@@ -87,7 +88,7 @@ function Shell({ children }) {
               <Avatar firstName={user?.firstName} lastName={user?.lastName} avatarOption={user?.avatarOption} size={28} />
               {!isMobile && 'Settings'}
             </Link>
-            <button onClick={() => setUser(null)} style={s.btnSecondary}>Sign out</button>
+            <button onClick={() => { clearAuthToken(); setUser(null); }} style={s.btnSecondary}>Sign out</button>
           </div>
         )}
       </nav>

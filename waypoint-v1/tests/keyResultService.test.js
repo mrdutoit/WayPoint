@@ -122,12 +122,27 @@ describe('updateKeyResult — does not accept status (FR-004)', () => {
     client.query
       .mockResolvedValueOnce({ rows: [{ id: 'kr-1', objectiveId: 'obj-1', title: 'Old', weighting: '1.00' }] })
       .mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: null }] })
-      .mockResolvedValueOnce({ rows: [{ id: 'kr-1', title: 'New title', weighting: '2.50' }] });
+      .mockResolvedValueOnce({ rows: [{ id: 'kr-1', title: 'New title', weighting: '2.50' }] })
+      // weighting changed (1.00 -> 2.5) — triggers a recompute on obj-1
+      .mockResolvedValueOnce({ rows: [] }) // no rubric levels configured
+      .mockResolvedValueOnce({}) // UPDATE obj-1's own status
+      .mockResolvedValueOnce({ rows: [{ parentId: null }] }); // obj-1 has no parent — cascade stops there
 
     const kr = await updateKeyResult(client, 't1', { id: 'u1' }, 'kr-1', { title: 'New title', weighting: 2.5 });
     expect(kr.title).toBe('New title');
     const updateSql = client.query.mock.calls[2][0];
     expect(updateSql).not.toMatch(/status\s*=/);
+  });
+
+  it('does NOT trigger a recompute on a title-only edit that leaves weighting unchanged', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 'kr-1', objectiveId: 'obj-1', title: 'Old', weighting: '2.50' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'obj-1', ownerId: 'u1', ownerManagerId: null }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'kr-1', title: 'New title', weighting: '2.50' }] });
+
+    await updateKeyResult(client, 't1', { id: 'u1' }, 'kr-1', { title: 'New title' });
+    expect(client.query).toHaveBeenCalledTimes(3); // no extra recompute queries
   });
 });
 

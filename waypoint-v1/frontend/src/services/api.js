@@ -2,14 +2,43 @@
 // VITE_API_BASE_URL, no cross-origin request, no CORS needed for any
 // call the deployed frontend itself makes. Relative paths only.
 
-let _token = null;
+const TOKEN_STORAGE_KEY = 'waypoint.token';
+
+function readStoredToken() {
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch {
+    return null; // localStorage can throw (privacy mode, storage disabled) — fall back to no persisted session rather than crash
+  }
+}
+
+// Restored at module load (not just set at login) — this is the actual
+// fix for the refresh-logs-you-out bug: _token used to be a bare
+// in-memory variable, always null again on any page reload, with
+// nothing anywhere reading a persisted value back. RoleContext.jsx
+// reconstructs `user` from this same stored token on mount.
+let _token = readStoredToken();
 
 export function setAuthToken(token) {
   _token = token;
+  try {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  } catch {
+    // best-effort — the session just won't survive a refresh this time
+  }
 }
 
 export function clearAuthToken() {
   _token = null;
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // best-effort
+  }
+}
+
+export function getAuthToken() {
+  return _token;
 }
 
 export class ApiError extends Error {

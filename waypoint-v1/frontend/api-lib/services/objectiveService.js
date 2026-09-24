@@ -25,6 +25,7 @@
 // the classes themselves live in errors.js, shared across all of Module 2.
 export { ValidationError, ForbiddenError, NotFoundError } from './errors.js';
 import { ValidationError, ForbiddenError, NotFoundError } from './errors.js';
+import { recomputeObjectiveStatus } from './scoringService.js';
 
 const OBJECTIVE_FIELDS = `
   o.id, o.tenant_id AS "tenantId", o.cycle_id AS "cycleId",
@@ -292,12 +293,26 @@ export async function updateObjective(client, tenantId, caller, objectiveId, { t
     await assertNoCascadeCycle(client, tenantId, nextParentId, objectiveId);
   }
 
+  const normalizedNextParentId = nextParentId ?? null;
+
   const { rows } = await client.query(
     `UPDATE okr.objective AS o SET title = $3, parent_objective_id = $4, cascade_level_id = $5
      WHERE tenant_id = $1 AND id = $2
      RETURNING ${OBJECTIVE_FIELDS}`,
-    [tenantId, objectiveId, nextTitle.trim(), nextParentId ?? null, nextCascadeLevelId]
+    [tenantId, objectiveId, nextTitle.trim(), normalizedNextParentId, nextCascadeLevelId]
   );
+
+  // Re-parenting changes which ancestor chain this Objective's score
+  // rolls up into — the OLD parent (if any) needs recomputing because it
+  // just lost this branch, and the NEW parent (if any) needs it because
+  // it just gained one. This Objective's own status is untouched by
+  // being re-parented (roll-up only flows child -> parent), so only the
+  // two ancestor chains need it, not objectiveId itself.
+  if (normalizedNextParentId !== existing.parentObjectiveId) {
+    if (existing.parentObjectiveId) await recomputeObjectiveStatus(client, tenantId, existing.parentObjectiveId);
+    if (normalizedNextParentId) await recomputeObjectiveStatus(client, tenantId, normalizedNextParentId);
+  }
+
   return rows[0];
 }
 
@@ -306,8 +321,11 @@ export async function updateObjective(client, tenantId, caller, objectiveId, { t
  * with no Key Results (or whose Key Results are all still "Not Started",
  * which is every Key Result until Module 3 ships Check-ins) has no
  * computed score and stays "Not Started" rather than defaulting to a
- * rubric level. The real weighted-average roll-up now lives in
+ * rubric level. The real weighted-average roll-up lives in
  * scoringService.js's recomputeObjectiveStatus — called from
- * checkInService.js whenever a Check-in is submitted, since that's the
- * only thing that can ever change it.
+ * checkInService.js when a Check-in is submitted, and, as of
+ * 2026-09-23, also from this file (updateObjective, on a re-parent or
+ * cascade-level move) and keyResultService.js (updateKeyResult, on a
+ * weighting change) — every action that can change what a roll-up
+ * would compute now actually triggers one, not just Check-ins.
  */

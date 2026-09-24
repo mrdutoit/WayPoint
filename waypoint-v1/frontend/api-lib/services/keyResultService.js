@@ -1,4 +1,5 @@
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
+import { recomputeObjectiveStatus } from './scoringService.js';
 import { isElementEnabled } from './okrElementConfigService.js';
 
 /**
@@ -165,6 +166,14 @@ export async function updateKeyResult(client, tenantId, caller, keyResultId, { t
      RETURNING ${KEY_RESULT_FIELDS}`,
     [tenantId, keyResultId, nextTitle.trim(), nextWeighting]
   );
+
+  // Weighting feeds directly into the weighted average recomputeObjectiveStatus
+  // computes — a title-only edit doesn't change any score, so only recompute
+  // when the number that actually matters to scoring changed.
+  if (nextWeighting !== Number(existing.weighting)) {
+    await recomputeObjectiveStatus(client, tenantId, existing.objectiveId);
+  }
+
   return rows[0];
 }
 

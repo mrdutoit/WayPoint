@@ -92,7 +92,7 @@ waypoint-v1/
 │   │   │    UsersAdmin.jsx)
 │   │   ├── services/api.js
 │   │   ├── styles/tokens.js        <- design tokens, incl. brand colours, CHART_PALETTE
-│   │   ├── utils/ (dateFormat.js, statusGroups.js, objectiveTree.js)
+│   │   ├── utils/ (dateFormat.js, statusGroups.js, objectiveTree.js, jwt.js)
 │   │   └── App.jsx
 │   ├── public/                     <- favicon.png, favicon.svg, apple-touch-icon.png, waypoint-icon.png
 │   ├── vercel.json                 <- routes friendly paths to the router files
@@ -132,6 +132,14 @@ waypoint-v1/
 
 ## Key design decisions worth knowing before changing anything
 
+- **Auth session persists via `localStorage`, restored at module load
+  in `services/api.js` and reconstructed into `RoleContext`'s `user` on
+  mount** — a page refresh used to silently log everyone out (fixed
+  2026-09-23) because the token previously lived only in an in-memory
+  variable. If you're touching auth, know that the token and the
+  `user` object are two separately-maintained things that have to stay
+  in sync (`setAuthToken`/`clearAuthToken` in `api.js` only touch the
+  token; call sites are responsible for also calling `setUser`).
 - **`user_account.tenant_id` is nullable.** PlatformAdmin is internal
   staff, never assigned to a tenant. Every auth code path (login,
   password reset, flag access) branches on this explicitly.

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi, setAuthToken } from '../services/api.js';
+import { decodeToken } from '../utils/jwt.js';
 import { useRole } from '../context/RoleContext.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { s, colors } from '../styles/tokens.js';
@@ -22,7 +23,7 @@ export default function Login() {
       setAuthToken(result.token);
       // Decoded client-side only to drive the nav — every request is
       // still verified server-side regardless of what this shows.
-      const payload = JSON.parse(atob(result.token.split('.')[1]));
+      const payload = decodeToken(result.token);
       setUser({ id: payload.sub, tenantId: payload.tenantId, role: payload.role, email, passwordMustChange: result.passwordMustChange });
       navigate('/');
     } catch (err) {

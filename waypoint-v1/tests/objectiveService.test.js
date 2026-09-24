@@ -130,7 +130,11 @@ describe('updateObjective (FR-023: no cascade cycle)', () => {
       .mockResolvedValueOnce({ rows: [{ id: 'obj-A', ownerId: 'u1', ownerManagerId: null, cascadeLevelId: 'cl2', title: 'A', parentObjectiveId: null }] })
       .mockResolvedValueOnce({ rows: [{ id: 'obj-C', parentLevelIndex: 1, childLevelIndex: 2 }] }) // one level above — valid
       .mockResolvedValueOnce({ rows: [{ parent_objective_id: null }] }) // obj-C has no further parent — no cycle
-      .mockResolvedValueOnce({ rows: [{ id: 'obj-A', title: 'A', parentObjectiveId: 'obj-C' }] }); // update
+      .mockResolvedValueOnce({ rows: [{ id: 'obj-A', title: 'A', parentObjectiveId: 'obj-C' }] }) // update
+      // recompute on the new parent (obj-C) — old parent was null, so only one side fires
+      .mockResolvedValueOnce({ rows: [] }) // no rubric levels configured — short-circuits recomputeObjectiveStatus
+      .mockResolvedValueOnce({}) // UPDATE obj-C's own status (still "Not Started")
+      .mockResolvedValueOnce({ rows: [{ parentId: null }] }); // obj-C has no parent — cascade stops there
 
     const updated = await updateObjective(client, 't1', { id: 'u1' }, 'obj-A', { parentObjectiveId: 'obj-C' });
     expect(updated.parentObjectiveId).toBe('obj-C');
@@ -177,7 +181,11 @@ describe('updateObjective — moving an Objective to a different cascade level',
       .mockResolvedValueOnce({ rows: [{ id: 'cl4' }] }) // new level exists
       .mockResolvedValueOnce({ rows: [] }) // no children
       .mockResolvedValueOnce({ rows: [{ id: 'obj-parent', parentLevelIndex: 1, childLevelIndex: 4 }] }) // assertParentIsOneLevelAbove probe against the NEW level (index 4): parent sits at index 1, needs index 3 to fit — doesn't, so this throws and is caught
-      .mockResolvedValueOnce({ rows: [{ id: 'obj-A', title: 'A', cascadeLevelId: 'cl4', parentObjectiveId: null }] }); // update — parent cleared
+      .mockResolvedValueOnce({ rows: [{ id: 'obj-A', title: 'A', cascadeLevelId: 'cl4', parentObjectiveId: null }] }) // update — parent cleared
+      // recompute on the OLD parent (obj-parent) — it just lost this branch; no new parent to recompute since nextParentId is null
+      .mockResolvedValueOnce({ rows: [] }) // no rubric levels configured
+      .mockResolvedValueOnce({}) // UPDATE obj-parent's own status
+      .mockResolvedValueOnce({ rows: [{ parentId: null }] }); // obj-parent has no parent — cascade stops there
 
     const updated = await updateObjective(client, 't1', { id: 'u1' }, 'obj-A', { cascadeLevelId: 'cl4' });
     expect(updated.parentObjectiveId).toBe(null);

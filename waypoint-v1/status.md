@@ -456,6 +456,74 @@ misunderstanding — confirmed by reading the code, not assumed.
   to set up.
 - `npm run build` and `npm test` (415, up from 411) both pass.
 
+## Later the same day: session persistence fixed, roll-up triggers closed at the source
+
+Mark reported that hitting browser refresh silently logged him out —
+confirmed as a real, root-cause bug, not a misunderstanding, and fixed:
+
+- **The bug:** the JWT lived only in a plain in-memory variable
+  (`let _token = null` in `api.js`), and `RoleContext.jsx`'s `user`
+  state started from `null` on every mount with nothing anywhere
+  reading a saved session back. Any full page reload wiped both —
+  `RequireAuth` correctly sent an unauthenticated-looking session to
+  `/login`, there was just no session-recovery mechanism to prevent
+  that state from being unauthenticated in the first place.
+- **Fixed:** the token now persists to `localStorage` (wrapped in
+  try/catch — some browser contexts, e.g. strict privacy modes, can
+  throw on storage access; the session just won't survive a refresh in
+  that case rather than crashing the app) and is restored at module
+  load. `RoleContext` reconstructs `user` from the stored token on
+  mount, checking the JWT's own `exp` claim and discarding a stale
+  token rather than trying to use it. email/firstName/lastName aren't
+  in the JWT payload (only sub/tenantId/role are signed) — those get
+  filled in by the same `GET /api/me` enrichment effect that already
+  ran after a fresh login, no new backend endpoint needed.
+- **Second bug found along the way:** "Sign out" only ever called
+  `setUser(null)` — it never actually cleared the token. Fixed in the
+  same pass; leaving it would have partially undermined the fix above
+  (a signed-out session's token would still have been sitting in
+  `localStorage`, available to restore itself right back).
+- Extracted the JWT-payload-decoding logic (previously duplicated only
+  in `Login.jsx`) into a new shared `utils/jwt.js`, with real unit
+  tests — 5 new tests for `decodeToken`/`isTokenExpired`, not just "the
+  build passed."
+
+Separately, on the "should there be a manual recompute button"
+question — investigated properly rather than answered from a gut call.
+Found two more real, recurring places (not just the one-time bug
+above) where a stored Objective status could go stale without any new
+Check-in ever happening:
+
+- **Editing a Key Result's weighting** after Check-ins already exist —
+  `updateKeyResult` never triggered a recompute, so the Objective's
+  cached status kept reflecting the old weighting.
+- **Re-parenting an Objective, or moving its cascade level** —
+  `updateObjective` never triggered a recompute either. Both the OLD
+  parent (which just lost a branch) and the NEW parent (which just
+  gained one) needed their ancestor chains recomputed; the Objective
+  being moved does NOT need its own status recomputed, since roll-up
+  only flows child → parent.
+
+Both fixed the same way Check-in submission already works: the
+mutation itself now calls `recomputeObjectiveStatus` inline, in the
+same transaction, only when the value that actually feeds scoring
+changed (a title-only Key Result edit, or a same-parent Objective
+edit, triggers nothing extra). No manual button built — closing the
+gap at the source avoids the class of bug entirely rather than giving
+someone a workaround to remember to click.
+
+One related gap found but deliberately NOT fixed this pass: renaming a
+tenant's scoring rubric level label can also leave old statuses
+referencing a since-renamed label until their next recompute. Lower
+frequency — renaming a rubric level is mostly a setup-time action, not
+a routine one — so flagged here rather than fixed silently.
+
+3 test files fixed for the new query sequences these changes
+introduced (mocked `client.query` chains needed the extra recompute
+calls accounted for), plus 2 new tests confirming the new triggers
+fire only when they should. `npm run build` and `npm test` (421, up
+from 415) both pass.
+
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
 Raised when comparing WayPoint against Perdoo's UI (screenshots reviewed
@@ -489,15 +557,24 @@ silent addition, before being built:
 
 ## Next immediate step
 
-Apply `db/migrations/2026-09-18-audit-log-detail.sql` against Neon (then
-delete it from the repo per convention) if that hasn't happened yet —
-nothing shows entity labels or diffs until that column exists live.
-Cascade sunburst next, the last of the three chart candidates. Also
-still open: confirm this delivery (inline Check-in on the Objective
-page, the weighting treemap) looks right in a real browser, signed in
-as an actual Tenant Administrator this time so Check-in Compliance and
-its heatmap are reachable — everything here was verified by
-`npm run build`/`npm test` passing, not by a real deploy.
+Two threads open, neither blocking the other:
+
+1. **The design pass.** Mark's own read of the app (most pages are
+   still the Stage 3 scaffold's functional-first styling, never given
+   a real design system treatment) was accurate — proposed doing one
+   page (Objective Detail) as a concrete pilot for review before it
+   becomes the system the rest of the app follows. Awaiting Mark's go
+   on that, or a reference product he wants WayPoint's design language
+   to move toward instead.
+2. **Verification catch-up.** `db/migrations/2026-09-18-audit-log-detail.sql`
+   still needs applying against Neon if that hasn't happened (nothing
+   shows entity labels/diffs until it does), and several deliveries in
+   a row now (charts, inline Check-in, the roll-up fix, session
+   persistence) have only been verified by `npm run build`/`npm test`
+   passing, not by real browser use signed in as an actual Tenant
+   Administrator. Worth a proper look-through before adding the
+   cascade sunburst (still the last of the three chart candidates) on
+   top of an unverified stack.
 
 ## Open items, not yet resolved
 
@@ -507,6 +584,10 @@ its heatmap are reachable — everything here was verified by
 - Per-module dev-team review isn't leaving a durable record in the repo
   (see "Where things actually stand" above) — worth deciding how that
   should be tracked going forward so this kind of drift is caught sooner.
+- Renaming a scoring rubric level's label doesn't trigger a status
+  recompute (see 2026-09-23 above) — a lower-frequency version of the
+  same staleness class as the weighting/re-parent gaps already closed.
+  Not fixed yet; flagged here rather than silently dropped.
 
 ## For a new chat picking this up
 

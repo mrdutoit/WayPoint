@@ -1,12 +1,30 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { meApi } from '../services/api.js';
+import { meApi, getAuthToken, clearAuthToken } from '../services/api.js';
+import { decodeToken, isTokenExpired } from '../utils/jwt.js';
 
 export const ROLES = ['PlatformAdmin', 'TenantAdmin', 'Manager', 'Employee'];
 
 const RoleContext = createContext(null);
 
+// Reconstructs `user` from whatever token api.js restored from
+// localStorage at module load — this is the actual fix for the
+// refresh-logs-you-out bug. email/firstName/lastName aren't in the JWT
+// (issueToken only signs sub/tenantId/role), so those stay unset here;
+// the enrichment effect below fills them in via GET /api/me, exactly
+// the same way it already does right after a fresh login.
+function restoreUserFromStoredToken() {
+  const token = getAuthToken();
+  if (!token) return null;
+  const payload = decodeToken(token);
+  if (!payload || isTokenExpired(payload)) {
+    clearAuthToken(); // stale or unreadable — don't keep trying to use it
+    return null;
+  }
+  return { id: payload.sub, tenantId: payload.tenantId, role: payload.role };
+}
+
 export function RoleProvider({ children, initialUser = null }) {
-  const [user, setUser] = useState(initialUser);
+  const [user, setUser] = useState(() => initialUser ?? restoreUserFromStoredToken());
 
   // firstName/lastName/theme/avatarOption aren't in the JWT (issueToken
   // only signs sub/tenantId/role) — this is the one place `user` gets
