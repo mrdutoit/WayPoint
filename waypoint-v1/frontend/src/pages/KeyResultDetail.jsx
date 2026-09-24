@@ -139,7 +139,7 @@ function CheckInRow({ checkIn, rubric }) {
         <StatusChip status={level?.label ?? 'Unknown'} />
         <span style={{ fontSize: 12, color: colors.ink500 }}>Confidence: {checkIn.confidence}/5</span>
         <span style={{ fontSize: 12, color: colors.ink400 }}>{new Date(checkIn.submittedAt).toLocaleString()}</span>
-        <span style={{ fontSize: 12, color: colors.ink400 }}>— {checkIn.submittedByFirstName} {checkIn.submittedByLastName}</span>
+        <span style={{ fontSize: 12, color: colors.ink400 }}>By {checkIn.submittedByFirstName} {checkIn.submittedByLastName}</span>
       </div>
       {checkIn.comment && <div style={{ fontSize: 13, color: colors.ink700, marginTop: 6 }}>{checkIn.comment}</div>}
     </div>

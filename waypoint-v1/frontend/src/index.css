@@ -21,3 +21,18 @@ button, input, select, textarea { font-family: inherit; }
     transition-duration: .01ms !important;
   }
 }
+
+/* Subtle hover lift for interactive cards (Dashboard quick links, chart
+   cards) — transform only, deliberately. Every card already sets its
+   own box-shadow inline via s.card (tokens.js), and an inline style
+   always wins over a class for the same property regardless of
+   specificity — so a hover effect layered on top of this system has to
+   use a property nothing inline already controls. Respects
+   prefers-reduced-motion via the rule above (transition-duration drops
+   to ~0 there, so the lift becomes an instant state change, not motion). */
+.wp-lift {
+  transition: transform 160ms ease;
+}
+.wp-lift:hover {
+  transform: translateY(-3px);
+}

@@ -4,43 +4,66 @@ import { useRole } from '../context/RoleContext.jsx';
 import { useTerms } from '../context/TerminologyContext.jsx';
 import { useWindowSize } from '../hooks/useWindowSize.js';
 import { objectivesApi, reportsApi } from '../services/api.js';
-import { s, colors } from '../styles/tokens.js';
+import { s, colors, radius } from '../styles/tokens.js';
 import { groupByStatus } from '../utils/statusGroups.js';
 import StatCard from '../components/charts/StatCard.jsx';
 import StatusDonut from '../components/charts/StatusDonut.jsx';
 import StatusBarChart from '../components/charts/StatusBarChart.jsx';
-import { TargetIcon, AlertIcon, TrophyIcon, UsersIcon, CheckCircleIcon } from '../components/charts/icons.jsx';
+import {
+  TargetIcon, AlertIcon, TrophyIcon, UsersIcon, CheckCircleIcon, ClipboardIcon, SitemapIcon,
+} from '../components/charts/icons.jsx';
 
 // Real landing content, replacing the Stage 3 scaffold placeholder that
 // sat here unchanged through every module built since.
 //
-// 2026-09-16: rebuilt as a role-aware analytics dashboard. First pass
-// (same day) used identical stat-card boxes for every number and an
-// ALL-CAPS eyebrow label on each — exactly the generic "SaaS-card kit"
-// pattern (uniform radius/shadow, no hierarchy) the frontend-design
-// skill names as a default to avoid. Rebuilt around one clear hero
-// (the on-track/achieved ring + status donut, in one card with its own
-// visual weight) with everything else demoted to a lighter, icon-led
-// metric row beneath it, rather than a grid of competing equal boxes.
-// Still no new backend — same three endpoints as before.
+// 2026-09-16: rebuilt as a role-aware analytics dashboard, moving away
+// from the generic "SaaS-card kit" pattern (identical boxes, ALL-CAPS
+// labels, no hierarchy) toward one hero with real visual weight and
+// everything else demoted beneath it.
+//
+// 2026-09-24: second pass, explicitly instructed rather than assumed —
+// the first pass was a genuine improvement in structure but still read
+// flat: same card treatment everywhere, no depth, nothing interactive.
+// This pass adds actual materiality (a soft radial glow behind the
+// hero, not just a flat card), a real hover response on every
+// clickable surface (`.wp-lift` in index.css — transform-only, see its
+// own comment for why box-shadow wasn't usable here), and reworks the
+// quick-links list to share the same icon-led visual language as the
+// stat row above it, rather than two different card idioms on one
+// page. Still no new backend — same three endpoints as before.
 
-function QuickLink({ to, title, description }) {
+function QuickLink({ to, icon: Icon, title, description }) {
   return (
-    <Link to={to} style={{ ...s.card, textDecoration: 'none', display: 'block' }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: colors.ink900, marginBottom: 4 }}>{title}</div>
-      <div style={{ fontSize: 13, color: colors.ink500 }}>{description}</div>
+    <Link
+      to={to} className="wp-lift"
+      style={{
+        ...s.card, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 14,
+      }}
+    >
+      <div style={{
+        width: 40, height: 40, borderRadius: radius.sm, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: colors.brand600, background: `color-mix(in srgb, ${colors.brand600} 12%, transparent)`,
+      }}>
+        <Icon size={19} />
+      </div>
+      <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: colors.ink900 }}>{title}</div>
+        <div style={{ fontSize: 13, color: colors.ink500 }}>{description}</div>
+      </div>
+      <div style={{ color: colors.ink400, fontSize: 18, flexShrink: 0 }}>&rarr;</div>
     </Link>
   );
 }
 
 // Thin circular progress ring for the one hero number on the page —
 // deliberately the only place on this screen that gets this treatment.
-function ProgressRing({ pct, size = 92, stroke = 9, accent }) {
+function ProgressRing({ pct, size = 108, stroke = 10, accent }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const offset = c - (Math.max(0, Math.min(100, pct)) / 100) * c;
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0, filter: `drop-shadow(0 2px 6px color-mix(in srgb, ${accent} 35%, transparent))` }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
         <circle cx={size / 2} cy={size / 2} r={r} stroke={colors.ink200} strokeWidth={stroke} fill="none" />
         <circle
@@ -50,7 +73,7 @@ function ProgressRing({ pct, size = 92, stroke = 9, accent }) {
       </svg>
       <div style={{
         position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 22, fontWeight: 700, color: colors.ink900,
+        fontSize: 28, fontWeight: 800, color: colors.ink900, fontVariantNumeric: 'tabular-nums',
       }}>
         {pct}%
       </div>
@@ -102,7 +125,7 @@ export default function Dashboard() {
 
   return (
     <div style={pageStyle}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, color: colors.ink900 }}>
+      <h1 style={{ fontSize: 23, fontWeight: 700, marginBottom: 4, color: colors.ink900, letterSpacing: '-0.01em' }}>
         Welcome{displayName ? `, ${displayName}` : ''}
       </h1>
       <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 24 }}>
@@ -111,8 +134,8 @@ export default function Dashboard() {
 
       {isPlatformAdmin ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 480, marginBottom: 24 }}>
-          <QuickLink to="/tenants" title="Tenants" description="Provision new tenants and manage billing mode." />
-          <QuickLink to="/admin/flags" title="Feature flags" description="Enable or disable platform-wide capabilities." />
+          <QuickLink to="/tenants" icon={UsersIcon} title="Tenants" description="Provision new tenants and manage billing mode." />
+          <QuickLink to="/admin/flags" icon={TargetIcon} title="Feature flags" description="Enable or disable platform-wide capabilities." />
         </div>
       ) : (
         <>
@@ -126,16 +149,24 @@ export default function Dashboard() {
             </div>
           ) : (
             <>
-              {/* Hero — the one place this page spends visual weight */}
+              {/* Hero — the one place this page spends visual weight. A soft
+                  radial glow behind the ring (not a flat card) gives it real
+                  depth rather than just being a bigger version of every
+                  other box on the page. */}
               <div style={{ ...s.card, padding: 28, position: 'relative', overflow: 'hidden', marginBottom: 16 }}>
                 <div style={{
                   position: 'absolute', top: 0, left: 0, right: 0, height: 3,
                   background: `linear-gradient(90deg, ${colors.brand500}, ${colors.brand700})`,
                 }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
+                <div style={{
+                  position: 'absolute', top: '-30%', left: '-10%', width: 360, height: 360,
+                  background: `radial-gradient(circle, color-mix(in srgb, ${colors.brand500} 14%, transparent) 0%, transparent 70%)`,
+                  pointerEvents: 'none',
+                }} />
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
                   <ProgressRing pct={healthPct ?? 0} accent={colors.brand600} />
                   <div style={{ minWidth: 180 }}>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: colors.ink900 }}>On track or achieved</div>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: colors.ink900 }}>On track or achieved</div>
                     <div style={{ fontSize: 13, color: colors.ink500 }}>
                       {healthyCount} of {objectives.length} {tPlural('Objective').toLowerCase()} this Cycle
                     </div>
@@ -146,7 +177,7 @@ export default function Dashboard() {
                 </div>
 
                 <div style={{
-                  display: 'flex', flexWrap: 'wrap', gap: '20px 32px',
+                  position: 'relative', display: 'flex', flexWrap: 'wrap', gap: '20px 32px',
                   marginTop: 24, paddingTop: 20, borderTop: `1px solid ${colors.line}`,
                 }}>
                   <StatCard icon={TargetIcon} label={tPlural('Objective')} value={objectives.length} accent={colors.brand600} />
@@ -170,7 +201,7 @@ export default function Dashboard() {
                   gap: 16, marginBottom: 24,
                 }}>
                   {isManager && (
-                    <div style={s.card}>
+                    <div className="wp-lift" style={s.card}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <UsersIcon size={16} />
@@ -194,7 +225,7 @@ export default function Dashboard() {
                   )}
 
                   {isTenantAdmin && (
-                    <div style={s.card}>
+                    <div className="wp-lift" style={s.card}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <CheckCircleIcon size={16} />
@@ -222,11 +253,11 @@ export default function Dashboard() {
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 480 }}>
-            <QuickLink to="/objectives" title={tPlural('Objective')} description={`View and create your ${tPlural('Objective').toLowerCase()} for the current Cycle.`} />
-            <QuickLink to={`/reports/scorecard/${user?.id}`} title="My scorecard" description="Your current Cycle's scores and check-in history." />
-            <QuickLink to="/reports/alignment-map" title="Alignment map" description="The full cascade tree, company to individual." />
+            <QuickLink to="/objectives" icon={TargetIcon} title={tPlural('Objective')} description={`View and create your ${tPlural('Objective').toLowerCase()} for the current Cycle.`} />
+            <QuickLink to={`/reports/scorecard/${user?.id}`} icon={ClipboardIcon} title="My scorecard" description="Your current Cycle's scores and check-in history." />
+            <QuickLink to="/reports/alignment-map" icon={SitemapIcon} title="Alignment map" description="The full cascade tree, company to individual." />
             {isTenantAdmin && (
-              <QuickLink to="/users" title="Users" description="Invite, manage roles, and reset passwords." />
+              <QuickLink to="/users" icon={UsersIcon} title="Users" description="Invite, manage roles, and reset passwords." />
             )}
           </div>
         </>

@@ -56,3 +56,24 @@ export function CheckCircleIcon({ size = 20 }) {
     </svg>
   );
 }
+
+export function ClipboardIcon({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" {...base}>
+      <rect x="4.5" y="3.5" width="11" height="14" rx="1.5" />
+      <rect x="7.5" y="2.5" width="5" height="2.5" rx="0.8" />
+      <path d="M7 9h6M7 12h6M7 15h3.5" />
+    </svg>
+  );
+}
+
+export function SitemapIcon({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" {...base}>
+      <rect x="7" y="2.5" width="6" height="4" rx="1" />
+      <rect x="2.5" y="13.5" width="6" height="4" rx="1" />
+      <rect x="11.5" y="13.5" width="6" height="4" rx="1" />
+      <path d="M10 6.5v3.5M5.5 13.5V10a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v3.5" />
+    </svg>
+  );
+}
