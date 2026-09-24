@@ -1,4 +1,4 @@
-import { ForbiddenError } from './errors.js';
+import { ForbiddenError, NotFoundError } from './errors.js';
 
 /**
  * FR-033 — reports computed on demand against the operational
@@ -43,18 +43,27 @@ async function findActiveCycle(client, tenantId) {
  * not any employee in the tenant; TenantAdmin may view anyone's.
  */
 export async function getScorecard(client, tenantId, caller, userId) {
-  if (caller.role !== 'TenantAdmin' && caller.id !== userId) {
-    const { rows } = await client.query(
-      `SELECT manager_id AS "managerId" FROM okr.user_account WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, userId]
-    );
-    if (rows.length === 0 || rows[0].managerId !== caller.id) {
-      throw new ForbiddenError('You can only view your own scorecard or a direct report\'s');
-    }
+  // 2026-09-24: always looks up the scorecard's subject (previously only
+  // for the manager check) so the page can say WHOSE scorecard it is —
+  // it used to render the same "Scorecard" heading for everyone, with
+  // nothing on screen identifying the person. The same row serves the
+  // direct-report check, so this is still one query, not two.
+  const { rows: personRows } = await client.query(
+    `SELECT id, first_name AS "firstName", last_name AS "lastName",
+            avatar_option AS "avatarOption", manager_id AS "managerId"
+     FROM okr.user_account WHERE tenant_id = $1 AND id = $2`,
+    [tenantId, userId]
+  );
+  const subject = personRows[0];
+  const allowed = caller.role === 'TenantAdmin' || caller.id === userId || (subject && subject.managerId === caller.id);
+  if (!allowed) {
+    throw new ForbiddenError('You can only view your own scorecard or a direct report\'s');
   }
+  if (!subject) throw new NotFoundError('User not found');
+  const person = { id: subject.id, firstName: subject.firstName, lastName: subject.lastName, avatarOption: subject.avatarOption };
 
   const cycle = await findActiveCycle(client, tenantId);
-  if (!cycle) return { cycle: null, objectives: [] };
+  if (!cycle) return { person, cycle: null, objectives: [] };
 
   const { rows: objectiveRows } = await client.query(
     `SELECT id, title, status FROM okr.objective
@@ -84,7 +93,7 @@ export async function getScorecard(client, tenantId, caller, userId) {
     objectives.push({ ...objective, keyResults });
   }
 
-  return { cycle, objectives };
+  return { person, cycle, objectives };
 }
 
 /**

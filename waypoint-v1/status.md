@@ -5,8 +5,8 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** 2026-09-24 (second entry that day — Dashboard redesign,
-roll-up completion gate, Scorecard crash). Originally reconstructed 2026-09-16 directly
+**Last updated:** 2026-09-24 (third entry that day — interactive charts,
+Scorecard redesign). Originally reconstructed 2026-09-16 directly
 from the GitHub repo (`mrdutoit/WayPoint`, `waypoint-v1`) rather than from a
 session log — the previous version of this file said Stage 4 hadn't
 started, which the repo contradicted. This file was condensed on
@@ -392,6 +392,59 @@ layout rather than rethinking it.
 - `npm run build`, `npm test` (440, up from 421), and the integration
   suite (31) all pass.
 
+## 2026-09-24 (evening): interactive charts, Dashboard charts restored, Scorecard redesign
+
+Mark's review of the redesigned Dashboard: right direction; wanted the
+course line interactive, the previous Dashboard's charts kept (not
+dropped) and brought up to the same standard, and the Scorecard redone.
+
+- **New chart primitives, `components/viz/`** — hand-built, no Recharts:
+  `CourseLine` (extracted from Dashboard), `StatusRing`, `StatusBars`,
+  `WeightMap`, `ConfidenceTrail`, shared `Tooltip`. All interactive,
+  hover and keyboard focus alike.
+- **Course line interaction:** the whole plot is the hover target —
+  the pointer snaps to the nearest waypoint (small dots are hard to hit)
+  and shows a card with Key Result, Objective, timestamp, score,
+  confidence and comment; away from any waypoint a scrub line shows the
+  date under the cursor. Waypoints are buttons: Tab reaches each, Enter
+  opens its Objective.
+- **Dashboard's previous charts restored as an "at a glance" row:** the
+  completion ring + status donut + stat row are now one `StatusRing`
+  (headline % in the centre, every count in the legend, hover isolates a
+  status); the team key result bar chart is `StatusBars`, plus a
+  personal key-result distribution. Scoped to the caller's own data
+  (Managers get Team; others get an Organisation ring) — the old ones
+  were tenant-wide.
+- **Scorecard rebuilt** in the Dashboard's language: navy hero naming
+  the person (avatar, name) with their course line; at-a-glance row
+  (Objectives ring, Key Results bars, a Rhythm panel — check-in count,
+  last check-in, average current confidence); then per Objective a
+  `WeightMap` and a row per Key Result with share of score, latest
+  comment, `ConfidenceTrail`, and an expandable check-in timeline.
+- **Treemap semantics fixed, not just restyled.** The old treemap pooled
+  every Key Result from every Objective by raw weighting — but FR-016
+  weightings are only normalised within an Objective, so cross-Objective
+  sizes were meaningless (the stray green sliver on Joe's scorecard).
+  Now one map per Objective, each tile labelled with its share of that
+  Objective's score; un-checked-in tiles are hatched so "no data" never
+  reads as a status colour.
+- **Backend:** `getScorecard` now returns `person` (name, avatar) — the
+  page previously never said whose scorecard it was. Folded into the
+  existing manager-check query (one lookup, not two); an unknown user
+  still returns Forbidden to non-admins (no user enumeration).
+- **Removed dead code:** `charts/WeightingTreemap.jsx`,
+  `charts/Sparkline.jsx`, `charts/StatCard.jsx` — no remaining users.
+  Delete these three from GitHub when applying the delta.
+- `Q3 2026` in the hero now set in Instrument Sans — Bricolage's Q has
+  a detached tail that read as an underlined "O3".
+- Dark theme: weight-map tile labels switch to navy ink (white failed
+  contrast on the lighter dark-theme status tints). Mobile: course-line
+  month labels hidden under 480px.
+- Verified in headless Chromium across Dashboard/Scorecard, light/dark,
+  390px, and hover states (waypoint, tile, confidence trail).
+  `npm run build`, `npm test` (446), integration against real Postgres
+  (31) all pass.
+
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
 Raised when comparing WayPoint against Perdoo's UI (screenshots reviewed
@@ -424,23 +477,23 @@ silent addition, before being built:
 
 ## Next immediate step
 
-1. **Deploy this delta, then run "Recompute all OKR statuses"** from
-   `tools/bootstrap-admin.html` once (needs `BOOTSTRAP_SECRET` set in
-   Vercel). Until then, every stored status still reflects the old
-   roll-up rule — e.g. the Company/Division/Team "Achieved" chain.
-2. **Review the new Dashboard as Fred (Manager) and as the Tenant
-   Administrator**, and the fixed Scorecard.
-3. **Open question to Mark:** should Managers get the check-in cadence
-   heatmap for their own direct reports (on Team Progress)? Currently
-   only TenantAdmin sees it.
-4. **Design pass across the rest of the app** — the Dashboard sets the
-   direction (typography, navy chart panel, row-based layout over card
-   grids). Objective Detail, Objectives list, Key Result Detail,
-   Reports hub and the Settings/admin pages haven't had it.
-5. **Cascade sunburst** — last of the three chart candidates, not started.
-6. Still outstanding from earlier: apply
-   `db/migrations/2026-09-18-audit-log-detail.sql` against Neon if not
-   done.
+1. **Deploy, then run "Recompute all OKR statuses"** from
+   `tools/bootstrap-admin.html` if not yet done — Fred's "Grow net
+   revenue" still showed Achieved (with one Key Result only On Track),
+   which is exactly an old-rule status waiting for that repair. Delete
+   the three removed chart files from GitHub.
+2. **Migrate Team Progress and Check-in Compliance** to the viz
+   primitives — the last two pages on legacy Recharts; then delete
+   `components/charts/` except `icons.jsx`.
+3. **Open question to Mark:** should Managers get the cadence heatmap
+   for their own direct reports (on Team Progress)? Natural to settle
+   as part of step 2.
+4. **Design pass across the rest of the app** — Objective Detail,
+   Objectives list, Key Result Detail, Reports hub, Settings/admin.
+5. **Cascade sunburst** — last chart candidate; build it on the viz
+   primitives, not Recharts.
+6. Still outstanding: apply `db/migrations/2026-09-18-audit-log-detail.sql`
+   against Neon if not done.
 
 ## Open items, not yet resolved
 

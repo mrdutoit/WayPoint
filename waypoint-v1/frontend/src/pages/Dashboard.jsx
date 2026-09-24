@@ -6,8 +6,11 @@ import { reportsApi } from '../services/api.js';
 import { STATUS_META, colors } from '../styles/tokens.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { formatDate } from '../utils/dateFormat.js';
+import CourseLine from '../components/viz/CourseLine.jsx';
+import StatusRing from '../components/viz/StatusRing.jsx';
+import StatusBars from '../components/viz/StatusBars.jsx';
 import {
-  cycleProgress, positionInCycle, monthTicks, daysSince, checkInQueue, relativeDays, STALE_AFTER_DAYS,
+  cycleProgress, daysSince, checkInQueue, relativeDays, STALE_AFTER_DAYS,
 } from '../utils/cycleMath.js';
 import './dashboard.css';
 
@@ -30,7 +33,6 @@ import './dashboard.css';
  * result "this Cycle" and presenting it as the caller's own.
  */
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const ATTENTION = ['Off Track', 'At Risk'];
 const ON_COURSE = ['On Track', 'Achieved'];
 
@@ -55,140 +57,6 @@ function StatusLabel({ status }) {
       <span className="db-dot" style={{ background: statusColor(status) }} />
       {status}
     </span>
-  );
-}
-
-// ---------------------------------------------------------------------
-// Hero course line
-// ---------------------------------------------------------------------
-
-const W = 1000;
-const H = 150;
-const COURSE_Y = 122;
-const PROFILE_TOP = 22;
-const PROFILE_BOTTOM = 92;
-
-function confidenceY(value) {
-  const clamped = Math.min(5, Math.max(1, Number(value) || 1));
-  return PROFILE_BOTTOM - ((clamped - 1) / 4) * (PROFILE_BOTTOM - PROFILE_TOP);
-}
-
-function CourseLine({ cycle, progress, checkIns }) {
-  const todayX = progress.fraction * W;
-  const ticks = monthTicks(cycle.startDate, cycle.endDate);
-
-  const points = checkIns
-    .map((ci) => ({ ...ci, x: (positionInCycle(ci.submittedAt, cycle.startDate, cycle.endDate) ?? 0) * W }))
-    .sort((a, b) => a.x - b.x);
-
-  // Confidence profile: one point per day with Check-ins (the day's mean),
-  // joined into a line and softly filled — the "altitude" of the passage.
-  const byDay = new Map();
-  for (const p of points) {
-    const key = Math.round(p.x);
-    const entry = byDay.get(key) ?? { x: p.x, sum: 0, n: 0 };
-    entry.sum += Number(p.confidence) || 0;
-    entry.n += 1;
-    byDay.set(key, entry);
-  }
-  const profile = [...byDay.values()].map((d) => ({ x: d.x, y: confidenceY(d.sum / d.n) }));
-  const profilePath = profile.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-  const areaPath = profile.length > 1
-    ? `${profilePath} L${profile[profile.length - 1].x.toFixed(1)},${PROFILE_BOTTOM} L${profile[0].x.toFixed(1)},${PROFILE_BOTTOM} Z`
-    : null;
-
-  // Waypoints sharing (nearly) the same x stack upward slightly rather
-  // than hiding each other.
-  const stackCount = new Map();
-  const waypoints = points.map((p) => {
-    const key = Math.round(p.x / 6);
-    const n = stackCount.get(key) ?? 0;
-    stackCount.set(key, n + 1);
-    return { ...p, y: COURSE_Y - n * 11 };
-  });
-
-  const label = `${cycle.name}: day ${progress.dayNumber} of ${progress.totalDays}, ${plural(checkIns.length, 'check-in', 'check-ins')} recorded so far.`;
-
-  return (
-    <div className="db-course">
-      {!progress.afterEnd && !progress.beforeStart && (
-        <span className="db-today" style={{ left: `${progress.fraction * 100}%` }}>Today</span>
-      )}
-      <div className="db-course-plot">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="db-course-grad" gradientUnits="userSpaceOnUse" x1="0" x2={W} y1="0" y2="0">
-            <stop offset="0%" stopColor="#6fe8ff" />
-            <stop offset="100%" stopColor="#2e8cf0" />
-          </linearGradient>
-          <linearGradient id="db-profile-grad" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#6fe8ff" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="#6fe8ff" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        {/* Month boundaries */}
-        {ticks.map((t) => (
-          <g key={t.date.toISOString()}>
-            <line x1={t.fraction * W} x2={t.fraction * W} y1={PROFILE_TOP - 6} y2={COURSE_Y + 8} stroke="rgba(148,163,184,0.22)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-          </g>
-        ))}
-
-        {/* Confidence profile */}
-        {areaPath && <path className="db-course-profile" d={areaPath} fill="url(#db-profile-grad)" />}
-        {profile.length > 1 && (
-          <path className="db-course-profile" d={profilePath} fill="none" stroke="#6fe8ff" strokeOpacity="0.7" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-        )}
-
-        {/* Remaining course */}
-        <line x1={todayX} x2={W} y1={COURSE_Y} y2={COURSE_Y} stroke="rgba(148,163,184,0.45)" strokeWidth="2" strokeDasharray="2 7" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-        {/* Course sailed */}
-        {todayX > 0 && (
-          <g className="db-course-elapsed">
-            <rect x="0" y={COURSE_Y - 2} width={todayX} height="4" rx="2" fill="url(#db-course-grad)" />
-          </g>
-        )}
-
-        {/* Today */}
-        {!progress.afterEnd && (
-          <line x1={todayX} x2={todayX} y1={PROFILE_TOP - 8} y2={COURSE_Y + 10} stroke="#ffffff" strokeOpacity="0.85" strokeWidth="1.25" vectorEffect="non-scaling-stroke" />
-        )}
-
-      </svg>
-
-      {/* Buoys and waypoints are HTML, positioned in % over the SVG: the
-          SVG stretches to fill the width (preserveAspectRatio="none"), so
-          circles drawn inside it would squash into ellipses on a phone. */}
-      <span className="db-buoy db-buoy-start" style={{ left: 0, top: `${(COURSE_Y / H) * 100}%` }} />
-      <span className="db-buoy db-buoy-end" style={{ left: '100%', top: `${(COURSE_Y / H) * 100}%` }} />
-      {waypoints.map((p, i) => (
-        <span
-          key={i} className="db-waypoint"
-          style={{ left: `${(p.x / W) * 100}%`, top: `${(p.y / H) * 100}%`, background: statusColor(p.scoreLabel) }}
-          title={`${p.keyResultTitle}: ${p.scoreLabel}, confidence ${p.confidence}/5 (${formatDate(String(p.submittedAt).slice(0, 10))})`}
-        />
-      ))}
-      </div>
-
-      <CourseAxis cycle={cycle} progress={progress} ticks={ticks} />
-    </div>
-  );
-}
-
-// Axis labels live in HTML, not SVG text, so they don't stretch with the
-// preserveAspectRatio="none" course and stay crisp at any width.
-function CourseAxis({ cycle, progress, ticks }) {
-  const monthName = (d) => MONTHS[d.getMonth()];
-  return (
-    <div style={{ position: 'relative', height: 20, marginTop: 4, fontSize: 12, color: 'var(--ink500)', fontVariantNumeric: 'tabular-nums' }}>
-      <span style={{ position: 'absolute', left: 0 }}>{formatDate(cycle.startDate)}</span>
-      {ticks.filter((t) => t.fraction > 0.14 && t.fraction < 0.86).map((t) => (
-        <span key={t.date.toISOString()} style={{ position: 'absolute', left: `${t.fraction * 100}%`, transform: 'translateX(-50%)' }}>
-          {monthName(t.date)}
-        </span>
-      ))}
-      <span style={{ position: 'absolute', right: 0 }}>{formatDate(cycle.endDate)}</span>
-    </div>
   );
 }
 
@@ -217,7 +85,9 @@ function Hero({ user, scorecard, queue, isTenantAdmin, terms }) {
 
   const objectives = scorecard.objectives;
   const keyResults = objectives.flatMap((o) => o.keyResults);
-  const checkIns = objectives.flatMap((o) => o.keyResults.flatMap((kr) => kr.checkInHistory.map((ci) => ({ ...ci, keyResultTitle: kr.title }))));
+  const checkIns = objectives.flatMap((o) => o.keyResults.flatMap((kr) => kr.checkInHistory.map((ci) => ({
+    ...ci, keyResultTitle: kr.title, objectiveId: o.id, objectiveTitle: o.title,
+  }))));
   const onCourse = objectives.filter((o) => ON_COURSE.includes(o.status)).length;
   const attention = objectives.filter((o) => ATTENTION.includes(o.status)).length;
   const neverCheckedIn = queue.filter((k) => k.daysSinceCheckIn === null).length;
@@ -270,12 +140,52 @@ function Hero({ user, scorecard, queue, isTenantAdmin, terms }) {
 
       <CourseLine cycle={cycle} progress={progress} checkIns={checkIns} />
 
-      <div className="db-course-legend">
-        <span><span className="db-dot" style={{ background: 'linear-gradient(90deg,#6fe8ff,#2e8cf0)', width: 16, borderRadius: 2, height: 4 }} />Course so far</span>
-        <span><span className="db-dot" style={{ background: statusColor('On Track') }} />Each dot is one of your {tPlural('CheckIn').toLowerCase()}, coloured by its score</span>
-        {checkIns.length > 1 && <span><span className="db-dot" style={{ background: '#6fe8ff', opacity: 0.6, width: 16, borderRadius: 2, height: 2 }} />Confidence</span>}
-      </div>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------
+// At a glance — the charts the previous Dashboard had (completion ring,
+// status donut + stat row, team key result status bars), kept rather
+// than dropped, rebuilt in the new chart language and re-scoped to
+// data that is actually the caller's (the old ones were tenant-wide).
+// ---------------------------------------------------------------------
+
+function Glance({ scorecard, teamProgress, alignment, isManager, terms }) {
+  const { t, tPlural } = terms;
+  const objectives = scorecard.objectives;
+  const keyResults = objectives.flatMap((o) => o.keyResults);
+  const onCourse = objectives.filter((o) => ON_COURSE.includes(o.status)).length;
+  const pct = objectives.length ? Math.round((onCourse / objectives.length) * 100) : 0;
+  const orgObjectives = alignment?.objectives ?? [];
+  const orgOnCourse = orgObjectives.filter((o) => ON_COURSE.includes(o.status)).length;
+
+  return (
+    <div className="db-glance">
+      <section className="vz-panel">
+        <h2 className="vz-panel-title">Your {tPlural('Objective').toLowerCase()}</h2>
+        <p className="vz-panel-note">Share on track or achieved this {t('Cycle').toLowerCase()}</p>
+        <StatusRing items={objectives} noun={tPlural('Objective').toLowerCase()} headline={{ figure: `${pct}%`, caption: 'on track or achieved' }} />
+      </section>
+      <section className="vz-panel">
+        <h2 className="vz-panel-title">Your {tPlural('KeyResult').toLowerCase()}</h2>
+        <p className="vz-panel-note">Latest {t('CheckIn').toLowerCase()} score for each</p>
+        <StatusBars items={keyResults} />
+      </section>
+      {isManager ? (
+        <section className="vz-panel">
+          <h2 className="vz-panel-title">Team {tPlural('KeyResult').toLowerCase()}</h2>
+          <p className="vz-panel-note">Across your direct reports</p>
+          {teamProgress ? <StatusBars items={teamProgress.rows} /> : <div className="vz-empty">Loading…</div>}
+        </section>
+      ) : (
+        <section className="vz-panel">
+          <h2 className="vz-panel-title">Organisation</h2>
+          <p className="vz-panel-note">Every {t('Objective').toLowerCase()} this {t('Cycle').toLowerCase()}</p>
+          <StatusRing items={orgObjectives} noun={tPlural('Objective').toLowerCase()} headline={{ figure: `${orgOnCourse}/${orgObjectives.length}`, caption: 'on track or achieved' }} />
+        </section>
+      )}
+    </div>
   );
 }
 
@@ -534,6 +444,10 @@ export default function Dashboard() {
       ) : (
         <>
           <Hero user={user} scorecard={scorecard} queue={queue} isTenantAdmin={isTenantAdmin} terms={terms} />
+
+          {scorecard.cycle && (
+            <Glance scorecard={scorecard} teamProgress={teamProgress} alignment={alignment} isManager={isManager} terms={terms} />
+          )}
 
           {scorecard.cycle && (
             <div className="db-body">

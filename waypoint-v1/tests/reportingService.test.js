@@ -13,49 +13,62 @@ const TENANT_ADMIN = { id: 'admin-1', role: 'TenantAdmin' };
 const NO_CYCLE = { rows: [] };
 const CYCLE = { rows: [{ id: 'cycle-1', name: 'Q3 2026', startDate: '2026-07-01', endDate: '2026-09-30' }] };
 
+const PERSON = (managerId = 'mgr-1', id = 'emp-1') => ({ rows: [{ id, firstName: 'Joe', lastName: 'Soap', avatarOption: 'grad', managerId }] });
+
 describe('getScorecard — visibility', () => {
   it('a caller may always view their own scorecard', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce(NO_CYCLE);
+    client.query.mockResolvedValueOnce(PERSON()).mockResolvedValueOnce(NO_CYCLE);
     const result = await getScorecard(client, 't1', EMPLOYEE, 'emp-1');
     expect(result.objectives).toEqual([]);
   });
 
-  it('TenantAdmin may view anyone\'s scorecard, no manager lookup needed', async () => {
+  it('TenantAdmin may view anyone\'s scorecard — one subject lookup, then the cycle', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce(NO_CYCLE);
+    client.query.mockResolvedValueOnce(PERSON('someone-else')).mockResolvedValueOnce(NO_CYCLE);
     await getScorecard(client, 't1', TENANT_ADMIN, 'emp-1');
-    expect(client.query).toHaveBeenCalledTimes(1); // straight to the cycle lookup, no ownership check query
+    expect(client.query).toHaveBeenCalledTimes(2);
   });
 
   it('a Manager may view their own direct report\'s scorecard', async () => {
     const client = mockClient();
-    client.query
-      .mockResolvedValueOnce({ rows: [{ managerId: 'mgr-1' }] })
-      .mockResolvedValueOnce(NO_CYCLE);
+    client.query.mockResolvedValueOnce(PERSON('mgr-1')).mockResolvedValueOnce(NO_CYCLE);
     const result = await getScorecard(client, 't1', MANAGER, 'emp-1');
     expect(result.objectives).toEqual([]);
   });
 
   it('refuses a Manager viewing a non-report\'s scorecard', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce({ rows: [{ managerId: 'someone-else' }] });
+    client.query.mockResolvedValueOnce(PERSON('someone-else'));
     await expect(getScorecard(client, 't1', MANAGER, 'emp-1')).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it('refuses an Employee viewing a colleague\'s scorecard', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce({ rows: [{ managerId: 'mgr-1' }] });
+    client.query.mockResolvedValueOnce(PERSON('mgr-1', 'other-emp'));
     await expect(getScorecard(client, 't1', EMPLOYEE, 'other-emp')).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('refuses a non-admin looking up an unknown user as Forbidden, not NotFound — no user enumeration', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce({ rows: [] });
+    await expect(getScorecard(client, 't1', MANAGER, 'ghost')).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('returns the subject\'s name so the page can say whose scorecard it is', async () => {
+    const client = mockClient();
+    client.query.mockResolvedValueOnce(PERSON()).mockResolvedValueOnce(NO_CYCLE);
+    const result = await getScorecard(client, 't1', EMPLOYEE, 'emp-1');
+    expect(result.person).toEqual({ id: 'emp-1', firstName: 'Joe', lastName: 'Soap', avatarOption: 'grad' });
   });
 });
 
 describe('getScorecard — no active Cycle', () => {
   it('returns an empty scorecard rather than throwing', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce(NO_CYCLE);
+    client.query.mockResolvedValueOnce(PERSON()).mockResolvedValueOnce(NO_CYCLE);
     const result = await getScorecard(client, 't1', EMPLOYEE, 'emp-1');
-    expect(result).toEqual({ cycle: null, objectives: [] });
+    expect(result).toMatchObject({ cycle: null, objectives: [] });
   });
 });
 
@@ -63,6 +76,7 @@ describe('getScorecard — assembles Objectives with Key Results and Check-in hi
   it('nests Key Results under each Objective, and check-in history under each Key Result', async () => {
     const client = mockClient();
     client.query
+      .mockResolvedValueOnce(PERSON())
       .mockResolvedValueOnce(CYCLE)
       .mockResolvedValueOnce({ rows: [{ id: 'obj-1', title: 'Grow revenue', status: 'On Track' }] })
       .mockResolvedValueOnce({ rows: [{ id: 'kr-1', title: 'Sign 10 clients', weighting: '1', status: 'On Track' }] })

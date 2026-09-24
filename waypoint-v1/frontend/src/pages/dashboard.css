@@ -112,9 +112,11 @@
 .db-cycle-name {
   display: block;
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 650;
   color: #fff;
-  font-family: var(--font-display);
+  /* UI face, not display: Bricolage's Q has a detached tail that made
+     "Q3 2026" read as an underlined "O3 2026" (2026-09-24). */
+  font-family: var(--font-sans);
   letter-spacing: -0.01em;
 }
 
@@ -211,6 +213,23 @@
   border-radius: 50%;
   display: inline-block;
   flex-shrink: 0;
+}
+
+/* ---------- At a glance ---------- */
+
+.db-glance {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+@media (max-width: 1000px) {
+  .db-glance { grid-template-columns: 1fr 1fr; }
+  .db-glance > :last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .db-glance { grid-template-columns: 1fr; }
 }
 
 /* ---------- Body layout ---------- */
