@@ -105,7 +105,7 @@ describe('getTeamProgress', () => {
 
   it('scopes the query to the caller\'s own direct reports', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce(CYCLE).mockResolvedValueOnce({ rows: [] });
+    client.query.mockResolvedValueOnce(CYCLE).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] });
     await getTeamProgress(client, 't1', MANAGER);
     const rowsCall = client.query.mock.calls[1];
     expect(rowsCall[1]).toEqual(['t1', 'cycle-1', 'mgr-1']);
@@ -114,9 +114,23 @@ describe('getTeamProgress', () => {
 
   it('orders by risk: level_index ascending, then confidence ascending', async () => {
     const client = mockClient();
-    client.query.mockResolvedValueOnce(CYCLE).mockResolvedValueOnce({ rows: [] });
+    client.query.mockResolvedValueOnce(CYCLE).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] });
     await getTeamProgress(client, 't1', MANAGER);
     expect(client.query.mock.calls[1][0]).toMatch(/ORDER BY "levelIndex" ASC, "latestConfidence" ASC NULLS FIRST/);
+  });
+
+  it('returns this Cycle\'s Check-ins for the caller\'s direct reports only', async () => {
+    const client = mockClient();
+    const ci = { employeeId: 'emp-1', keyResultId: 'kr-1', submittedAt: '2026-09-01T09:00:00Z', confidence: 4, scoreLabel: 'On Track' };
+    client.query
+      .mockResolvedValueOnce(CYCLE)
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [ci] });
+    const result = await getTeamProgress(client, 't1', MANAGER);
+    expect(result.checkIns).toEqual([ci]);
+    const cadenceCall = client.query.mock.calls[2];
+    expect(cadenceCall[1]).toEqual(['t1', 'cycle-1', 'mgr-1']);
+    expect(cadenceCall[0]).toMatch(/u\.manager_id = \$3/);
   });
 });
 

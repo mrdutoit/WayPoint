@@ -5,8 +5,8 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** 2026-09-24 (third entry that day — interactive charts,
-Scorecard redesign). Originally reconstructed 2026-09-16 directly
+**Last updated:** 2026-09-24 (fourth entry that day — Reports and
+Alignment Map redesign). Originally reconstructed 2026-09-16 directly
 from the GitHub repo (`mrdutoit/WayPoint`, `waypoint-v1`) rather than from a
 session log — the previous version of this file said Stage 4 hadn't
 started, which the repo contradicted. This file was condensed on
@@ -85,8 +85,9 @@ equivalent to "the module was reviewed and closed out."
   triggers automatically on a weighting change or a re-parent/level
   move, not just a new Check-in.
 - Initiatives and Reflections against Key Results/Objectives
-- Reporting: Scorecard, Team Progress, Alignment Map (collapsible tree,
-  not a visual canvas), Check-in Compliance — Dashboard, Team Progress,
+- Reporting: Scorecard, Team Progress, Alignment Map (strategy canvas),
+  Check-in Compliance — all four and the Reports hub redesigned
+  2026-09-24 in the Dashboard's chart language — Dashboard, Team Progress,
   and Check-in Compliance lead with a Recharts-based chart above the
   existing table/list detail; Scorecard leads with a weighting-sized
   treemap instead of a status donut; Check-in Compliance additionally
@@ -445,6 +446,57 @@ dropped) and brought up to the same standard, and the Scorecard redone.
   `npm run build`, `npm test` (446), integration against real Postgres
   (31) all pass.
 
+## 2026-09-24 (late): Reports hub, Team Progress, Check-in Compliance, Alignment Map
+
+Mark: the Scorecard/Dashboard direction is right; the older reports and
+the Alignment Map were still "very 1-dimensional". All four report pages
+and the hub rebuilt; Recharts and `components/charts/` removed.
+
+- **Alignment Map → strategy canvas** on the navy panel: one column per
+  cascade level, a card per Objective (status, title, owner), curved
+  connectors coloured by the child's status. Hover or focus a card and
+  its whole lineage lights (everything it rolls into and everything
+  feeding it); the rest dims. Per-card collapse (Sam's Stage 2 review
+  requirement) plus Expand all / Top level only; maps over 40 Objectives
+  open collapsed below level two. Cards size to the panel so a four-level
+  cascade fits without scrolling on desktop; narrower screens scroll.
+  Layout is `utils/strategyLayout.js` (columns by cascade LEVEL, not tree
+  depth; leaves first, parents centred), 5 unit tests. Above it: status
+  ring, an **Alignment** figure (share of below-top-level Objectives
+  linked to a parent, listing the unlinked ones) and status by level.
+  Closes the backlog's "visual strategy map" item.
+- **Team Progress:** navy panel with one course lane per direct report
+  (`Lanes` — every Check-in where it happened, coloured by score, detail
+  on hover, shared month/today axis); glance row (team Objectives ring,
+  team Key Results bars, "Where to look" counts); then per person —
+  riskiest first, server risk order kept — a cadence strip and their Key
+  Results with confidence, last check-in (overdue flagged) and status.
+- **Open question 3 settled by building it:** Managers now get the
+  check-in cadence for their own direct reports. `getTeamProgress`
+  returns `checkIns` (this Cycle's Check-ins on direct reports' Key
+  Results, with score and comment) — no new exposure, since a Manager
+  already sees exactly this on each report's Scorecard. Rows also gained
+  `employeeAvatarOption`, `objectiveStatus`, `weighting`, `lastCheckInAt`.
+  Query verified against real Postgres (integration suite).
+- **Check-in Compliance:** coverage ring (checked in / not yet), People
+  and Volume panels, then one row per person, least covered first:
+  ratio + meter, a **single-row cadence strip** (`CadenceStrip`, one cell
+  per day) aligned under a shared month axis so rhythms compare straight
+  down the page — replaces the stacked 7-row calendar heatmaps. Unchecked
+  Key Results expand per person. `getCheckinCompliance` rows gained
+  `employeeAvatarOption`.
+- **Reports hub:** cards with a small drawing of each report's own
+  visual (course, lanes, cascade, cadence) instead of plain text links.
+- **Removed:** `components/charts/` entirely and the `recharts`
+  dependency (`frontend/package.json` + lock) — no remaining users.
+  Delete `frontend/src/components/charts/` from GitHub when applying;
+  run `npm install` (Vercel does this on deploy).
+- `useElementWidth` now re-attaches when its element mounts after the
+  component (the Alignment canvas only exists once data loads).
+- Verified in headless Chromium (all four pages, lineage hover, lane
+  hover, 390px). `npm run build`, `npm test` (452), integration against
+  real Postgres (31) all pass.
+
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
 Raised when comparing WayPoint against Perdoo's UI (screenshots reviewed
@@ -462,11 +514,6 @@ silent addition, before being built:
   with goal/report data pulled in. No FR, no entity, never scoped.
   Materially different feature category from OKR tracking, not a
   natural extension of it.
-- **Visual strategy map** — the Alignment Map report is functionally
-  equivalent (parent-child cascade, collapse/expand for deep trees) but
-  renders as an indented list, not a box-and-connector canvas. The
-  cascade sunburst (still not built, see above) is the more visually
-  ambitious version of this same idea.
 - **Composite team "business review" view** — trend + roll-up + freeform
   wins/observations in one page. Partial overlap with Team Progress +
   Reflections; not currently its own FR.
@@ -478,21 +525,16 @@ silent addition, before being built:
 ## Next immediate step
 
 1. **Deploy, then run "Recompute all OKR statuses"** from
-   `tools/bootstrap-admin.html` if not yet done — Fred's "Grow net
-   revenue" still showed Achieved (with one Key Result only On Track),
-   which is exactly an old-rule status waiting for that repair. Delete
-   the three removed chart files from GitHub.
-2. **Migrate Team Progress and Check-in Compliance** to the viz
-   primitives — the last two pages on legacy Recharts; then delete
-   `components/charts/` except `icons.jsx`.
-3. **Open question to Mark:** should Managers get the cadence heatmap
-   for their own direct reports (on Team Progress)? Natural to settle
-   as part of step 2.
-4. **Design pass across the rest of the app** — Objective Detail,
-   Objectives list, Key Result Detail, Reports hub, Settings/admin.
-5. **Cascade sunburst** — last chart candidate; build it on the viz
-   primitives, not Recharts.
-6. Still outstanding: apply `db/migrations/2026-09-18-audit-log-detail.sql`
+   `tools/bootstrap-admin.html` if not yet done. Delete
+   `frontend/src/components/charts/` from GitHub when applying this delta.
+2. **Design pass across the rest of the app** — Objective Detail (the
+   page everyone lands on from every chart), Objectives list, Key Result
+   Detail, then Settings/admin pages. Same language: one navy signature
+   panel per page at most, quiet panels and rows elsewhere.
+3. **Cascade sunburst** — last chart candidate; build on `components/viz/`.
+   Now that the Alignment Map is a real canvas, worth confirming the
+   sunburst still earns its place before building it.
+4. Still outstanding: apply `db/migrations/2026-09-18-audit-log-detail.sql`
    against Neon if not done.
 
 ## Open items, not yet resolved

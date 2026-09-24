@@ -11,6 +11,9 @@ import './viz.css';
  * status and swaps the centre to its count and share.
  *
  * items: [{ status }]   headline: { figure, caption } for the idle centre
+ * groups (optional): [{ status, count, color }] — pre-grouped segments
+ *   with their own colours, for non-status splits (e.g. Check-in
+ *   Compliance's "Checked in" / "Not yet"). Overrides `items`.
  */
 
 const SIZE = 132;
@@ -19,10 +22,11 @@ const R = (SIZE - STROKE) / 2;
 const C = 2 * Math.PI * R;
 const GAP = 4; // px of arc between segments
 
-export default function StatusRing({ items, headline, noun = 'items' }) {
+export default function StatusRing({ items = [], groups: givenGroups, headline, noun = 'items' }) {
   const [hover, setHover] = useState(null);
-  const groups = groupByStatus(items);
-  const total = items.length;
+  const groups = (givenGroups ?? groupByStatus(items)).filter((g) => g.count > 0);
+  const total = groups.reduce((sum, g) => sum + g.count, 0);
+  const colorOf = (g) => g.color ?? statusColor(g.status);
 
   if (total === 0) return <div className="vz-empty">Nothing to show yet.</div>;
 
@@ -48,7 +52,7 @@ export default function StatusRing({ items, headline, noun = 'items' }) {
                 key={seg.status}
                 className="seg"
                 cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none"
-                stroke={statusColor(seg.status)}
+                stroke={colorOf(seg)}
                 strokeWidth={hover === seg.status ? STROKE + 4 : STROKE}
                 strokeLinecap={groups.length > 1 ? 'butt' : 'round'}
                 strokeDasharray={`${seg.len} ${C}`}
@@ -63,7 +67,7 @@ export default function StatusRing({ items, headline, noun = 'items' }) {
         <div className="vz-ring-centre">
           {hovered ? (
             <>
-              <span className="vz-ring-figure" style={{ color: statusColor(hovered.status) }}>{hovered.count}</span>
+              <span className="vz-ring-figure" style={{ color: colorOf(hovered) }}>{hovered.count}</span>
               <span className="vz-ring-caption">{hovered.status}, {Math.round((hovered.count / total) * 100)}%</span>
             </>
           ) : (
@@ -86,7 +90,7 @@ export default function StatusRing({ items, headline, noun = 'items' }) {
             onBlur={() => setHover(null)}
             aria-label={`${g.count} ${noun} ${g.status}`}
           >
-            <span className="vz-dot" style={{ background: statusColor(g.status) }} />
+            <span className="vz-dot" style={{ background: colorOf(g) }} />
             <span>{g.status}</span>
             <span className="vz-legend-count">{g.count}</span>
           </button>

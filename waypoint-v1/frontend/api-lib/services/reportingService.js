@@ -121,16 +121,18 @@ export async function getTeamProgress(client, tenantId, caller) {
   const { rows } = await client.query(
     `SELECT
        u.id AS "employeeId", u.first_name AS "employeeFirstName", u.last_name AS "employeeLastName",
-       o.id AS "objectiveId", o.title AS "objectiveTitle",
-       kr.id AS "keyResultId", kr.title AS "keyResultTitle", kr.status,
+       u.avatar_option AS "employeeAvatarOption",
+       o.id AS "objectiveId", o.title AS "objectiveTitle", o.status AS "objectiveStatus",
+       kr.id AS "keyResultId", kr.title AS "keyResultTitle", kr.status, kr.weighting,
        COALESCE(rl.level_index, 0) AS "levelIndex",
-       latest.confidence AS "latestConfidence"
+       latest.confidence AS "latestConfidence",
+       latest.submitted_at AS "lastCheckInAt"
      FROM okr.user_account u
      JOIN okr.objective o ON o.tenant_id = u.tenant_id AND o.owner_id = u.id AND o.cycle_id = $2
      JOIN okr.key_result kr ON kr.tenant_id = u.tenant_id AND kr.objective_id = o.id
      LEFT JOIN okr.rubric_level rl ON rl.label = kr.status
      LEFT JOIN LATERAL (
-       SELECT ci.confidence FROM okr.check_in ci
+       SELECT ci.confidence, ci.submitted_at FROM okr.check_in ci
        WHERE ci.key_result_id = kr.id ORDER BY ci.submitted_at DESC LIMIT 1
      ) latest ON true
      WHERE u.tenant_id = $1 AND u.manager_id = $3
@@ -138,7 +140,29 @@ export async function getTeamProgress(client, tenantId, caller) {
     [tenantId, cycle.id, caller.id]
   );
 
-  return { cycle, rows };
+  // 2026-09-24: every Check-in this Cycle on the Manager's own direct
+  // reports' Key Results — drives Team Progress's per-person lanes (each
+  // Check-in plotted where it happened, coloured by score, with its
+  // detail on hover) and cadence strips (counted per day client-side).
+  // No new exposure: a Manager can already see each report's full
+  // Check-in history, comments included, on their Scorecard
+  // (getScorecard's direct-report rule, and FR-018/checkInService's
+  // owner-or-Manager read rule). Ordered by time for plotting.
+  const { rows: checkIns } = await client.query(
+    `SELECT u.id AS "employeeId", o.id AS "objectiveId", o.title AS "objectiveTitle",
+            kr.id AS "keyResultId", kr.title AS "keyResultTitle",
+            ci.submitted_at AS "submittedAt", ci.confidence, ci.comment, rl.label AS "scoreLabel"
+     FROM okr.check_in ci
+     JOIN okr.rubric_level rl ON rl.id = ci.rubric_level_id
+     JOIN okr.key_result kr ON kr.id = ci.key_result_id
+     JOIN okr.objective o ON o.id = kr.objective_id
+     JOIN okr.user_account u ON u.id = o.owner_id
+     WHERE ci.tenant_id = $1 AND o.cycle_id = $2 AND u.manager_id = $3
+     ORDER BY ci.submitted_at ASC`,
+    [tenantId, cycle.id, caller.id]
+  );
+
+  return { cycle, rows, checkIns };
 }
 
 /**
@@ -198,6 +222,7 @@ export async function getCheckinCompliance(client, tenantId, caller) {
   const { rows } = await client.query(
     `SELECT
        u.id AS "employeeId", u.first_name AS "employeeFirstName", u.last_name AS "employeeLastName",
+       u.avatar_option AS "employeeAvatarOption",
        kr.id AS "keyResultId", kr.title AS "keyResultTitle",
        EXISTS (
          SELECT 1 FROM okr.check_in ci WHERE ci.key_result_id = kr.id AND ci.tenant_id = $1
@@ -234,6 +259,7 @@ export async function getCheckinCompliance(client, tenantId, caller) {
         employeeId: row.employeeId,
         employeeFirstName: row.employeeFirstName,
         employeeLastName: row.employeeLastName,
+        employeeAvatarOption: row.employeeAvatarOption,
         keyResults: [],
         checkInsByDate: [],
       });

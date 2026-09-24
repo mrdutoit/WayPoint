@@ -79,10 +79,8 @@ waypoint-v1/
 │   ├── src/                        <- the React app
 │   │   ├── components/ (Avatar.jsx, DatePicker.jsx, ErrorBoundary.jsx, Logo.jsx,
 │   │   │   SubmitCheckInForm.jsx,
-│   │   │   charts/ (StatusDonut.jsx, StatusBarChart.jsx, CalendarHeatmap.jsx, icons.jsx
-│   │   │     — legacy Recharts, still used by Team Progress and Check-in Compliance),
-│   │   │   viz/ (CourseLine.jsx, StatusRing.jsx, StatusBars.jsx, WeightMap.jsx,
-│   │   │     ConfidenceTrail.jsx, Tooltip.jsx, viz.css — the current chart language))
+│   │   │   viz/ (CourseLine.jsx, Lanes.jsx, StatusRing.jsx, StatusBars.jsx, WeightMap.jsx,
+│   │   │     ConfidenceTrail.jsx, CadenceStrip.jsx, Tooltip.jsx, viz.css — every chart))
 │   │   ├── constants/avatarOptions.js
 │   │   ├── context/ (FlagContext, RoleContext, TerminologyContext, ThemeContext)
 │   │   ├── hooks/ (useElementWidth.js, useFetch.js, useWindowSize.js)
@@ -91,10 +89,10 @@ waypoint-v1/
 │   │   │    Dashboard.jsx, FeatureFlags.jsx, KeyResultDetail.jsx, Login.jsx,
 │   │   │    ObjectiveDetail.jsx, Objectives.jsx, OkrSettings.jsx, Reports.jsx,
 │   │   │    Scorecard.jsx, Settings.jsx, TeamProgress.jsx, TenantsAdmin.jsx,
-│   │   │    UsersAdmin.jsx, dashboard.css + scorecard.css — page stylesheets)
+│   │   │    UsersAdmin.jsx; page stylesheets dashboard.css, scorecard.css, reports.css, alignment.css)
 │   │   ├── services/api.js
 │   │   ├── styles/tokens.js        <- design tokens, incl. brand colours, CHART_PALETTE
-│   │   ├── utils/ (cycleMath.js, squarify.js, dateFormat.js, statusGroups.js, objectiveTree.js, jwt.js)
+│   │   ├── utils/ (cycleMath.js, squarify.js, strategyLayout.js, dateFormat.js, statusGroups.js, objectiveTree.js, jwt.js)
 │   │   └── App.jsx
 │   ├── public/                     <- favicon.png, favicon.svg, apple-touch-icon.png, waypoint-icon.png
 │   ├── vercel.json                 <- routes friendly paths to the router files
@@ -126,21 +124,23 @@ waypoint-v1/
 - **Auth:** Standalone (Argon2id password hashing + JWT), not SSO by
   default. SSO is a scaffolded, switched-off feature flag
   (`auth.sso.enabled`) for later.
-- **Charts (2026-09-24):** two generations, mid-migration.
-  - **Current — `src/components/viz/`**, hand-built SVG/HTML, no chart
-    library: `CourseLine` (Cycle-as-course hero, Dashboard + Scorecard),
-    `StatusRing`, `StatusBars`, `WeightMap` (squarified treemap via
-    `utils/squarify.js`, one per Objective), `ConfidenceTrail`, and one
-    shared `Tooltip`/`CheckInDetail` card. Rules: status colour is the
-    only colour (`STATUS_META`), no axes or gridlines unless they carry
-    meaning, and every mark answers hover AND keyboard focus with the
-    detail behind it. Styles in `viz.css`. New charts go here.
-  - **Legacy — `src/components/charts/`**, Recharts themed from
-    `tokens.js` (`StatusDonut`, `StatusBarChart`, `CalendarHeatmap`).
-    Still used by Team Progress and Check-in Compliance only; to be
-    migrated to the viz primitives, then deleted.
-  - Either way, a page groups its data with `utils/statusGroups.js`
-    rather than reimplementing grouping.
+- **Charts:** hand-built SVG/HTML in `src/components/viz/`, no chart
+  library (Recharts was removed 2026-09-24 once the last page moved off
+  it). `CourseLine` (Cycle-as-course hero, Dashboard + Scorecard),
+  `Lanes` (one course per person, Team Progress), `StatusRing`,
+  `StatusBars`, `WeightMap` (squarified treemap via `utils/squarify.js`,
+  one per Objective), `ConfidenceTrail`, `CadenceStrip` (one cell per day
+  of the Cycle), and one shared `Tooltip`/`CheckInDetail` card. Rules:
+  status colour is the only colour (`STATUS_META`), no axes or gridlines
+  unless they carry meaning, every mark answers hover AND keyboard focus
+  with the detail behind it. Styles in `viz.css`. A page groups its data
+  with `utils/statusGroups.js` rather than reimplementing grouping. The
+  Alignment Map's canvas layout is `utils/strategyLayout.js` (pure,
+  tested); the component only draws.
+- **Signature surface:** the navy chart panel (`.db-hero` in
+  `dashboard.css`) is used for the one "hero" visual per page — course
+  line, team lanes, the alignment canvas. Everything else sits on quiet
+  panels and rows. Keep it to one navy panel per page.
 - **Schema:** One plain SQL file (`db/schema.sql`), applied by hand via
   Neon's SQL console — deliberately not a migration library at this
   scale. A schema change ships as a short-lived migration file that gets

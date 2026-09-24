@@ -1,0 +1,79 @@
+/* Alignment Map strategy canvas (2026-09-24). See AlignmentMap.jsx. */
+
+.am-align-figure { font-size: 40px; font-weight: 700; letter-spacing: -0.03em; color: var(--ink900); line-height: 1; margin: 6px 0 4px; }
+.am-align-figure small { display: block; font-family: var(--font-sans); font-size: 12.5px; font-weight: 500; letter-spacing: 0; color: var(--ink500); margin-top: 6px; }
+.am-unlinked { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.am-unlinked-head { font-size: 12px; font-weight: 600; color: var(--warn); }
+.am-unlinked-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink700); text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.am-unlinked-item:hover { color: var(--brand600); }
+
+.am-levels { display: flex; flex-direction: column; gap: 10px; }
+.am-level { display: grid; grid-template-columns: 84px 1fr 24px; gap: 10px; align-items: center; font-size: 13px; }
+.am-level-name { color: var(--ink700); font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.am-level-count { text-align: right; font-weight: 650; color: var(--ink900); font-variant-numeric: tabular-nums; }
+
+.am-tools { display: flex; gap: 8px; }
+.am-tools button {
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--brand600);
+  background: transparent; border: 1px solid color-mix(in srgb, var(--brand600) 30%, transparent);
+  border-radius: 999px; padding: 5px 12px; cursor: pointer;
+}
+.am-tools button:hover { background: var(--brand600); color: #fff; }
+
+.am-canvas-wrap { padding: 18px 0 8px; }
+.am-hint { margin: 0 24px 4px; font-size: 12.5px; color: var(--ink500); }
+.am-scroll { overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; }
+.am-canvas { position: relative; }
+.am-edges { position: absolute; inset: 0; pointer-events: none; }
+.am-edge { transition: stroke-opacity 160ms ease, stroke-width 160ms ease; }
+
+.am-colhead {
+  position: absolute;
+  top: 16px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink600);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  padding-bottom: 8px;
+}
+.am-colhead small { font-size: 11.5px; color: var(--ink500); font-weight: 500; }
+
+.am-node {
+  position: absolute;
+  border-radius: 12px;
+  background: rgba(16, 38, 79, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: inset 3px 0 0 var(--status), 0 8px 20px -14px rgba(0, 0, 0, 0.6);
+  transition: opacity 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.am-node.dim { opacity: 0.28; }
+.am-node.focus { border-color: rgba(111, 232, 255, 0.55); transform: translateY(-1px); }
+.am-node-main {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  height: 100%;
+  padding: 10px 40px 10px 14px;
+  cursor: pointer;
+  border-radius: 12px;
+}
+.am-node-main:focus-visible { outline: 2px solid #6fe8ff; outline-offset: 2px; }
+.am-node-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--status); }
+.am-node-title {
+  font-size: 13.5px; font-weight: 600; color: #fff; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.am-node-owner { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink500); margin-top: auto; }
+.am-node-toggle {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  min-width: 26px; height: 26px; padding: 0 6px;
+  border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.35);
+  background: #0b1b3a; color: #fff; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.am-node-toggle:hover { border-color: #6fe8ff; }
