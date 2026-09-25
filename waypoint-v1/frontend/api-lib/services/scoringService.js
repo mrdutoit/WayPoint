@@ -123,7 +123,12 @@ export async function recomputeKeyResultStatus(client, tenantId, keyResultId) {
 export async function recomputeObjectiveStatus(client, tenantId, objectiveId) {
   const levels = await getTenantRubricLevels(client, tenantId);
   const scoredIndexes = []; // one level_index per scored input
-  let inputCount = 0; // every input, scored or not
+  let inputCount = 0; // every input, scored or not (own Key Results count as ONE averaged input)
+  // Coverage for display (2026-09-25): counted per Key Result and per
+  // child, not per averaged block, because "2 of 3 reporting" is read by
+  // people as "2 of the 3 things underneath have reported".
+  let reporting = 0;
+  let total = 0;
   let allInputsComplete = true; // every input scored AND at the top level
 
   if (levels.length > 0) {
@@ -149,6 +154,8 @@ export async function recomputeObjectiveStatus(client, tenantId, objectiveId) {
     if (ownKeyResults.length > 0) {
       inputCount += 1;
       const scored = ownKeyResults.filter((r) => r.level_index !== null && r.level_index !== undefined);
+      total += ownKeyResults.length;
+      reporting += scored.length;
       if (scored.length < ownKeyResults.length) allInputsComplete = false;
       if (scored.some((r) => r.level_index !== topIndex)) allInputsComplete = false;
       const totalWeight = scored.reduce((sum, r) => sum + Number(r.weighting), 0);
@@ -163,8 +170,10 @@ export async function recomputeObjectiveStatus(client, tenantId, objectiveId) {
     );
     for (const child of children) {
       inputCount += 1;
+      total += 1;
       const level = levels.find((l) => l.label === child.status);
       if (level) {
+        reporting += 1;
         scoredIndexes.push(level.level_index);
         if (level.level_index !== topIndex) allInputsComplete = false;
       } else {
@@ -177,17 +186,17 @@ export async function recomputeObjectiveStatus(client, tenantId, objectiveId) {
       if (level.level_index === topIndex && !(allInputsComplete && inputCount > 0) && levels.length > 1) {
         level = levels[levels.length - 2];
       }
-      return persistAndCascade(client, tenantId, objectiveId, level.label);
+      return persistAndCascade(client, tenantId, objectiveId, level.label, reporting, total);
     }
   }
 
-  return persistAndCascade(client, tenantId, objectiveId, 'Not Started');
+  return persistAndCascade(client, tenantId, objectiveId, 'Not Started', reporting, total);
 }
 
-async function persistAndCascade(client, tenantId, objectiveId, status) {
+async function persistAndCascade(client, tenantId, objectiveId, status, reporting = 0, total = 0) {
   await client.query(
-    `UPDATE okr.objective SET status = $3 WHERE tenant_id = $1 AND id = $2`,
-    [tenantId, objectiveId, status]
+    `UPDATE okr.objective SET status = $3, inputs_reporting = $4, inputs_total = $5 WHERE tenant_id = $1 AND id = $2`,
+    [tenantId, objectiveId, status, reporting, total]
   );
 
   const { rows: parentRows } = await client.query(

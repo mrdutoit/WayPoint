@@ -13,6 +13,7 @@ import {
   cycleProgress, daysSince, checkInQueue, relativeDays, STALE_AFTER_DAYS,
 } from '../utils/cycleMath.js';
 import './dashboard.css';
+import Coverage from '../components/viz/Coverage.jsx';
 
 /*
  * Dashboard — 2026-09-24 redesign, replacing the card-and-donut layout
@@ -233,7 +234,7 @@ function ObjectiveRows({ objectives, terms }) {
               </div>
             )}
             <div className="db-objective-meta">
-              <span>{plural(obj.keyResults.length, t('KeyResult').toLowerCase(), tPlural('KeyResult').toLowerCase())}</span>
+              <Coverage reporting={obj.inputsReporting} total={obj.inputsTotal} />
               {needAttention > 0 && <span style={{ color: 'var(--warn)' }}>{needAttention} need{needAttention === 1 ? 's' : ''} attention</span>}
               <span>Last {t('CheckIn').toLowerCase()}: {relativeDays(daysSince(lastCheckIn)).toLowerCase()}</span>
             </div>

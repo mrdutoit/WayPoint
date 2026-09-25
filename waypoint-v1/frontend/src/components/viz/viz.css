@@ -317,3 +317,17 @@
 }
 .vz-sun-fig { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: #fff; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
 .vz-sun-cap { font-size: 10.5px; color: var(--ink500); margin-top: 4px; line-height: 1.25; max-width: 90px; }
+
+/* ---------- Roll-up coverage ---------- */
+.vz-cov { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink500); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vz-cov-pips { display: inline-flex; gap: 2px; }
+.vz-cov-pips > span { width: 6px; height: 6px; border-radius: 2px; background: var(--ink200); }
+.vz-cov-pips > span.on { background: var(--ink500); }
+.vz-cov.complete .vz-cov-pips > span.on { background: var(--success); }
+.vz-cov.compact { font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); }
+.vz-cov.compact.complete { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, transparent); }
+.vz-cov.on-dark { color: #94a3b8; }
+.vz-cov.on-dark .vz-cov-pips > span { background: rgba(148, 163, 184, 0.3); }
+.vz-cov.on-dark .vz-cov-pips > span.on { background: #cbd5e1; }
+.vz-cov.on-dark.complete .vz-cov-pips > span.on { background: #4ade80; }
+.vz-cov.compact.on-dark { border-color: rgba(148, 163, 184, 0.3); }

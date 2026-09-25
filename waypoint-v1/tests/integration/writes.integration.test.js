@@ -360,11 +360,27 @@ describeIfDb('write paths against real Postgres', () => {
     const statusOf = async (id) => (await client.query(`SELECT status FROM okr.objective WHERE id = $1`, [id])).rows[0].status;
     expect(await statusOf(child.id)).toBe('Not Started');
     expect(await statusOf(parent.id)).toBe('On Track'); // old rule: 'Achieved'
+    // Coverage (2026-09-25): 1 Key Result reporting + 1 child not started = 1 of 2
+    const { rows: cov } = await client.query(`SELECT inputs_reporting, inputs_total FROM okr.objective WHERE id = $1`, [parent.id]);
+    expect(cov[0]).toEqual({ inputs_reporting: 1, inputs_total: 2 });
 
     // Simulate a status stored under the old rule, then repair it.
     await client.query(`UPDATE okr.objective SET status = 'Achieved' WHERE id = $1`, [parent.id]);
     const result = await inTenantContext(() => recomputeTenantStatuses(client, tenantId));
     expect(result.leafObjectives).toBeGreaterThan(0);
+    expect(await statusOf(parent.id)).toBe('On Track');
+
+    // Renaming rubric levels now recomputes stored statuses in the same
+    // transaction (2026-09-25) — previously they kept the old label.
+    const { setRubricForTenant, getRubricForTenant } = await import('../../frontend/api-lib/services/scoringRubricService.js');
+    const before = await inTenantContext(() => getRubricForTenant(client, tenantId));
+    const renamed = before.levels.map((l) => (l.label === 'On Track' ? 'Healthy' : l.label === 'Achieved' ? 'Done' : l.label));
+    await inTenantContext(() => setRubricForTenant(client, tenantId, { name: before.name, levels: renamed }));
+    expect(await statusOf(parent.id)).toBe('Healthy');
+    const { rows: kr } = await client.query(`SELECT status FROM okr.key_result WHERE id = $1`, [parentKr.id]);
+    expect(kr[0].status).toBe('Done');
+    // put it back for any later test
+    await inTenantContext(() => setRubricForTenant(client, tenantId, { name: before.name, levels: before.levels.map((l) => l.label) }));
     expect(await statusOf(parent.id)).toBe('On Track');
   });
 

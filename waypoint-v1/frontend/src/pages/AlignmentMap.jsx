@@ -12,6 +12,7 @@ import { statusColor } from '../components/viz/Tooltip.jsx';
 import './dashboard.css';
 import './reports.css';
 import './alignment.css';
+import Coverage from '../components/viz/Coverage.jsx';
 
 /*
  * Alignment Map (FR-033) — 2026-09-24 redesign.
@@ -240,7 +241,7 @@ export default function AlignmentMap() {
                       <button type="button" className="am-node-main" onFocus={() => setFocus(n.id)} onBlur={() => setFocus(null)}
                         onClick={() => navigate(`/objectives/${n.id}`)}
                         aria-label={`${n.title}, ${n.cascadeLevel}, ${n.status}, owned by ${n.ownerFirstName} ${n.ownerLastName}`}>
-                        <span className="am-node-status"><span className="vz-dot" style={{ background: statusColor(n.status) }} />{n.status}</span>
+                        <span className="am-node-status"><span className="vz-dot" style={{ background: statusColor(n.status) }} />{n.status}<Coverage reporting={n.inputsReporting} total={n.inputsTotal} variant="compact" onDark /></span>
                         <span className="am-node-title">{n.title}</span>
                         <span className="am-node-owner">
                           <Avatar firstName={n.ownerFirstName} lastName={n.ownerLastName} size={18} />

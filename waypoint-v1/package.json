@@ -4,11 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test -c e2e/playwright.config.js",
+    "test:integration": "vitest run tests/integration --no-file-parallelism"
   },
   "devDependencies": {
-    "vitest": "^2.1.5",
+    "@playwright/test": "^1.56.0",
+    "jszip": "^3.10.1",
     "pg": "^8.13.1",
-    "jszip": "^3.10.1"
+    "vitest": "^2.1.5"
   }
 }

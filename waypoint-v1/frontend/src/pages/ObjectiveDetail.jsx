@@ -13,6 +13,7 @@ import { cycleProgress, daysSince, relativeDays, STALE_AFTER_DAYS } from '../uti
 import './dashboard.css';
 import './reports.css';
 import './objectives.css';
+import Coverage from '../components/viz/Coverage.jsx';
 
 /*
  * Objective Detail — 2026-09-24 redesign. The page every chart links to.
@@ -143,6 +144,7 @@ export default function ObjectiveDetail() {
             <h1 className="db-day db-display ob-title">{objective.title}</h1>
             <div className="ob-hero-status">
               <StatusText status={objective.status} />
+              <Coverage reporting={objective.inputsReporting} total={objective.inputsTotal} onDark />
               {objective.canEdit && !editing && (
                 <button type="button" className="ob-btn ob-btn-ghost ob-btn-sm" onClick={() => setEditing(true)}>Edit</button>
               )}

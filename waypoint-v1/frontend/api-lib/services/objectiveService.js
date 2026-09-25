@@ -30,7 +30,8 @@ import { recomputeObjectiveStatus } from './scoringService.js';
 const OBJECTIVE_FIELDS = `
   o.id, o.tenant_id AS "tenantId", o.cycle_id AS "cycleId",
   o.cascade_level_id AS "cascadeLevelId", o.parent_objective_id AS "parentObjectiveId",
-  o.owner_id AS "ownerId", o.title, o.status, o.created_at AS "createdAt"
+  o.owner_id AS "ownerId", o.title, o.status, o.created_at AS "createdAt",
+  o.inputs_reporting AS "inputsReporting", o.inputs_total AS "inputsTotal"
 `;
 
 /**

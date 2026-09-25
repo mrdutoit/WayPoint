@@ -66,7 +66,7 @@ export async function getScorecard(client, tenantId, caller, userId) {
   if (!cycle) return { person, cycle: null, objectives: [] };
 
   const { rows: objectiveRows } = await client.query(
-    `SELECT id, title, status FROM okr.objective
+    `SELECT id, title, status, inputs_reporting AS "inputsReporting", inputs_total AS "inputsTotal" FROM okr.objective
      WHERE tenant_id = $1 AND cycle_id = $2 AND owner_id = $3
      ORDER BY created_at ASC`,
     [tenantId, cycle.id, userId]
@@ -188,6 +188,7 @@ export async function getAlignmentMap(client, tenantId, caller) {
 
   const { rows } = await client.query(
     `SELECT o.id, o.title, o.status, o.parent_objective_id AS "parentObjectiveId",
+            o.inputs_reporting AS "inputsReporting", o.inputs_total AS "inputsTotal",
             cl.label AS "cascadeLevel", cl.level_index AS "cascadeLevelIndex",
             u.first_name AS "ownerFirstName", u.last_name AS "ownerLastName"
      FROM okr.objective o

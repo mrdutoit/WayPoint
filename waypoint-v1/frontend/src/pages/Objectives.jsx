@@ -13,6 +13,7 @@ import './dashboard.css';
 import './reports.css';
 import './objectives.css';
 import './alignment.css';
+import Coverage from '../components/viz/Coverage.jsx';
 
 /*
  * Objectives — 2026-09-24 redesign. The CRUD entry point (the Alignment
@@ -47,6 +48,7 @@ function TreeNode({ node, depth, levelLabelById }) {
           <span className="ob-node-level">{levelLabelById[node.cascadeLevelId] ?? ''}</span>
           <Link to={`/objectives/${node.id}`} className="ob-node-title">{node.title}</Link>
           {!expanded && hasChildren && <span className="db-section-note">+{node.children.length}</span>}
+          <Coverage reporting={node.inputsReporting} total={node.inputsTotal} variant="compact" />
         </span>
         <span className="ob-node-owner">
           <Avatar firstName={node.ownerFirstName} lastName={node.ownerLastName} size={22} />
@@ -187,6 +189,7 @@ export default function Objectives() {
                   <span className="ob-node-main">
                     <span className="ob-node-level">{levelLabelById[o.cascadeLevelId] ?? ''}</span>
                     <Link to={`/objectives/${o.id}`} className="ob-node-title">{o.title}</Link>
+                    <Coverage reporting={o.inputsReporting} total={o.inputsTotal} variant="compact" />
                   </span>
                   <span className="ob-node-owner">
                     <Avatar firstName={o.ownerFirstName} lastName={o.ownerLastName} size={22} />

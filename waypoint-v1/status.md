@@ -5,8 +5,8 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** 2026-09-25 (second entry — sunburst built, design
-pass complete across every page). Originally reconstructed 2026-09-16 directly
+**Last updated:** 2026-09-25 (browser tests + CI, roll-up coverage,
+automatic recompute on rubric save). Originally reconstructed 2026-09-16 directly
 from the GitHub repo (`mrdutoit/WayPoint`, `waypoint-v1`) rather than from a
 session log — the previous version of this file said Stage 4 hadn't
 started, which the repo contradicted. This file was condensed on
@@ -571,6 +571,59 @@ remaining page to reach the same standard. No page is on the old look now.
   shot in headless Chromium, including 390px for Login, Objectives and
   the sunburst.
 
+## 2026-09-25 (evening): status ring hover clipping fixed
+
+- `StatusRing`: a hovered segment thickens by 4px, but the ring's radius
+  was sized for the resting stroke only, so the hovered stroke ran past
+  the SVG edge and was clipped (most visible with a single segment, e.g.
+  one Achieved Objective — the whole ring looked like it zoomed in and
+  lost its edges). Radius now leaves room for the hover growth
+  (`HOVER_GROW`). Affects every ring: Dashboard, Scorecard, Team
+  Progress, Check-in Compliance, Objectives, Alignment Map. Verified in
+  headless Chromium, dark theme, hover state.
+- **Deliveries are now true deltas** — diffed against the current GitHub
+  state, not the session's starting clone. Earlier zips were cumulative.
+
+## 2026-09-25 (night): browser tests + CI, roll-up coverage, rubric-save recompute
+
+Mark's items 4, 5 and 6 from the outstanding list.
+
+- **Browser tests in the repo** (`e2e/`, Playwright): the built frontend
+  in real Chromium, every `/api/*` call answered from `e2e/fixtures.js`
+  (no database, no secrets). `smoke.spec.js`: every page for every role
+  that can reach it — renders a heading, isn't the error boundary, throws
+  nothing, logs no console errors — on desktop AND a phone viewport.
+  `interactions.spec.js`: one regression test per browser-only bug we've
+  actually had (refresh logout, sign-out, expired token, blank
+  Scorecard, ring hover clipping, check-in deep link, course-line detail
+  card, sunburst focus → scroll, mobile nav) plus coverage display. 54
+  tests pass. The clipping test was checked against the old ring
+  geometry and fails as it should.
+- **CI** (`.github/workflows/ci.yml`, at the REPO root, not inside
+  `waypoint-v1/`): on every push, three parallel jobs — unit (vitest),
+  integration (vitest against a Postgres 16 service container), e2e
+  (Playwright; on failure uploads a "playwright-report" artifact with
+  screenshots and traces). Results in GitHub's Actions tab. Doesn't touch
+  Vercel or Neon. New scripts: `npm run test:e2e`, `npm run
+  test:integration` (one file at a time — both files rebuild the okr
+  schema in the same scratch database). `@playwright/test` added to the
+  ROOT devDependencies only; Vercel builds `frontend/` and never sees it.
+- **Roll-up coverage** ("3 of 5 reporting"): new columns
+  `okr.objective.inputs_reporting` / `inputs_total`, written by
+  `recomputeObjectiveStatus` alongside the status — counted per Key
+  Result and per child Objective. Shown on Objective Detail (hero), the
+  Objectives list, Alignment Map cards, Dashboard objective rows and
+  Scorecard sections (`components/viz/Coverage.jsx`). **Migration:**
+  `db/migrations/2026-09-25-objective-rollup-coverage.sql` — apply in
+  Neon, run "Recompute all OKR statuses" to fill the columns, then delete
+  the migration file (already folded into `schema.sql`).
+- **Rubric rename no longer leaves statuses stale:** saving the scoring
+  rubric now recomputes every status in the tenant in the same
+  transaction (`scoringRubricService.setRubricForTenant` →
+  `recomputeTenantStatuses`). Closes the open item. Verified against real
+  Postgres: rename On Track → Healthy, stored statuses follow, rename back.
+- `npm test` (458), integration (31), e2e (54) all pass.
+
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
 Raised when comparing WayPoint against Perdoo's UI (screenshots reviewed
@@ -598,37 +651,21 @@ silent addition, before being built:
 
 ## Next immediate step
 
-1. **Deploy, then run "Recompute all OKR statuses"** from
-   `tools/bootstrap-admin.html` if not yet done.
-2. **Review the whole app in the browser** — this closes the design pass;
-   every page is now on the new language.
-3. **Pre-Handover Review** (security/performance/sizing) is the next
-   formal stage gate once Mark is happy with Stage 4.
-4. Still outstanding: apply `db/migrations/2026-09-18-audit-log-detail.sql`
-   against Neon if not done.
+1. **Apply `db/migrations/2026-09-25-objective-rollup-coverage.sql`** in
+   Neon, then run "Recompute all OKR statuses" once, then delete the
+   migration file from GitHub.
+2. **Check the Actions tab** after uploading — first CI run should be
+   green on all three jobs.
+3. **Take stock with Mark** (his words), then the Pre-Handover Review.
 
 ## Open items, not yet resolved
 
-- Trademark/domain check on "WayPoint" — flagged early in Stage 1, never
-  externally confirmed.
+- Trademark/domain check on "WayPoint" — deliberately deferred until the
+  product is sold (Mark, 2026-09-25); not a blocker before then.
 - No second database region or Azure migration — deliberately deferred.
 - Per-module dev-team review isn't leaving a durable record in the repo
   (see "Where things actually stand" above) — worth deciding how that
   should be tracked going forward so this kind of drift is caught sooner.
-- Renaming a scoring rubric level's label doesn't trigger a status
-  recompute (see 2026-09-23 above). Still not automatic, but there is
-  now a manual remedy: "Recompute all OKR statuses" in
-  `tools/bootstrap-admin.html` (2026-09-24).
-- A roll-up status is a health reading of what's been reported so far;
-  the UI doesn't yet show *how much* has been reported (e.g. "2 of 3
-  inputs scored"). Worth considering alongside the design pass.
-- This codebase has no frontend component test harness — a real,
-  standing gap, not just a one-off. The refresh-logout and sign-out
-  bugs (2026-09-23) are exactly the class of bug that gap allows
-  through: `npm run build`/`npm test` passing proves the logic is
-  sound, not that the actual browser experience is. Worth deciding
-  whether that's worth setting up, or whether real-browser spot-checks
-  stay the deliberate substitute.
 
 ## For a new chat picking this up
 

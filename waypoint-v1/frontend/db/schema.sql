@@ -215,6 +215,10 @@ CREATE TABLE okr.objective (
   owner_id             uuid NOT NULL REFERENCES okr.user_account(id) ON DELETE RESTRICT,
   title                text NOT NULL,
   status               text NOT NULL DEFAULT 'Not Started',
+  -- Roll-up coverage (2026-09-25): own Key Results + child Objectives that
+  -- have reported / all of them. Written by recomputeObjectiveStatus.
+  inputs_reporting     integer NOT NULL DEFAULT 0,
+  inputs_total         integer NOT NULL DEFAULT 0,
   created_at           timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ON okr.objective (tenant_id);

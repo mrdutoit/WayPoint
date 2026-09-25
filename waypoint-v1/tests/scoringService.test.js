@@ -94,7 +94,7 @@ describe('recomputeObjectiveStatus — own Key Results only, no children', () =>
     const status = await recomputeObjectiveStatus(client, 't1', 'obj-1');
     expect(status).toBe('At Risk');
     const updateCall = client.query.mock.calls[3];
-    expect(updateCall[1]).toEqual(['t1', 'obj-1', 'At Risk']);
+    expect(updateCall[1]).toEqual(['t1', 'obj-1', 'At Risk', 2, 2]); // + coverage: 2 of 2 Key Results reporting
   });
 
   it('weights Key Results unevenly, not just averaging their raw scores', async () => {
@@ -163,7 +163,7 @@ describe('recomputeObjectiveStatus — own Key Results AND children combined (th
     const status = await recomputeObjectiveStatus(client, 't1', 'obj-1');
     expect(status).toBe('On Track');
     const updateCall = client.query.mock.calls[3];
-    expect(updateCall[1]).toEqual(['t1', 'obj-1', 'On Track']);
+    expect(updateCall[1]).toEqual(['t1', 'obj-1', 'On Track', 3, 3]); // 2 Key Results + 1 child, all reporting
   });
 
   it('scores from its own Key Results when its only child is "Not Started" — but capped below Achieved', async () => {
@@ -207,7 +207,7 @@ describe('recomputeObjectiveStatus — cascades upward to the parent Objective',
     // 10 total queries across both passes — proves the recursive call actually happened
     expect(client.query).toHaveBeenCalledTimes(10);
     const parentUpdateCall = client.query.mock.calls[8];
-    expect(parentUpdateCall[1]).toEqual(['t1', 'parent-obj', 'Achieved']);
+    expect(parentUpdateCall[1]).toEqual(['t1', 'parent-obj', 'Achieved', 1, 1]);
   });
 });
 
@@ -273,6 +273,32 @@ describe('recomputeTenantStatuses', () => {
     expect(updates[0][0]).toContain('okr.key_result');
     expect(updates[0][1]).toEqual(['t1', 'kr-1', 'Achieved']);
     expect(updates[1][0]).toContain('okr.objective');
-    expect(updates[1][1]).toEqual(['t1', 'leaf-1', 'Achieved']);
+    expect(updates[1][1]).toEqual(['t1', 'leaf-1', 'Achieved', 1, 1]);
+  });
+});
+
+describe('recomputeObjectiveStatus — coverage written alongside status (2026-09-25)', () => {
+  it('counts each Key Result and each child separately: 1 of 2 Key Results + 0 of 1 child = 1 of 3', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: RUBRIC_LEVELS })
+      .mockResolvedValueOnce({ rows: [{ weighting: '1', level_index: 4 }, { weighting: '1', level_index: null }] })
+      .mockResolvedValueOnce({ rows: [{ status: 'Not Started' }] })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ parentId: null }] });
+    await recomputeObjectiveStatus(client, 't1', 'obj-1');
+    expect(client.query.mock.calls[3][1]).toEqual(['t1', 'obj-1', 'On Track', 1, 3]);
+  });
+
+  it('an Objective with nothing under it records 0 of 0', async () => {
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: RUBRIC_LEVELS })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ parentId: null }] });
+    await recomputeObjectiveStatus(client, 't1', 'obj-1');
+    expect(client.query.mock.calls[3][1]).toEqual(['t1', 'obj-1', 'Not Started', 0, 0]);
   });
 });

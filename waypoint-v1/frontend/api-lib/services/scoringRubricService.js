@@ -1,4 +1,5 @@
 import { ValidationError } from './errors.js';
+import { recomputeTenantStatuses } from './scoringService.js';
 
 /**
  * Scoring rubric (FR-017): "A Tenant Administrator defines a scoring
@@ -75,6 +76,17 @@ export async function setRubricForTenant(client, tenantId, { name, levels }) {
     `DELETE FROM okr.rubric_level WHERE rubric_id = $1 AND level_index > $2`,
     [rubricId, levels.length]
   );
+
+  // 2026-09-25: Key Result and Objective statuses are stored as rubric
+  // LABELS, so renaming or reordering a level left every stored status
+  // on the old wording until something happened to recompute it (the
+  // open item in status.md; previously fixed only by the manual
+  // "Recompute all OKR statuses" tool). Recompute the tenant's statuses
+  // here, in the same transaction, so a rubric save and the statuses it
+  // implies always land together. Rubric changes are rare, set-up-time
+  // actions, so the whole-tenant pass is an acceptable cost — and simpler
+  // and safer than trying to detect which kinds of edit need it.
+  await recomputeTenantStatuses(client, tenantId);
 
   return getRubricForTenant(client, tenantId);
 }

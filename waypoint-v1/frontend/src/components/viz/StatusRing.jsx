@@ -18,7 +18,12 @@ import './viz.css';
 
 const SIZE = 132;
 const STROKE = 14;
-const R = (SIZE - STROKE) / 2;
+// A hovered segment thickens by HOVER_GROW. The radius leaves room for that
+// inside the SVG box — sized for the resting stroke only, the thicker hover
+// stroke ran past the edge and was clipped (Mark, 2026-09-25: the ring
+// looked like it "zoomed in and cut off the edges" on hover).
+const HOVER_GROW = 4;
+const R = (SIZE - STROKE - HOVER_GROW) / 2;
 const C = 2 * Math.PI * R;
 const GAP = 4; // px of arc between segments
 
@@ -53,7 +58,7 @@ export default function StatusRing({ items = [], groups: givenGroups, headline, 
                 className="seg"
                 cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none"
                 stroke={colorOf(seg)}
-                strokeWidth={hover === seg.status ? STROKE + 4 : STROKE}
+                strokeWidth={hover === seg.status ? STROKE + HOVER_GROW : STROKE}
                 strokeLinecap={groups.length > 1 ? 'butt' : 'round'}
                 strokeDasharray={`${seg.len} ${C}`}
                 strokeDashoffset={-seg.offset}

@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { getRubricForTenant, setRubricForTenant, DEFAULT_RUBRIC_LEVELS } from '../frontend/api-lib/services/scoringRubricService.js';
+import { recomputeTenantStatuses } from '../frontend/api-lib/services/scoringService.js';
+
+// The recompute is exercised for real in scoringService.test.js and the
+// integration suite; here it's stubbed so these tests stay about the rubric.
+vi.mock('../frontend/api-lib/services/scoringService.js', () => ({ recomputeTenantStatuses: vi.fn(async () => ({})) }));
 
 function mockClient() {
   return { query: vi.fn() };
@@ -73,5 +78,22 @@ describe('setRubricForTenant — get-or-create-one-per-tenant (FR-017)', () => {
 
     const insertCall = client.query.mock.calls.find((c) => c[0].includes('INSERT INTO okr.scoring_rubric'));
     expect(insertCall).toBeUndefined(); // no new rubric row created
+  });
+});
+
+describe('setRubricForTenant — keeps stored statuses in step (2026-09-25)', () => {
+  it('recomputes every status in the tenant after saving, before returning the rubric', async () => {
+    recomputeTenantStatuses.mockClear();
+    const client = mockClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 'existing-rubric' }] })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({}).mockResolvedValueOnce({}).mockResolvedValueOnce({}).mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 'existing-rubric', name: 'Renamed' }] })
+      .mockResolvedValueOnce({ rows: [] });
+    await setRubricForTenant(client, 't1', { name: 'Renamed', levels: ['Behind', 'Wobbly', 'Healthy', 'Done'] });
+    expect(recomputeTenantStatuses).toHaveBeenCalledTimes(1);
+    expect(recomputeTenantStatuses).toHaveBeenCalledWith(client, 't1');
   });
 });

@@ -103,6 +103,7 @@ waypoint-v1/
 │   ├── bootstrap-admin.html        (seeds flags + PlatformAdmin; recomputes all OKR statuses)
 │   └── login-test.html             (verifies sign-in end to end)
 ├── tests/                          <- vitest, run from repo root; includes tests/integration/
+├── e2e/                            <- Playwright browser tests (config, fixtures, specs)
 └── README.md                       <- setup, deployment, env vars
 ```
 
@@ -153,6 +154,15 @@ waypoint-v1/
   `dashboard.css`) is used for the one "hero" visual per page — course
   line, team lanes, the alignment canvas. Everything else sits on quiet
   panels and rows. Keep it to one navy panel per page.
+- **Testing (2026-09-25):** three layers, all run by GitHub Actions on
+  every push (`.github/workflows/ci.yml` at the repository root — outside
+  `waypoint-v1/`): unit (`npm test`, vitest, mocked DB), integration
+  (`npm run test:integration`, real Postgres, applies `schema.sql` fresh),
+  browser (`npm run test:e2e`, Playwright against the built frontend with
+  the API mocked from `e2e/fixtures.js`). When an API response shape
+  changes, update the matching fixture — a page rendering against a
+  stale fixture is exactly what the e2e layer is there to catch. Every
+  browser-only bug fixed gets a regression test in `interactions.spec.js`.
 - **Schema:** One plain SQL file (`db/schema.sql`), applied by hand via
   Neon's SQL console — deliberately not a migration library at this
   scale. A schema change ships as a short-lived migration file that gets
@@ -201,7 +211,10 @@ waypoint-v1/
   nearest rubric level. Unscored inputs (no Check-in / child "Not
   Started") are excluded from the average but block the top level: the
   rubric's highest level ("Achieved") is reached only when every input
-  is scored and at that level, otherwise capped one below. Changing
+  is scored and at that level, otherwise capped one below. The same pass
+  writes coverage (`inputs_reporting`/`inputs_total`, per Key Result and
+  per child) shown as "3 of 5 reporting". Saving the scoring rubric
+  recomputes the tenant automatically. Changing
   these rules leaves stored statuses stale — run "Recompute all OKR
   statuses" (`tools/bootstrap-admin.html` →
   `GET /api/admin/recompute-statuses`) after any such change.

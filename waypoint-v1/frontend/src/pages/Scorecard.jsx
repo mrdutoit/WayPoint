@@ -14,6 +14,7 @@ import ConfidenceTrail from '../components/viz/ConfidenceTrail.jsx';
 import { StatusText, ConfidencePips, statusColor, formatStamp } from '../components/viz/Tooltip.jsx';
 import './dashboard.css';
 import './scorecard.css';
+import Coverage from '../components/viz/Coverage.jsx';
 
 /*
  * Scorecard — 2026-09-24 redesign, in the Dashboard's language.
@@ -92,7 +93,7 @@ function ObjectiveSection({ objective, terms }) {
         <div>
           <h2 className="sc-objective-title db-display">{objective.title}</h2>
           <div className="sc-objective-meta">
-            {plural(objective.keyResults.length, t('KeyResult').toLowerCase(), tPlural('KeyResult').toLowerCase())}
+            <Coverage reporting={objective.inputsReporting} total={objective.inputsTotal} />
           </div>
         </div>
         <div className="sc-objective-right">
