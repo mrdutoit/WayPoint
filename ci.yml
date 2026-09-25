@@ -1,0 +1,92 @@
+# WayPoint CI (2026-09-25) — runs every test on every push and pull request,
+# because there is no local CLI to run them on. Three jobs, in parallel:
+#
+#   unit         vitest, no database (tests/**/*.test.js)
+#   integration  vitest against a real Postgres 16 service container
+#                (tests/integration — applies frontend/db/schema.sql fresh)
+#   e2e          Playwright in real Chromium against the built frontend,
+#                API mocked from e2e/fixtures.js (desktop + phone viewport)
+#
+# Results: the Actions tab on GitHub. A failed e2e run uploads the HTML
+# report (screenshots + traces) as an artifact named "playwright-report".
+# None of this touches Vercel or Neon — deploys are unaffected.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+defaults:
+  run:
+    working-directory: waypoint-v1
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            waypoint-v1/package-lock.json
+            waypoint-v1/frontend/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix frontend
+      - run: npm test
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: waypoint_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/waypoint_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            waypoint-v1/package-lock.json
+            waypoint-v1/frontend/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix frontend
+      # One file at a time: both integration files drop and re-create the
+      # okr schema in the same scratch database.
+      - run: npm run test:integration
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            waypoint-v1/package-lock.json
+            waypoint-v1/frontend/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix frontend
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: waypoint-v1/playwright-report
+          retention-days: 14
