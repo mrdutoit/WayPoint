@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useWindowSize } from '../hooks/useWindowSize.js';
 import { usersApi } from '../services/api.js';
 import { s, colors } from '../styles/tokens.js';
+import './reports.css';
+import { Avatar } from '../components/Avatar.jsx';
 
 const COMPLEXITY_HINTS = [
   { test: (v) => v.length >= 12, label: '12+ characters' },
@@ -30,12 +32,12 @@ export default function UsersAdmin() {
   return (
     <div style={isMobile ? s.pageMobile : s.page}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: colors.ink900 }}>Users</h1>
+        <h1 className="rp-title">Users</h1>
         <button type="button" onClick={() => setShowInvite((v) => !v)} style={s.btnPrimary}>
           {showInvite ? 'Cancel' : 'Invite user'}
         </button>
       </div>
-      <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 20 }}>
+      <p className="rp-sub" style={{ marginBottom: 24 }}>
         Managers and Employees in your organisation. The password you set here is a one-time bootstrap —
         each new user is forced to change it at first login.
       </p>
@@ -155,11 +157,16 @@ function UserRow({ user, managers, onChanged }) {
   return (
     <>
       <tr>
-        <td style={s.td}>{user.firstName} {user.lastName}</td>
-        <td style={s.td}>{user.email}</td>
+        <td style={s.td}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Avatar firstName={user.firstName} lastName={user.lastName} avatarOption={user.avatarOption} size={32} />
+            <span style={{ fontWeight: 600, color: colors.ink900 }}>{user.firstName} {user.lastName}</span>
+          </span>
+        </td>
+        <td style={{ ...s.td, color: colors.ink500 }}>{user.email}</td>
         <td style={s.td}>
           {isTenantAdmin ? (
-            <span style={s.chip(colors.brand600, colors.ink100)}>TenantAdmin</span>
+            <span style={s.chip(colors.brand600, colors.brand50)}>Tenant administrator</span>
           ) : (
             <select value={user.role} onChange={handleRoleChange} disabled={roleSaving} style={{ ...s.select, width: 130 }}>
               {ASSIGNABLE_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}

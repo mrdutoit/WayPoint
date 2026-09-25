@@ -4,6 +4,11 @@ import { useWindowSize } from '../hooks/useWindowSize.js';
 import { auditLogApi, tenantsApi } from '../services/api.js';
 import { s, colors } from '../styles/tokens.js';
 import DatePicker from '../components/DatePicker.jsx';
+import './reports.css';
+import { Avatar } from '../components/Avatar.jsx';
+import { formatStamp } from '../components/viz/Tooltip.jsx';
+import { describeAction, entityName } from '../utils/auditText.js';
+
 
 // FR-031 — the read side that didn't exist anywhere before 2026-09-17
 // (auditService.js used to only export recordAuditEvent; nothing read
@@ -85,11 +90,11 @@ export default function AuditLog() {
 
   return (
     <div style={pageStyle}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, color: colors.ink900 }}>Audit Log</h1>
-      <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 20 }}>
+      <h1 className="rp-title">Audit log</h1>
+      <p className="rp-sub" style={{ marginBottom: 24 }}>
         {isPlatformAdmin
-          ? 'Significant actions across the platform (FR-007), filterable by tenant.'
-          : "Significant actions in your organisation (FR-007)."}
+          ? 'Every significant action across the platform, filterable by tenant.'
+          : "Every significant action in your organisation: who did what, and when."}
       </p>
 
       {isPlatformAdmin && (
@@ -136,10 +141,10 @@ export default function AuditLog() {
             <table style={{ ...s.table, minWidth: 720 }}>
               <thead>
                 <tr>
-                  <th style={s.th}>Timestamp</th>
-                  <th style={s.th}>Actor</th>
-                  <th style={s.th}>Action</th>
-                  <th style={s.th}>Entity</th>
+                  <th style={s.th}>When</th>
+                  <th style={s.th}>Who</th>
+                  <th style={s.th}>What</th>
+                  <th style={s.th}>On</th>
                   <th style={s.th}>Changes</th>
                   {isPlatformAdmin && <th style={s.th}>Tenant</th>}
                 </tr>
@@ -147,14 +152,21 @@ export default function AuditLog() {
               <tbody>
                 {events.map((e) => (
                   <tr key={e.id}>
-                    <td style={s.td}>{new Date(e.timestamp).toLocaleString()}</td>
-                    <td style={s.td}>{e.actorFirstName ? `${e.actorFirstName} ${e.actorLastName}` : '—'}</td>
-                    <td style={s.td}>{e.action}</td>
+                    <td style={{ ...s.td, whiteSpace: 'nowrap', color: colors.ink500, fontVariantNumeric: 'tabular-nums' }}>{formatStamp(e.timestamp)}</td>
                     <td style={s.td}>
-                      {e.entityType}
+                      {e.actorFirstName ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
+                          <Avatar firstName={e.actorFirstName} lastName={e.actorLastName} size={26} />
+                          {e.actorFirstName} {e.actorLastName}
+                        </span>
+                      ) : <span style={{ color: colors.ink400 }}>System</span>}
+                    </td>
+                    <td style={{ ...s.td, whiteSpace: 'nowrap' }}>{describeAction(e.action)}</td>
+                    <td style={s.td}>
                       {/* entityLabel is null for events recorded before 2026-09-18 —
                           older rows fall back to the raw id rather than showing nothing */}
-                      {e.entityLabel ? `: ${e.entityLabel}` : (e.entityId ? ` (${e.entityId})` : '')}
+                      <div style={{ fontWeight: 600, color: colors.ink900 }}>{e.entityLabel ?? e.entityId ?? '—'}</div>
+                      <div style={{ fontSize: 12, color: colors.ink500 }}>{entityName(e.entityType)}</div>
                     </td>
                     <td style={s.td}>
                       {e.changes && e.changes.length > 0 ? (

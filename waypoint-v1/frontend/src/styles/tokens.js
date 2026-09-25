@@ -51,52 +51,59 @@ export const STATUS_META = {
   'Achieved': { color: colors.success, bg: colors.successBg },
 };
 
+// 2026-09-25: refreshed to the Dashboard/Reports design language so every
+// page still built from these inline styles (Settings and admin pages)
+// picks up the same look without a rewrite: quiet hairline panels instead
+// of drop-shadowed cards, sentence-case table headers, pill buttons,
+// softer 10px inputs (focus ring comes from index.css).
 export const s = {
-  page: { padding: '24px 32px', maxWidth: 1200, margin: '0 auto' },
-  pageMobile: { padding: '16px' },
+  page: { padding: '28px 32px 56px', maxWidth: 1200, margin: '0 auto' },
+  pageMobile: { padding: '16px 16px 40px' },
   card: {
     background: colors.panel, border: `1px solid ${colors.line}`,
-    borderRadius: radius.md, boxShadow: shadow.sm, padding: 20,
+    borderRadius: 14, padding: '20px 22px',
   },
   tableCard: {
     background: colors.panel, border: `1px solid ${colors.line}`,
-    borderRadius: radius.md, boxShadow: shadow.sm, overflow: 'auto',
+    borderRadius: 14, overflow: 'auto',
   },
   table: { width: '100%', borderCollapse: 'collapse' },
   th: {
-    textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600,
-    color: colors.ink500, textTransform: 'uppercase', letterSpacing: '0.04em',
-    borderBottom: `1px solid ${colors.line}`, whiteSpace: 'nowrap',
+    textAlign: 'left', padding: '12px 20px', fontSize: 12.5, fontWeight: 600,
+    color: colors.ink500, borderBottom: `1px solid ${colors.line}`, whiteSpace: 'nowrap',
+    background: colors.ink50,
   },
-  td: { padding: '12px 16px', fontSize: 14, color: colors.ink800, borderBottom: `1px solid ${colors.ink100}` },
+  td: { padding: '14px 20px', fontSize: 14, color: colors.ink800, borderBottom: `1px solid ${colors.line}`, verticalAlign: 'middle' },
   chip: (color, bg) => ({
     display: 'inline-flex', alignItems: 'center', gap: 6,
     padding: '3px 10px', borderRadius: radius.pill,
     fontSize: 12, fontWeight: 600, color, background: bg,
   }),
   btnPrimary: {
-    background: colors.brand600, color: '#fff', border: 'none',
-    borderRadius: radius.sm, padding: '10px 18px', fontSize: 14, fontWeight: 600,
-    cursor: 'pointer',
+    background: colors.brand600, color: '#fff', border: '1px solid transparent',
+    borderRadius: radius.pill, padding: '8px 16px', fontSize: 13.5, fontWeight: 600,
+    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
   },
   btnSecondary: {
-    background: colors.panel, color: colors.ink700, border: `1px solid ${colors.line}`,
-    borderRadius: radius.sm, padding: '10px 18px', fontSize: 14, fontWeight: 600,
-    cursor: 'pointer',
+    background: 'transparent', color: colors.ink700, border: `1px solid ${colors.line}`,
+    borderRadius: radius.pill, padding: '8px 16px', fontSize: 13.5, fontWeight: 600,
+    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
   },
   formInput: {
     color: colors.ink900, colorScheme: 'light dark',
     background: colors.panel, border: `1px solid ${colors.line}`,
-    borderRadius: radius.sm, padding: '9px 12px', fontSize: 14,
+    borderRadius: 10, padding: '10px 12px', fontSize: 14,
     fontFamily: 'inherit', width: '100%',
   },
   select: {
     color: colors.ink900, colorScheme: 'light dark',
     background: colors.panel, border: `1px solid ${colors.line}`,
-    borderRadius: radius.sm, padding: '9px 12px', fontSize: 14,
+    borderRadius: 10, padding: '10px 12px', fontSize: 14,
     fontFamily: 'inherit', width: '100%',
   },
-  label: { fontSize: 13, fontWeight: 600, color: colors.ink700, marginBottom: 6, display: 'block' },
+  label: { fontSize: 12.5, fontWeight: 600, color: colors.ink600, marginBottom: 6, display: 'block' },
+  // Section headings inside settings/admin pages — the display face, as on the reports.
+  sectionTitle: { fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 650, letterSpacing: '-0.01em', marginBottom: 4, color: colors.ink900 },
   navBar: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '12px 24px', background: colors.panel, borderBottom: `1px solid ${colors.line}`,

@@ -79,7 +79,8 @@ waypoint-v1/
 │   ├── src/                        <- the React app
 │   │   ├── components/ (Avatar.jsx, DatePicker.jsx, ErrorBoundary.jsx, Logo.jsx,
 │   │   │   SubmitCheckInForm.jsx,
-│   │   │   viz/ (CourseLine.jsx, Lanes.jsx, StatusRing.jsx, StatusBars.jsx, WeightMap.jsx,
+│   │   │   AuthLayout.jsx + auth.css (sign-in screens),
+│   │   │   viz/ (CourseLine.jsx, Lanes.jsx, CascadeSunburst.jsx, StatusRing.jsx, StatusBars.jsx, WeightMap.jsx,
 │   │   │     ConfidenceTrail.jsx, CadenceStrip.jsx, Tooltip.jsx, viz.css — every chart))
 │   │   ├── constants/avatarOptions.js
 │   │   ├── context/ (FlagContext, RoleContext, TerminologyContext, ThemeContext)
@@ -89,10 +90,11 @@ waypoint-v1/
 │   │   │    Dashboard.jsx, FeatureFlags.jsx, KeyResultDetail.jsx, Login.jsx,
 │   │   │    ObjectiveDetail.jsx, Objectives.jsx, OkrSettings.jsx, Reports.jsx,
 │   │   │    Scorecard.jsx, Settings.jsx, TeamProgress.jsx, TenantsAdmin.jsx,
-│   │   │    UsersAdmin.jsx; page stylesheets dashboard.css, scorecard.css, reports.css, alignment.css, objectives.css)
+│   │   │    UsersAdmin.jsx; page stylesheets dashboard.css, scorecard.css, reports.css, alignment.css, objectives.css, settings.css)
 │   │   ├── services/api.js
 │   │   ├── styles/tokens.js        <- design tokens, incl. brand colours, CHART_PALETTE
-│   │   ├── utils/ (cycleMath.js, squarify.js, strategyLayout.js, dateFormat.js, statusGroups.js, objectiveTree.js, jwt.js)
+│   │   ├── utils/ (auditText.js, cycleMath.js, squarify.js, strategyLayout.js, dateFormat.js, statusGroups.js, objectiveTree.js, jwt.js)
+│   │   ├── shell.css               <- app navigation bar
 │   │   └── App.jsx
 │   ├── public/                     <- favicon.png, favicon.svg, apple-touch-icon.png, waypoint-icon.png
 │   ├── vercel.json                 <- routes friendly paths to the router files
@@ -127,7 +129,8 @@ waypoint-v1/
 - **Charts:** hand-built SVG/HTML in `src/components/viz/`, no chart
   library (Recharts was removed 2026-09-24 once the last page moved off
   it). `CourseLine` (Cycle-as-course hero, Dashboard + Scorecard),
-  `Lanes` (one course per person, Team Progress), `StatusRing`,
+  `Lanes` (one course per person, Team Progress), `CascadeSunburst`
+  (Alignment Map panel), `StatusRing`,
   `StatusBars`, `WeightMap` (squarified treemap via `utils/squarify.js`,
   one per Objective), `ConfidenceTrail`, `CadenceStrip` (one cell per day
   of the Cycle), and one shared `Tooltip`/`CheckInDetail` card. Rules:
@@ -143,6 +146,9 @@ waypoint-v1/
   `tokens.js` for the inputs themselves), panels, Key Result rows,
   Initiative status segments. `SubmitCheckInForm` uses status-coloured
   score choices and a 1–5 confidence scale (no dropdowns).
+- **Settings/admin pages** still render from `tokens.js` inline styles
+  (`s.card`, `s.table`, `s.btnPrimary`, `s.sectionTitle`…), refreshed
+  2026-09-25 to the same language — change the look there, not per page.
 - **Signature surface:** the navy chart panel (`.db-hero` in
   `dashboard.css`) is used for the one "hero" visual per page — course
   line, team lanes, the alignment canvas. Everything else sits on quiet

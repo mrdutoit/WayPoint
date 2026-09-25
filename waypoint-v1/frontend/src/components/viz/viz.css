@@ -299,3 +299,21 @@
 .sc-conf small { font-size: 13px; color: var(--ink500); font-weight: 500; margin-right: 8px; }
 .sc-conf .vz-pips { align-self: center; }
 
+
+/* ---------- Cascade sunburst (proposal) ---------- */
+
+.vz-sun { position: relative; width: 100%; max-width: 460px; aspect-ratio: 1; margin: 0 auto; }
+.vz-sun svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.vz-sun-slice { cursor: pointer; transition: fill-opacity 160ms ease; outline: none; }
+.vz-sun-slice.active { stroke: #fff; stroke-width: 1.5; }
+.vz-sun-slice:focus-visible { stroke: var(--db-cyan, #6fe8ff); stroke-width: 2; }
+.vz-sun-label {
+  font-family: var(--font-sans); font-size: 10.5px; font-weight: 650; fill: #0b1b3a;
+  pointer-events: none; letter-spacing: 0.01em; transition: opacity 160ms ease;
+}
+.vz-sun-centre {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none;
+}
+.vz-sun-fig { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: #fff; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.vz-sun-cap { font-size: 10.5px; color: var(--ink500); margin-top: 4px; line-height: 1.25; max-width: 90px; }

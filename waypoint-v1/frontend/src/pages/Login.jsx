@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { authApi, setAuthToken } from '../services/api.js';
 import { decodeToken } from '../utils/jwt.js';
 import { useRole } from '../context/RoleContext.jsx';
-import { Logo } from '../components/Logo.jsx';
-import { s, colors } from '../styles/tokens.js';
+import AuthLayout from '../components/AuthLayout.jsx';
+import { s } from '../styles/tokens.js';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -34,37 +34,25 @@ export default function Login() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', background: colors.ink50 }}>
-      <form onSubmit={handleSubmit} style={{ ...s.card, width: 360 }}>
-        <div style={{ marginBottom: 20 }}>
-          <Logo size={32} withWordmark />
-        </div>
-        <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 20 }}>Sign in to your organisation</p>
-
-        <label style={s.label} htmlFor="email">Email</label>
-        <input
-          id="email" type="email" required autoComplete="email"
-          value={email} onChange={(e) => setEmail(e.target.value)}
-          style={{ ...s.formInput, marginBottom: 14 }}
-        />
-
-        <label style={s.label} htmlFor="password">Password</label>
-        <input
-          id="password" type="password" required autoComplete="current-password"
-          value={password} onChange={(e) => setPassword(e.target.value)}
-          style={{ ...s.formInput, marginBottom: 14 }}
-        />
-
-        {error && (
-          <div style={{ ...s.chip(colors.danger, colors.dangerBg), marginBottom: 14, display: 'block' }}>
-            {error}
-          </div>
-        )}
-
-        <button type="submit" disabled={submitting} style={{ ...s.btnPrimary, width: '100%' }}>
+    <AuthLayout>
+      <h1 className="auth-title">Sign in</h1>
+      <p className="auth-sub">Welcome back. Sign in to your organisation.</p>
+      <form onSubmit={handleSubmit} className="auth-form">
+        <label>
+          Email
+          <input id="email" type="email" required autoComplete="email" autoFocus
+            value={email} onChange={(e) => setEmail(e.target.value)} style={s.formInput} />
+        </label>
+        <label>
+          Password
+          <input id="password" type="password" required autoComplete="current-password"
+            value={password} onChange={(e) => setPassword(e.target.value)} style={s.formInput} />
+        </label>
+        {error && <div className="auth-error" role="alert">{error}</div>}
+        <button type="submit" disabled={submitting} className="auth-submit">
           {submitting ? 'Signing in\u2026' : 'Sign in'}
         </button>
       </form>
-    </div>
+    </AuthLayout>
   );
 }

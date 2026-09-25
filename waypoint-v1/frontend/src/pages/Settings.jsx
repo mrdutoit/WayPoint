@@ -7,8 +7,10 @@ import { meApi } from '../services/api.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { AVATAR_OPTIONS, avatarValue } from '../constants/avatarOptions.js';
 import { s, colors } from '../styles/tokens.js';
+import './reports.css';
+import './settings.css';
 
-const SECTION_TITLE = { fontSize: 16, fontWeight: 700, marginBottom: 4, color: colors.ink900 };
+const SECTION_TITLE = s.sectionTitle;
 const SECTION_NOTE = { fontSize: 13, color: colors.ink500, marginBottom: 16 };
 
 // A representative set, matching profileService.js's TIMEZONE_IDS —
@@ -31,11 +33,11 @@ export default function Settings() {
 
   return (
     <div style={isMobile ? s.pageMobile : s.page}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, color: colors.ink900 }}>Settings</h1>
-      <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 24 }}>
+      <h1 className="rp-title">Settings</h1>
+      <p className="rp-sub" style={{ marginBottom: 24 }}>
         Personal preferences — visible only to you.
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 480 }}>
+      <div className="st-grid">
         <ThemeSection />
         <DateTimeSection user={user} setUser={setUser} />
         <ProfileSection user={user} />

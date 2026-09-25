@@ -5,9 +5,16 @@ import { useWindowSize } from '../hooks/useWindowSize.js';
 import { cascadeLevelsApi, cyclesApi, rubricApi, cadencesApi, okrElementsApi, terminologyApi, tenantsApi } from '../services/api.js';
 import { s, colors } from '../styles/tokens.js';
 import DatePicker from '../components/DatePicker.jsx';
+import './reports.css';
+import './settings.css';
 
-const SECTION_TITLE = { fontSize: 16, fontWeight: 700, marginBottom: 4, color: colors.ink900 };
+const SECTION_TITLE = s.sectionTitle;
 const SECTION_NOTE = { fontSize: 13, color: colors.ink500, marginBottom: 16 };
+
+const SECTIONS = [
+  ['st-cascade', 'Cascade levels'], ['st-cadences', 'Cadences'], ['st-cycles', 'Cycles'],
+  ['st-rubric', 'Scoring rubric'], ['st-terms', 'Terminology'], ['st-elements', 'OKR elements'], ['st-export', 'Data export'],
+];
 
 export default function OkrSettings() {
   const { isTenantAdmin, user } = useRole();
@@ -37,19 +44,28 @@ export default function OkrSettings() {
 
   return (
     <div style={pageStyle}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, color: colors.ink900 }}>OKR Settings</h1>
-      <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 24 }}>
+      <h1 className="rp-title">OKR settings</h1>
+      <p className="rp-sub" style={{ marginBottom: 24 }}>
         Configure the cascade structure, review cycles, scoring rubric, terminology, and which OKR elements
         are in use for your organisation.
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <CascadeLevelsSection />
-        <CadencesSection cadences={cadences} error={cadencesError} onChanged={loadCadences} />
-        <CyclesSection cadences={cadences} />
-        <RubricSection />
-        <TerminologySection />
-        <OkrElementsSection />
-        <DataExportSection tenantId={user?.tenantId} />
+      {/* 2026-09-25: a sticky index beside the stacked sections — seven
+          settings panels was a long unsignposted scroll. */}
+      <div className="st-layout">
+        {!isMobile && (
+          <nav className="st-index" aria-label="Settings sections">
+            {SECTIONS.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
+          </nav>
+        )}
+        <div className="st-sections">
+          <section id="st-cascade"><CascadeLevelsSection /></section>
+          <section id="st-cadences"><CadencesSection cadences={cadences} error={cadencesError} onChanged={loadCadences} /></section>
+          <section id="st-cycles"><CyclesSection cadences={cadences} /></section>
+          <section id="st-rubric"><RubricSection /></section>
+          <section id="st-terms"><TerminologySection /></section>
+          <section id="st-elements"><OkrElementsSection /></section>
+          <section id="st-export"><DataExportSection tenantId={user?.tenantId} /></section>
+        </div>
       </div>
     </div>
   );
@@ -632,7 +648,7 @@ function DataExportSection({ tenantId }) {
       <div style={SECTION_TITLE}>Data export</div>
       <div style={SECTION_NOTE}>
         Download your organisation's full OKR data — Objectives, Key Results, Initiatives, Check-ins,
-        Reflections, and Cycles (FR-030). JSON is one file; CSV is a zip with one file per entity, since
+        Reflections, and Cycles. JSON is one file; CSV is a zip with one file per entity, since
         the six don't share a single table shape.
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>

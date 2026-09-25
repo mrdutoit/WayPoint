@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
+import './shell.css';
 import { RoleProvider, useRole, ROLES } from './context/RoleContext.jsx';
 import { clearAuthToken } from './services/api.js';
 import { FlagProvider } from './context/FlagContext.jsx';
@@ -34,65 +35,54 @@ function Shell({ children }) {
   const { pathname } = useLocation();
   const previewMode = !user;
 
+  // 2026-09-25 nav redesign: sticky translucent bar, active-page pill,
+  // and — new — the same links on mobile as a scrollable row under the
+  // bar (previously mobile had no navigation at all beyond the logo).
+  const links = [
+    ['/', 'Dashboard', true],
+    ['/objectives', tPlural('Objective'), true],
+    ['/reports', 'Reports', true],
+    ['/okr-settings', 'OKR settings', isTenantAdmin],
+    ['/users', 'Users', isTenantAdmin],
+    ['/tenants', 'Tenants', isPlatformAdmin],
+    ['/admin/flags', 'Feature flags', isPlatformAdmin],
+    ['/audit-log', 'Audit log', isTenantAdmin || isPlatformAdmin],
+  ].filter(([, , show]) => show);
+  const isActive = (to) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`)
+    || (to === '/objectives' && pathname.startsWith('/key-results')));
+  const navLinks = links.map(([to, label]) => (
+    <Link key={to} to={to} className={`wp-nav-link${isActive(to) ? ' active' : ''}`} aria-current={isActive(to) ? 'page' : undefined}>{label}</Link>
+  ));
+
   return (
     <div>
-      <nav style={s.navBar}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <Logo size={22} />
-          {!isMobile && (
-            <>
-              <Link to="/" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>Dashboard</Link>
-              <Link to="/objectives" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>{tPlural('Objective')}</Link>
-              <Link to="/reports" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>Reports</Link>
-              {isTenantAdmin && (
-                <>
-                  <Link to="/okr-settings" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
-                    OKR Settings
-                  </Link>
-                  <Link to="/users" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
-                    Users
-                  </Link>
-                </>
-              )}
-              {isPlatformAdmin && (
-                <>
-                  <Link to="/tenants" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
-                    Tenants
-                  </Link>
-                  <Link to="/admin/flags" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
-                    Feature Flags
-                  </Link>
-                </>
-              )}
-              {(isTenantAdmin || isPlatformAdmin) && (
-                <Link to="/audit-log" style={{ color: colors.ink700, textDecoration: 'none', fontSize: 14 }}>
-                  Audit Log
-                </Link>
-              )}
-            </>
+      <nav className="wp-nav">
+        <div className="wp-nav-inner">
+          <div className="wp-nav-left">
+            <Link to="/" className="wp-nav-logo" aria-label="WayPoint home"><Logo size={24} /></Link>
+            {!isMobile && <div className="wp-nav-links">{navLinks}</div>}
+          </div>
+          {previewMode ? (
+            <select
+              style={{ ...s.select, width: 200 }}
+              value={role ?? ''}
+              onChange={(e) => setUser(e.target.value ? { id: 'preview-user', tenantId: e.target.value === 'PlatformAdmin' ? null : 'preview-tenant', email: 'preview@waypoint.app', role: e.target.value } : null)}
+            >
+              <option value="">Preview role…</option>
+              {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          ) : (
+            <div className="wp-nav-right">
+              {!isMobile && <Link to="/change-password" className="wp-nav-quiet">Change password</Link>}
+              <Link to="/settings" className={`wp-nav-me${pathname === '/settings' ? ' active' : ''}`}>
+                <Avatar firstName={user?.firstName} lastName={user?.lastName} avatarOption={user?.avatarOption} size={28} />
+                {!isMobile && <span>{user?.firstName ?? 'Settings'}</span>}
+              </Link>
+              <button type="button" className="wp-nav-signout" onClick={() => { clearAuthToken(); setUser(null); }}>Sign out</button>
+            </div>
           )}
         </div>
-        {previewMode ? (
-          <select
-            style={{ ...s.select, width: 200 }}
-            value={role ?? ''}
-            onChange={(e) => setUser(e.target.value ? { id: 'preview-user', tenantId: e.target.value === 'PlatformAdmin' ? null : 'preview-tenant', email: 'preview@waypoint.app', role: e.target.value } : null)}
-          >
-            <option value="">Preview role…</option>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Link to="/change-password" style={{ color: colors.ink500, textDecoration: 'none', fontSize: 13 }}>
-              Change password
-            </Link>
-            <Link to="/settings" style={{ display: 'flex', alignItems: 'center', gap: 8, color: colors.ink700, textDecoration: 'none', fontSize: 13 }}>
-              <Avatar firstName={user?.firstName} lastName={user?.lastName} avatarOption={user?.avatarOption} size={28} />
-              {!isMobile && 'Settings'}
-            </Link>
-            <button onClick={() => { clearAuthToken(); setUser(null); }} style={s.btnSecondary}>Sign out</button>
-          </div>
-        )}
+        {isMobile && !previewMode && <div className="wp-nav-mobile">{navLinks}</div>}
       </nav>
       <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
     </div>

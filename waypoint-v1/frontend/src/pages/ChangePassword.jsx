@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import '../components/auth.css';
 import { useNavigate } from 'react-router-dom';
 import { useRole } from '../context/RoleContext.jsx';
-import { Logo } from '../components/Logo.jsx';
-import { s, colors } from '../styles/tokens.js';
+import AuthLayout from '../components/AuthLayout.jsx';
+import { s } from '../styles/tokens.js';
+import './dashboard.css';
+import './reports.css';
 import { authApi, setAuthToken, clearAuthToken } from '../services/api.js';
 
 /**
@@ -68,80 +71,60 @@ export default function ChangePassword({ forced = false }) {
     setUser(null);
   }
 
+  const form = success ? (
+    <div className="auth-ok">Password changed.{forced ? ' Taking you into WayPoint…' : ' Taking you back to your dashboard…'}</div>
+  ) : (
+    <form onSubmit={handleSubmit} className="auth-form">
+      <label>
+        Current password
+        <input type="password" required autoComplete="current-password" autoFocus style={s.formInput}
+          value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+      </label>
+      <label>
+        New password
+        <input type="password" required autoComplete="new-password" style={s.formInput}
+          value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+        <span className="cp-hints">
+          {COMPLEXITY_HINTS.map((h, i) => (
+            <span key={h.label} className={hintsMet[i] ? 'met' : ''}>{h.label}</span>
+          ))}
+        </span>
+      </label>
+      <label>
+        Confirm new password
+        <input type="password" required autoComplete="new-password" style={s.formInput}
+          value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+        {confirmPassword.length > 0 && !passwordsMatch && <span className="auth-hint" style={{ color: 'var(--danger)' }}>Passwords don&apos;t match yet</span>}
+      </label>
+      {error && <div className="auth-error">{error}</div>}
+      <button type="submit" disabled={!canSubmit || submitting} className="auth-submit">
+        {submitting ? 'Changing…' : 'Change password'}
+      </button>
+      {!forced && <button type="button" onClick={() => navigate('/')} className="auth-link">Cancel</button>}
+      {forced && <button type="button" onClick={handleLogoutInstead} className="auth-link">Sign out instead</button>}
+    </form>
+  );
+
+  // Forced (first sign-in / admin reset): full sign-in layout, no app
+  // around it. Voluntary: an ordinary page inside the app shell.
+  if (forced) {
+    return (
+      <AuthLayout>
+        <h1 className="auth-title">Set a new password</h1>
+        <p className="auth-sub">For security, choose your own password before continuing.</p>
+        {form}
+      </AuthLayout>
+    );
+  }
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', background: colors.ink50 }}>
-      <form onSubmit={handleSubmit} style={{ ...s.card, width: 380 }}>
-        <div style={{ marginBottom: 20 }}>
-          <Logo size={32} withWordmark />
+    <div className="db">
+      <div className="rp-head">
+        <div>
+          <h1 className="rp-title">Change password</h1>
+          <p className="rp-sub">Choose a new password for your account. You&apos;ll stay signed in.</p>
         </div>
-        <h1 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: colors.ink900 }}>
-          {forced ? 'Set a new password' : 'Change password'}
-        </h1>
-        <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 20 }}>
-          {forced
-            ? 'For security, set your own password before continuing.'
-            : 'Choose a new password for your account.'}
-        </p>
-
-        {success ? (
-          <div style={s.chip(colors.success, colors.successBg)}>
-            Password changed.{forced ? ' Taking you into WayPoint…' : ''}
-          </div>
-        ) : (
-          <>
-            <label style={s.label} htmlFor="cp-current">Current password</label>
-            <input
-              id="cp-current" type="password" required autoComplete="current-password" autoFocus
-              style={{ ...s.formInput, marginBottom: 14 }}
-              value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}
-            />
-
-            <label style={s.label} htmlFor="cp-new">New password</label>
-            <input
-              id="cp-new" type="password" required autoComplete="new-password"
-              style={{ ...s.formInput, marginBottom: 8 }}
-              value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
-            />
-            <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {COMPLEXITY_HINTS.map((h, i) => (
-                <span key={h.label} style={{ fontSize: 12, color: hintsMet[i] ? colors.success : colors.ink500 }}>
-                  {hintsMet[i] ? '✓' : '○'} {h.label}
-                </span>
-              ))}
-            </div>
-
-            <label style={s.label} htmlFor="cp-confirm">Confirm new password</label>
-            <input
-              id="cp-confirm" type="password" required autoComplete="new-password"
-              style={{ ...s.formInput, marginBottom: 6 }}
-              value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
-            />
-            {confirmPassword.length > 0 && !passwordsMatch && (
-              <div style={{ fontSize: 12, color: colors.danger, marginBottom: 8 }}>Passwords do not match</div>
-            )}
-
-            {error && <div style={{ ...s.chip(colors.danger, colors.dangerBg), marginTop: 8, marginBottom: 14 }}>{error}</div>}
-
-            <button type="submit" disabled={!canSubmit || submitting} style={{ ...s.btnPrimary, width: '100%', marginTop: 6 }}>
-              {submitting ? 'Changing…' : 'Change password'}
-            </button>
-
-            {!forced && (
-              <button type="button" onClick={() => navigate('/')} style={{ ...s.btnSecondary, width: '100%', marginTop: 10 }}>
-                Cancel
-              </button>
-            )}
-            {forced && (
-              <button
-                type="button" onClick={handleLogoutInstead}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', marginTop: 14, fontSize: 13, color: colors.ink500, fontFamily: 'inherit' }}
-              >
-                Log out instead
-              </button>
-            )}
-          </>
-        )}
-      </form>
+      </div>
+      <div className="cp-panel">{form}</div>
     </div>
   );
 }

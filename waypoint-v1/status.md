@@ -5,8 +5,8 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** 2026-09-25 (Objectives pages redesign, sunburst
-preview). Originally reconstructed 2026-09-16 directly
+**Last updated:** 2026-09-25 (second entry — sunburst built, design
+pass complete across every page). Originally reconstructed 2026-09-16 directly
 from the GitHub repo (`mrdutoit/WayPoint`, `waypoint-v1`) rather than from a
 session log — the previous version of this file said Stage 4 hadn't
 started, which the repo contradicted. This file was condensed on
@@ -124,8 +124,7 @@ equivalent to "the module was reviewed and closed out."
   given an API endpoint)
 - AI Settings functionality (menu scaffolded per FR-022, flags have no
   effect yet — Phase 2 by design)
-- Cascade sunburst — last of the three chart candidates (heatmap and
-  treemap are both done); not started
+
 
 ## History — condensed (2026-09-16 through 2026-09-20)
 
@@ -532,6 +531,46 @@ and the hub rebuilt; Recharts and `components/charts/` removed.
   link). `npm run build`, `npm test` (452), integration (31) pass. No
   backend changes this round.
 
+## 2026-09-25 (later): cascade sunburst built; design pass finished app-wide
+
+Mark approved the sunburst as an Alignment Map panel, and asked for every
+remaining page to reach the same standard. No page is on the old look now.
+
+- **Cascade sunburst** (`components/viz/CascadeSunburst.jsx`) — navy panel
+  at the top of the Alignment Map. Rings by cascade LEVEL (Company
+  innermost); slice width = leaves beneath; colour = status; titles along
+  the arc only where they stay meaningful (whole title, or a cut keeping
+  16+ characters). Unlinked Objectives float in their own ring with an
+  empty wedge beneath. Hover/focus lights the lineage with a detail card;
+  click scrolls the canvas to that card (`data-node`). Beside it, "Where
+  the trouble sits": second-level branches ranked by share of Off Track /
+  At Risk beneath them, click to jump. Reviewed at 2x in light, dark,
+  highlighted and 390px states against a 34-Objective sample.
+- **Navigation shell** (`App.jsx` + `shell.css`): sticky translucent bar,
+  active-page pill, first name beside the avatar. **Mobile previously had
+  no navigation links at all** — now a scrollable row under the bar.
+- **Login + forced password change** (`components/AuthLayout.jsx`,
+  `auth.css`): split layout, navy course-line panel left, form right;
+  compact band on mobile. Voluntary Change Password is an in-app page.
+  Password rules show as chips that turn green as they're met.
+- **Shared inline styles refreshed** (`tokens.js` `s.*`): hairline panels,
+  sentence-case table headers, pill buttons, 10px inputs, new
+  `s.sectionTitle`; global focus ring in `index.css`. This is what lifts
+  OKR Settings, Users, Tenants, Feature Flags, Audit Log and Settings
+  without rewriting their form logic — behaviour unchanged.
+- **OKR Settings**: sticky section index beside the seven panels
+  (`settings.css`). **Settings**: panels in a responsive grid.
+- **Users**: avatars and names; "Tenant administrator" in words.
+- **Audit Log**: rows now plain English — "Checked in", "Updated an
+  objective" — via `utils/auditText.js` (every code the services record is
+  mapped; unknown codes fall back to a tidied form; 3 tests). Who shows
+  an avatar, What/On split, local timestamps.
+- **Copy**: requirement IDs (FR-007, FR-011, FR-022, FR-030) and "Stage 4"
+  removed from on-screen text.
+- `npm run build`, `npm test` (455), integration (31) pass. Every page
+  shot in headless Chromium, including 390px for Login, Objectives and
+  the sunburst.
+
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
 Raised when comparing WayPoint against Perdoo's UI (screenshots reviewed
@@ -561,11 +600,10 @@ silent addition, before being built:
 
 1. **Deploy, then run "Recompute all OKR statuses"** from
    `tools/bootstrap-admin.html` if not yet done.
-2. **Mark to decide on the cascade sunburst** (see 2026-09-25 entry):
-   build as an Alignment Map panel, or drop it.
-3. **Design pass on Settings and admin pages** — OKR Settings, Users,
-   Tenants, Feature Flags, Audit Log, Change Password, Login. The last
-   pages still on the old inline-styled look.
+2. **Review the whole app in the browser** — this closes the design pass;
+   every page is now on the new language.
+3. **Pre-Handover Review** (security/performance/sizing) is the next
+   formal stage gate once Mark is happy with Stage 4.
 4. Still outstanding: apply `db/migrations/2026-09-18-audit-log-detail.sql`
    against Neon if not done.
 

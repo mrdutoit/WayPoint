@@ -7,6 +7,7 @@ import { Avatar } from '../components/Avatar.jsx';
 import { formatDate } from '../utils/dateFormat.js';
 import { strategyLayout, lineageOf } from '../utils/strategyLayout.js';
 import StatusRing from '../components/viz/StatusRing.jsx';
+import CascadeSunburst from '../components/viz/CascadeSunburst.jsx';
 import { statusColor } from '../components/viz/Tooltip.jsx';
 import './dashboard.css';
 import './reports.css';
@@ -100,6 +101,13 @@ export default function AlignmentMap() {
     const linked = belowTop.filter((o) => o.parentObjectiveId && objectives.some((p) => p.id === o.parentObjectiveId));
     const unlinked = belowTop.filter((o) => !linked.includes(o));
     const onCourse = objectives.filter((o) => ['On Track', 'Achieved'].includes(o.status)).length;
+    // Branches (second level) ranked by how much of what sits beneath them is off track or at risk.
+    const secondLevel = layout.columns[1];
+    const hotBranches = objectives.filter((o) => o.cascadeLevelIndex === secondLevel).map((o) => {
+      const desc = [...lineageOf(objectives, o.id)].filter((x) => x !== o.id && objectives.find((y) => y.id === x)?.cascadeLevelIndex > o.cascadeLevelIndex);
+      const all = [o.id, ...desc].map((x) => objectives.find((y) => y.id === x));
+      return { ...o, size: all.length, bad: all.filter((y) => ['Off Track', 'At Risk'].includes(y.status)).length };
+    }).filter((b) => b.bad > 0).sort((a, b) => b.bad / b.size - a.bad / a.size).slice(0, 4);
     const cols = layout.columns.length;
     const fitted = panelWidth ? (panelWidth - PAD * 2 - (cols - 1) * COL_GAP) / cols : 232;
     CARD_W = Math.round(Math.min(CARD_W_MAX, Math.max(CARD_W_MIN, fitted)));
@@ -109,6 +117,26 @@ export default function AlignmentMap() {
 
     body = (
       <>
+        <section className="db-hero am-sun-panel" data-theme="dark">
+          <div className="am-sun-grid">
+            <CascadeSunburst objectives={objectives} onSelect={(oid) => { setFocus(oid); document.querySelector(`[data-node="${oid}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} />
+            <div className="am-sun-side">
+              <h2 className="rp-hero-title">The cascade at a glance</h2>
+              <p className="rp-hero-note" style={{ marginBottom: 14 }}>Rings from the centre out: {layout.columns.map((l) => levelInfo.get(l).label).join(', ')}. Each slice is as wide as the work beneath it. Hover to trace a branch; click to find it on the map below.</p>
+              <div className="am-sun-hot">
+                <div className="am-sun-hot-head">Where the trouble sits</div>
+                {hotBranches.map((b) => (
+                  <button type="button" key={b.id} className="am-sun-hot-item" onClick={() => document.querySelector(`[data-node="${b.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+                    <span className="vz-dot" style={{ background: statusColor(b.status) }} />
+                    <span className="am-sun-hot-title">{b.title}</span>
+                    <span className="am-sun-hot-n">{b.bad} of {b.size}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
         <div className="db-glance">
           <section className="vz-panel">
             <h2 className="vz-panel-title">Every {t('Objective').toLowerCase()}</h2>
@@ -204,6 +232,7 @@ export default function AlignmentMap() {
                   return (
                     <div
                       key={n.id}
+                      data-node={n.id}
                       className={`am-node${dim ? ' dim' : ''}${focus === n.id ? ' focus' : ''}`}
                       style={{ left: colX(n.col), top: rowY(n.row), width: CARD_W, height: CARD_H, '--status': statusColor(n.status) }}
                       onPointerEnter={() => setFocus(n.id)}

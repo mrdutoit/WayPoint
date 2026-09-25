@@ -1,0 +1,39 @@
+/* App shell navigation (2026-09-25). */
+.wp-nav {
+  position: sticky; top: 0; z-index: 30;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  -webkit-backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.wp-nav-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 24px; }
+.wp-nav-left { display: flex; align-items: center; gap: 18px; min-width: 0; }
+.wp-nav-logo { display: inline-flex; }
+.wp-nav-links { display: flex; align-items: center; gap: 2px; }
+.wp-nav-link {
+  font-size: 14px; font-weight: 550; color: var(--ink600); text-decoration: none;
+  padding: 7px 12px; border-radius: 999px; white-space: nowrap;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.wp-nav-link:hover { color: var(--ink900); background: var(--ink50); }
+.wp-nav-link.active { color: var(--ink900); background: var(--ink100); font-weight: 650; }
+.wp-nav-right { display: flex; align-items: center; gap: 14px; }
+.wp-nav-quiet { font-size: 13px; color: var(--ink500); text-decoration: none; }
+.wp-nav-quiet:hover { color: var(--ink900); }
+.wp-nav-me {
+  display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+  font-size: 13.5px; font-weight: 600; color: var(--ink700);
+  padding: 3px 12px 3px 3px; border-radius: 999px; border: 1px solid transparent;
+}
+.wp-nav-me:hover, .wp-nav-me.active { border-color: var(--line); background: var(--panel); }
+.wp-nav-signout {
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--ink600); cursor: pointer;
+  background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px;
+}
+.wp-nav-signout:hover { color: var(--ink900); border-color: var(--ink300); }
+.wp-nav-mobile {
+  display: flex; gap: 4px; overflow-x: auto; padding: 0 12px 8px;
+  scrollbar-width: none;
+}
+.wp-nav-mobile::-webkit-scrollbar { display: none; }
+@media (max-width: 640px) { .wp-nav-inner { padding: 8px 14px; } }

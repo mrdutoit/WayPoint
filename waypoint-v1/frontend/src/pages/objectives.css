@@ -150,3 +150,6 @@ a.ob-mini:hover { border-color: var(--ink300); }
   .ob-node { grid-template-columns: auto minmax(0, 1fr) auto; }
   .ob-node-owner span { display: none; }
 }
+.ob-glance { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); margin-top: 0; margin-bottom: 28px; }
+@media (max-width: 860px) { .ob-glance { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .ob-node-level { display: none; } .ob-node { padding-right: 14px; } }

@@ -3,12 +3,13 @@ import { useFlags } from '../context/FlagContext.jsx';
 import { useRole } from '../context/RoleContext.jsx';
 import { flagsApi } from '../services/api.js';
 import { s, colors } from '../styles/tokens.js';
+import './reports.css';
 
 const FLAG_DEFINITIONS = [
   { key: 'billing.mode', label: 'Billing mode', valueType: 'enum', options: ['manual', 'gateway'], note: 'FR-021' },
   { key: 'auth.sso.enabled', label: 'Single sign-on', valueType: 'boolean', note: 'FR-029' },
   { key: 'security.fieldEncryption.enabled', label: 'Field-level encryption', valueType: 'boolean', note: 'FR-028' },
-  { key: 'ai.settingsMenu.enabled', label: 'AI Settings menu', valueType: 'boolean', note: 'FR-022 \u2014 scaffolded, not yet active' },
+  { key: 'ai.settingsMenu.enabled', label: 'AI Settings menu', valueType: 'boolean', note: 'Scaffolded, not yet active' },
 ];
 
 export default function FeatureFlags() {
@@ -45,10 +46,9 @@ export default function FeatureFlags() {
 
   return (
     <div style={s.page}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, color: colors.ink900 }}>Feature Flags</h1>
-      <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 20 }}>
-        Platform-wide defaults. A tenant-specific override is set from that tenant's settings once tenant
-        provisioning is built (Stage 4).
+      <h1 className="rp-title">Feature flags</h1>
+      <p className="rp-sub" style={{ marginBottom: 24 }}>
+        Platform-wide defaults for every tenant. Changes take effect immediately, with no deployment.
       </p>
 
       <div style={s.tableCard}>

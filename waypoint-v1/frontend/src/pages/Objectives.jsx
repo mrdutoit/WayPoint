@@ -134,7 +134,7 @@ export default function Objectives() {
 
       {objectives && objectives.length > 0 && (
         <>
-          <div className="db-glance" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr)', marginTop: 0, marginBottom: 28 }}>
+          <div className="db-glance ob-glance">
             <section className="vz-panel">
               <h2 className="vz-panel-title">All {tPlural('Objective').toLowerCase()}</h2>
               <p className="vz-panel-note">Status across the organisation</p>

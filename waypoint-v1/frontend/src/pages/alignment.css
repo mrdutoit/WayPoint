@@ -77,3 +77,19 @@
   background: #0b1b3a; color: #fff; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .am-node-toggle:hover { border-color: #6fe8ff; }
+
+/* Sunburst panel (proposal) */
+.am-sun-panel { padding: 28px 32px; margin-bottom: 20px; }
+.am-sun-grid { display: grid; grid-template-columns: minmax(0, 460px) minmax(0, 1fr); gap: 36px; align-items: center; }
+.am-sun-side { min-width: 0; }
+.am-sun-hot { border-top: 1px solid rgba(148, 163, 184, 0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 4px; }
+.am-sun-hot-head { font-size: 12px; font-weight: 650; color: var(--warn); margin-bottom: 6px; }
+.am-sun-hot-item {
+  all: unset; box-sizing: border-box; cursor: pointer;
+  display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center;
+  padding: 8px 10px; margin: 0 -10px; border-radius: 8px; font-size: 13.5px; color: #e2e8f0;
+}
+.am-sun-hot-item:hover, .am-sun-hot-item:focus-visible { background: rgba(255, 255, 255, 0.06); }
+.am-sun-hot-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.am-sun-hot-n { font-size: 12px; color: var(--ink500); white-space: nowrap; }
+@media (max-width: 860px) { .am-sun-grid { grid-template-columns: 1fr; } }

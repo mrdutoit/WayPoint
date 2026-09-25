@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useWindowSize } from '../hooks/useWindowSize.js';
 import { tenantsApi } from '../services/api.js';
 import { s, colors } from '../styles/tokens.js';
+import './reports.css';
 
 const COMPLEXITY_HINTS = [
   { test: (v) => v.length >= 12, label: '12+ characters' },
@@ -27,13 +28,13 @@ export default function TenantsAdmin() {
   return (
     <div style={isMobile ? s.pageMobile : s.page}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: colors.ink900 }}>Tenants</h1>
+        <h1 className="rp-title">Tenants</h1>
         <button type="button" onClick={() => setShowCreate((v) => !v)} style={s.btnPrimary}>
           {showCreate ? 'Cancel' : 'New Tenant'}
         </button>
       </div>
-      <p style={{ fontSize: 13, color: colors.ink500, marginBottom: 20 }}>
-        Creates the tenant and its first Tenant Administrator together (FR-011). The password you set here
+      <p className="rp-sub" style={{ marginBottom: 24 }}>
+        Creates the tenant and its first Tenant Administrator together. The password you set here
         is a one-time bootstrap — the new admin is forced to change it at first login.
       </p>
 

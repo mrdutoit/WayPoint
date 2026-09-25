@@ -1,0 +1,12 @@
+/* Settings and admin pages (2026-09-25). */
+.st-layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 36px; align-items: start; }
+.st-index { position: sticky; top: 84px; display: flex; flex-direction: column; gap: 2px; }
+.st-index a {
+  font-size: 13.5px; font-weight: 550; color: var(--ink600); text-decoration: none;
+  padding: 7px 12px; border-radius: 8px; border-left: 2px solid transparent;
+}
+.st-index a:hover { color: var(--ink900); background: var(--ink50); border-left-color: var(--brand500); }
+.st-sections { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.st-sections > section { scroll-margin-top: 84px; }
+.st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .st-layout { grid-template-columns: 1fr; } .st-grid { grid-template-columns: 1fr; } }
