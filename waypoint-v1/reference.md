@@ -89,7 +89,7 @@ waypoint-v1/
 │   │   │    Dashboard.jsx, FeatureFlags.jsx, KeyResultDetail.jsx, Login.jsx,
 │   │   │    ObjectiveDetail.jsx, Objectives.jsx, OkrSettings.jsx, Reports.jsx,
 │   │   │    Scorecard.jsx, Settings.jsx, TeamProgress.jsx, TenantsAdmin.jsx,
-│   │   │    UsersAdmin.jsx; page stylesheets dashboard.css, scorecard.css, reports.css, alignment.css)
+│   │   │    UsersAdmin.jsx; page stylesheets dashboard.css, scorecard.css, reports.css, alignment.css, objectives.css)
 │   │   ├── services/api.js
 │   │   ├── styles/tokens.js        <- design tokens, incl. brand colours, CHART_PALETTE
 │   │   ├── utils/ (cycleMath.js, squarify.js, strategyLayout.js, dateFormat.js, statusGroups.js, objectiveTree.js, jwt.js)
@@ -137,6 +137,12 @@ waypoint-v1/
   with `utils/statusGroups.js` rather than reimplementing grouping. The
   Alignment Map's canvas layout is `utils/strategyLayout.js` (pure,
   tested); the component only draws.
+- **Working pages (2026-09-24):** Objectives, Objective Detail and Key
+  Result Detail share `objectives.css` — pill buttons (`.ob-btn-*`),
+  form fields (`.ob-field`, still using `s.formInput`/`s.select` from
+  `tokens.js` for the inputs themselves), panels, Key Result rows,
+  Initiative status segments. `SubmitCheckInForm` uses status-coloured
+  score choices and a 1–5 confidence scale (no dropdowns).
 - **Signature surface:** the navy chart panel (`.db-hero` in
   `dashboard.css`) is used for the one "hero" visual per page — course
   line, team lanes, the alignment canvas. Everything else sits on quiet

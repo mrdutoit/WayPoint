@@ -5,8 +5,8 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** 2026-09-24 (fourth entry that day — Reports and
-Alignment Map redesign). Originally reconstructed 2026-09-16 directly
+**Last updated:** 2026-09-25 (Objectives pages redesign, sunburst
+preview). Originally reconstructed 2026-09-16 directly
 from the GitHub repo (`mrdutoit/WayPoint`, `waypoint-v1`) rather than from a
 session log — the previous version of this file said Stage 4 hadn't
 started, which the repo contradicted. This file was condensed on
@@ -497,6 +497,41 @@ and the hub rebuilt; Recharts and `components/charts/` removed.
   hover, 390px). `npm run build`, `npm test` (452), integration against
   real Postgres (31) all pass.
 
+## 2026-09-25: Objectives, Objective Detail, Key Result Detail redesign; sunburst preview
+
+- **Objective Detail:** navy hero (level tag, owner, title, status, Edit)
+  with this Objective's own course line — Check-ins fetched per Key
+  Result, the same call Key Result Detail makes; if restricted, the hero
+  says so and the page still renders. "Where it sits" strip (what it
+  rolls up into, what feeds it). Key Results as rows with the weight map
+  above, share of score, confidence trail, last check-in (stale flagged),
+  status, and inline "Add check-in" drawer + inline edit. Reflections as
+  a readable list beside the form. `?checkin=` deep link now also scrolls
+  the drawer into view. Edit/re-parent/level-move behaviour unchanged.
+- **Objectives list:** status ring + by-level panel; Hierarchy (indent
+  guides, level tags, owners) / List / Mine toggle; restyled create form.
+  **Correctness fix:** the page said "current Cycle" but listed every
+  Cycle's Objectives (the list endpoint isn't Cycle-scoped) — now filters
+  to the active Cycle client-side, showing everything only when no Cycle
+  is active.
+- **Key Result Detail:** navy hero naming its Objective, with its own
+  course line; Check-in timeline (submitter, confidence pips) beside the
+  form and a confidence panel; Initiatives with a one-click status
+  segment (was a dropdown), overdue due dates flagged, Done struck through.
+- **SubmitCheckInForm:** score as status-coloured choices, confidence as
+  a 1–5 segmented scale (Sam's Stage 2 review asked for exactly this —
+  low friction, since it's on every Check-in). Must pick a score; same
+  payload and endpoint.
+- **Cascade sunburst — preview only, not built into the app.**
+  `cascade-sunburst-preview.html` (standalone, sample 34-Objective org)
+  shown to Mark to decide between it and the Alignment Map. Recommendation
+  given: if built, make it a compact panel at the top of the Alignment
+  Map (click a slice to scroll the canvas to it), not a fifth report;
+  skipping it is also reasonable. **Awaiting Mark's decision.**
+- Verified in headless Chromium (all three pages, check-in drawer deep
+  link). `npm run build`, `npm test` (452), integration (31) pass. No
+  backend changes this round.
+
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 
 Raised when comparing WayPoint against Perdoo's UI (screenshots reviewed
@@ -525,15 +560,12 @@ silent addition, before being built:
 ## Next immediate step
 
 1. **Deploy, then run "Recompute all OKR statuses"** from
-   `tools/bootstrap-admin.html` if not yet done. Delete
-   `frontend/src/components/charts/` from GitHub when applying this delta.
-2. **Design pass across the rest of the app** — Objective Detail (the
-   page everyone lands on from every chart), Objectives list, Key Result
-   Detail, then Settings/admin pages. Same language: one navy signature
-   panel per page at most, quiet panels and rows elsewhere.
-3. **Cascade sunburst** — last chart candidate; build on `components/viz/`.
-   Now that the Alignment Map is a real canvas, worth confirming the
-   sunburst still earns its place before building it.
+   `tools/bootstrap-admin.html` if not yet done.
+2. **Mark to decide on the cascade sunburst** (see 2026-09-25 entry):
+   build as an Alignment Map panel, or drop it.
+3. **Design pass on Settings and admin pages** — OKR Settings, Users,
+   Tenants, Feature Flags, Audit Log, Change Password, Login. The last
+   pages still on the old inline-styled look.
 4. Still outstanding: apply `db/migrations/2026-09-18-audit-log-detail.sql`
    against Neon if not done.
 
