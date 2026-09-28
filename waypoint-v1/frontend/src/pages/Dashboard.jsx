@@ -71,7 +71,7 @@ function Hero({ user, scorecard, queue, isTenantAdmin, terms }) {
 
   if (!cycle || !progress) {
     return (
-      <section className="db-hero" data-theme="dark">
+      <section className="db-hero">
         <p className="db-greeting">{greeting}</p>
         <h1 className="db-day db-display" style={{ fontSize: 'clamp(32px, 4.5vw, 48px)' }}>No active {t('Cycle').toLowerCase()}</h1>
         <p className="db-summary">
@@ -79,7 +79,7 @@ function Hero({ user, scorecard, queue, isTenantAdmin, terms }) {
             ? <>Nothing is being tracked right now. Create a {t('Cycle').toLowerCase()} in OKR settings and it will appear here as a course from its first day to its last.</>
             : <>Nothing is being tracked right now. Your administrator opens each {t('Cycle').toLowerCase()}; it will appear here as soon as one starts.</>}
         </p>
-        {isTenantAdmin && <Link className="db-link" style={{ color: 'var(--brand700)', display: 'inline-block', marginTop: 16 }} to="/okr-settings">Open OKR settings</Link>}
+        {isTenantAdmin && <Link className="db-link" style={{ color: 'var(--hero-accent)', display: 'inline-block', marginTop: 16 }} to="/okr-settings">Open OKR settings</Link>}
       </section>
     );
   }
@@ -124,7 +124,7 @@ function Hero({ user, scorecard, queue, isTenantAdmin, terms }) {
       : `Closes ${formatDate(cycle.endDate)}, ${plural(progress.daysLeft, 'day', 'days')} left`;
 
   return (
-    <section className="db-hero" data-theme="dark">
+    <section className="db-hero">
       <div className="db-hero-top">
         <div>
           <p className="db-greeting">{greeting}</p>
@@ -422,7 +422,7 @@ export default function Dashboard() {
   if (isPlatformAdmin) {
     return (
       <div className="db">
-        <section className="db-hero" data-theme="dark">
+        <section className="db-hero">
           <p className="db-greeting">{greetingFor(new Date())}{user?.firstName ? `, ${user.firstName}` : ''}</p>
           <h1 className="db-day db-display" style={{ fontSize: 'clamp(32px, 4.5vw, 48px)' }}>Platform administration</h1>
           <p className="db-summary">Tenants, feature flags and the audit trail for every organisation on WayPoint. Platform staff don&apos;t hold {t('Objective').toLowerCase()}s of their own.</p>

@@ -129,7 +129,7 @@ export default function ObjectiveDetail() {
     <div className="db">
       <Link to="/objectives" className="db-link">&larr; {tPlural('Objective')}</Link>
 
-      <section className="db-hero" data-theme="dark" style={{ marginTop: 14 }}>
+      <section className="db-hero" style={{ marginTop: 14 }}>
         <div className="db-hero-top">
           <div style={{ minWidth: 0, flex: '1 1 480px' }}>
             <div className="ob-hero-meta">
@@ -144,7 +144,7 @@ export default function ObjectiveDetail() {
             <h1 className="db-day db-display ob-title">{objective.title}</h1>
             <div className="ob-hero-status">
               <StatusText status={objective.status} />
-              <Coverage reporting={objective.inputsReporting} total={objective.inputsTotal} onDark />
+              <Coverage reporting={objective.inputsReporting} total={objective.inputsTotal} onHero />
               {objective.canEdit && !editing && (
                 <button type="button" className="ob-btn ob-btn-ghost ob-btn-sm" onClick={() => setEditing(true)}>Edit</button>
               )}
@@ -170,7 +170,7 @@ export default function ObjectiveDetail() {
         </p>
         {progress && keyResults.length > 0 && (
           checkInsRestricted
-            ? <p className="db-summary" style={{ fontSize: 13, color: 'var(--ink500)' }}>{tPlural('CheckIn')} detail is visible to the owner, their Manager and Tenant Administrators.</p>
+            ? <p className="db-summary" style={{ fontSize: 13, color: 'var(--hero-mut)' }}>{tPlural('CheckIn')} detail is visible to the owner, their Manager and Tenant Administrators.</p>
             : <CourseLine cycle={cycle} progress={progress} checkIns={allCheckIns} whose="this objective's" />
         )}
       </section>

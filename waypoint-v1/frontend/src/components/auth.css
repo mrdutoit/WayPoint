@@ -1,16 +1,17 @@
 .auth { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); min-height: 100vh; min-height: 100dvh; background: var(--bg, var(--ink50)); }
 .auth-art {
-  position: relative; overflow: hidden; color: #fff;
-  background: radial-gradient(120% 120% at 100% 0%, #10264f 0%, #0b1b3a 60%);
+  position: relative; overflow: hidden; color: var(--hero-strong);
+  background: var(--hero-bg);
+  border-right: 1px solid var(--hero-border);
   display: flex; flex-direction: column; justify-content: space-between; padding: 56px 56px 48px;
 }
 .auth-art::before {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  background-image: linear-gradient(rgba(111,232,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(111,232,255,0.06) 1px, transparent 1px);
+  background-image: linear-gradient(var(--hero-wash) 1px, transparent 1px), linear-gradient(90deg, var(--hero-wash) 1px, transparent 1px);
   background-size: 48px 48px;
 }
 .auth-art > * { position: relative; }
-.auth-kicker { font-size: 13px; color: #94a3b8; margin: 0 0 14px; }
+.auth-kicker { font-size: 13px; color: var(--hero-mut); margin: 0 0 14px; }
 .auth-headline { font-family: var(--font-display); font-size: clamp(30px, 3.4vw, 46px); line-height: 1.06; letter-spacing: -0.025em; font-weight: 700; margin: 0; max-width: 15ch; }
 .auth-course { width: 100%; max-width: 560px; height: auto; }
 .auth-main { display: flex; align-items: center; justify-content: center; padding: 40px 24px; }

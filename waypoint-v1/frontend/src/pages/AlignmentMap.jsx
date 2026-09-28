@@ -118,7 +118,7 @@ export default function AlignmentMap() {
 
     body = (
       <>
-        <section className="db-hero am-sun-panel" data-theme="dark">
+        <section className="db-hero am-sun-panel">
           <div className="am-sun-grid">
             <CascadeSunburst objectives={objectives} onSelect={(oid) => { setFocus(oid); document.querySelector(`[data-node="${oid}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} />
             <div className="am-sun-side">
@@ -198,7 +198,7 @@ export default function AlignmentMap() {
               </div>
             )}
           </div>
-          <div className="am-canvas-wrap db-hero" data-theme="dark">
+          <div className="am-canvas-wrap db-hero">
             <p className="am-hint">Hover an {t('Objective').toLowerCase()} to trace everything it rolls up into and everything that feeds it.</p>
             <div className="am-scroll" ref={scrollRef}>
               <div className="am-canvas" style={{ width, height }} onPointerLeave={() => setFocus(null)}>
@@ -241,7 +241,7 @@ export default function AlignmentMap() {
                       <button type="button" className="am-node-main" onFocus={() => setFocus(n.id)} onBlur={() => setFocus(null)}
                         onClick={() => navigate(`/objectives/${n.id}`)}
                         aria-label={`${n.title}, ${n.cascadeLevel}, ${n.status}, owned by ${n.ownerFirstName} ${n.ownerLastName}`}>
-                        <span className="am-node-status"><span className="vz-dot" style={{ background: statusColor(n.status) }} />{n.status}<Coverage reporting={n.inputsReporting} total={n.inputsTotal} variant="compact" onDark /></span>
+                        <span className="am-node-status"><span className="vz-dot" style={{ background: statusColor(n.status) }} />{n.status}<Coverage reporting={n.inputsReporting} total={n.inputsTotal} variant="compact" onHero /></span>
                         <span className="am-node-title">{n.title}</span>
                         <span className="am-node-owner">
                           <Avatar firstName={n.ownerFirstName} lastName={n.ownerLastName} size={18} />

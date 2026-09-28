@@ -91,17 +91,17 @@ export default function KeyResultDetail() {
     <div className="db">
       <Link to={`/objectives/${keyResult.objectiveId}`} className="db-link">&larr; {objective?.title ?? `Back to ${t('Objective').toLowerCase()}`}</Link>
 
-      <section className="db-hero" data-theme="dark" style={{ marginTop: 14 }}>
+      <section className="db-hero" style={{ marginTop: 14 }}>
         <div className="db-hero-top">
           <div style={{ minWidth: 0, flex: '1 1 480px' }}>
             <div className="ob-hero-meta">
               <span className="ob-level-tag">{t('KeyResult')}</span>
-              {objective && <span>of <Link to={`/objectives/${objective.id}`} style={{ color: 'var(--ink700)' }}>{objective.title}</Link></span>}
+              {objective && <span>of <Link to={`/objectives/${objective.id}`} style={{ color: 'var(--hero-ink)' }}>{objective.title}</Link></span>}
             </div>
             <h1 className="db-day db-display ob-title">{keyResult.title}</h1>
             <div className="ob-hero-status">
               <StatusText status={keyResult.status} />
-              <span style={{ fontSize: 13, color: 'var(--ink500)' }}>Weighting {Number(keyResult.weighting)}</span>
+              <span style={{ fontSize: 13, color: 'var(--hero-mut)' }}>Weighting {Number(keyResult.weighting)}</span>
             </div>
           </div>
           {cycle && (

@@ -201,16 +201,16 @@
 }
 .db-waypoint.active {
   transform: translate(-50%, -50%) scale(1.45);
-  box-shadow: 0 0 0 2px var(--db-navy, #0b1b3a), 0 0 0 5px rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 0 2px var(--hero-solid), 0 0 0 5px color-mix(in srgb, var(--hero-ink) 35%, transparent);
   z-index: 3;
 }
-.db-waypoint:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.db-waypoint:focus-visible { outline: 2px solid var(--hero-accent); outline-offset: 2px; }
 .db-scrub {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 1px;
-  background: rgba(255, 255, 255, 0.35);
+  background: color-mix(in srgb, var(--hero-ink) 40%, transparent);
   pointer-events: none;
 }
 .db-scrub-label {
@@ -218,9 +218,9 @@
   bottom: -2px;
   transform: translate(-50%, 100%);
   font-size: 11px;
-  color: #fff;
-  background: rgba(11, 27, 58, 0.9);
-  border: 1px solid rgba(111, 232, 255, 0.25);
+  color: var(--hero-strong);
+  background: color-mix(in srgb, var(--hero-solid) 92%, transparent);
+  border: 1px solid var(--hero-border);
   border-radius: 6px;
   padding: 1px 6px;
   white-space: nowrap;
@@ -232,7 +232,7 @@
 
 /* Dark theme's status colours are lighter tints; white text on them fails
    contrast, so tile labels switch to the navy ink there. */
-[data-theme="dark"] .vz-tile-inner:not(.unscored) { color: #0b1b3a; }
+[data-theme="dark"] .vz-tile-inner:not(.unscored) { color: var(--hero-solid); }
 [data-theme="dark"] .vz-tile-inner:not(.unscored) .vz-tile-title { text-shadow: none; }
 
 /* ---------- Cadence strip ---------- */
@@ -254,32 +254,32 @@
 /* ---------- Lanes (Team Progress) ---------- */
 
 .vz-lanes-grid { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; column-gap: 20px; }
-.vz-lanes-axis { position: relative; height: 22px; font-size: 11.5px; color: var(--ink500); }
+.vz-lanes-axis { position: relative; height: 22px; font-size: 11.5px; color: var(--hero-mut); }
 .vz-lanes-month, .vz-lanes-today { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
-.vz-lanes-today { color: #fff; font-weight: 600; }
+.vz-lanes-today { color: var(--hero-strong); font-weight: 600; }
 .vz-lane { display: contents; }
-.vz-lane-label { display: flex; align-items: center; min-height: 52px; border-top: 1px solid rgba(148, 163, 184, 0.14); }
-.vz-lane-body { position: relative; min-height: 52px; border-top: 1px solid rgba(148, 163, 184, 0.14); }
-.vz-lanes-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(148, 163, 184, 0.16); }
-.vz-lanes-now { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255, 255, 255, 0.7); }
+.vz-lane-label { display: flex; align-items: center; min-height: 52px; border-top: 1px solid color-mix(in srgb, var(--hero-ink) 14%, transparent); }
+.vz-lane-body { position: relative; min-height: 52px; border-top: 1px solid color-mix(in srgb, var(--hero-ink) 14%, transparent); }
+.vz-lanes-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--hero-ink) 16%, transparent); }
+.vz-lanes-now { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--hero-strong) 70%, transparent); }
 .vz-lane-plot { position: absolute; inset: 0; cursor: crosshair; }
 .vz-lane-track {
   position: absolute; left: 0; right: 0; top: 50%; height: 0;
-  border-top: 2px dotted rgba(148, 163, 184, 0.4);
+  border-top: 2px dotted color-mix(in srgb, var(--hero-ink) 40%, transparent);
 }
 .vz-lane-sailed {
   position: absolute; left: 0; top: calc(50% - 1.5px); height: 3px; border-radius: 2px;
-  background: linear-gradient(90deg, #6fe8ff, #2e8cf0);
+  background: linear-gradient(90deg, var(--path-a), var(--path-b), var(--path-c));
   transform-origin: left; animation: vz-grow 900ms cubic-bezier(0.65, 0, 0.35, 1) both;
 }
 .vz-lane-dot {
   position: absolute; top: 50%; width: 11px; height: 11px; border-radius: 50%; padding: 0; border: none;
-  transform: translate(-50%, -50%); box-shadow: 0 0 0 2px #0b1b3a; cursor: pointer;
+  transform: translate(-50%, -50%); box-shadow: 0 0 0 2px var(--hero-solid); cursor: pointer;
   transition: transform 140ms ease;
 }
-.vz-lane-dot.active { transform: translate(-50%, -50%) scale(1.45); box-shadow: 0 0 0 2px #0b1b3a, 0 0 0 5px rgba(255, 255, 255, 0.35); z-index: 2; }
-.vz-lane-dot:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.vz-lane-empty { position: absolute; left: 8px; top: 50%; transform: translateY(-140%); font-size: 11.5px; color: var(--ink500); }
+.vz-lane-dot.active { transform: translate(-50%, -50%) scale(1.45); box-shadow: 0 0 0 2px var(--hero-solid), 0 0 0 5px color-mix(in srgb, var(--hero-ink) 35%, transparent); z-index: 2; }
+.vz-lane-dot:focus-visible { outline: 2px solid var(--hero-accent); outline-offset: 2px; }
+.vz-lane-empty { position: absolute; left: 8px; top: 50%; transform: translateY(-140%); font-size: 11.5px; color: var(--hero-mut); }
 
 @media (max-width: 640px) {
   .vz-lanes-grid { grid-template-columns: 1fr; }
@@ -302,21 +302,27 @@
 
 /* ---------- Cascade sunburst (proposal) ---------- */
 
-.vz-sun { position: relative; width: 100%; max-width: 460px; aspect-ratio: 1; margin: 0 auto; }
+.vz-sun {
+  /* Labels sit on status-coloured slices: white on the light theme's
+     saturated status colours, the panel's navy on the dark theme's tints. */
+  --sun-label-ink: var(--hero-card);
+  position: relative; width: 100%; max-width: 460px; aspect-ratio: 1; margin: 0 auto; }
 .vz-sun svg { width: 100%; height: 100%; display: block; overflow: visible; }
 .vz-sun-slice { cursor: pointer; transition: fill-opacity 160ms ease; outline: none; }
-.vz-sun-slice.active { stroke: #fff; stroke-width: 1.5; }
-.vz-sun-slice:focus-visible { stroke: var(--db-cyan, #6fe8ff); stroke-width: 2; }
+.vz-sun-slice.active { stroke: var(--hero-strong); stroke-width: 1.5; }
+.vz-sun-slice:focus-visible { stroke: var(--hero-accent); stroke-width: 2; }
 .vz-sun-label {
-  font-family: var(--font-sans); font-size: 10.5px; font-weight: 650; fill: #0b1b3a;
+  font-family: var(--font-sans); font-size: 10.5px; font-weight: 650; fill: var(--sun-label-ink);
   pointer-events: none; letter-spacing: 0.01em; transition: opacity 160ms ease;
 }
 .vz-sun-centre {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none;
 }
-.vz-sun-fig { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: #fff; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.vz-sun-fig { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--hero-strong); letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
 .vz-sun-cap { font-size: 10.5px; color: var(--ink500); margin-top: 4px; line-height: 1.25; max-width: 90px; }
+
+[data-theme="dark"] .vz-sun { --sun-label-ink: var(--hero-solid); }
 
 /* ---------- Roll-up coverage ---------- */
 .vz-cov { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink500); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -326,8 +332,8 @@
 .vz-cov.complete .vz-cov-pips > span.on { background: var(--success); }
 .vz-cov.compact { font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); }
 .vz-cov.compact.complete { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, transparent); }
-.vz-cov.on-dark { color: #94a3b8; }
-.vz-cov.on-dark .vz-cov-pips > span { background: rgba(148, 163, 184, 0.3); }
-.vz-cov.on-dark .vz-cov-pips > span.on { background: #cbd5e1; }
-.vz-cov.on-dark.complete .vz-cov-pips > span.on { background: #4ade80; }
-.vz-cov.compact.on-dark { border-color: rgba(148, 163, 184, 0.3); }
+.vz-cov.on-hero { color: var(--hero-mut); }
+.vz-cov.on-hero .vz-cov-pips > span { background: color-mix(in srgb, var(--hero-ink) 28%, transparent); }
+.vz-cov.on-hero .vz-cov-pips > span.on { background: var(--hero-ink); }
+.vz-cov.on-hero.complete .vz-cov-pips > span.on { background: var(--success); }
+.vz-cov.compact.on-hero { border-color: color-mix(in srgb, var(--hero-ink) 28%, transparent); }

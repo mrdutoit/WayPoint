@@ -168,7 +168,7 @@ export default function Scorecard() {
     <div className="db">
       <Link to="/reports" className="db-link sc-back">&larr; Reports</Link>
 
-      <section className="db-hero" data-theme="dark">
+      <section className="db-hero">
         <div className="db-hero-top">
           <div className="sc-who">
             <Avatar firstName={person.firstName} lastName={person.lastName} avatarOption={person.avatarOption} size={52} />

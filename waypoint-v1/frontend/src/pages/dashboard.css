@@ -12,16 +12,14 @@
  *
  * Plain CSS (not inline styles) because the page needs hover states,
  * media queries and one keyframed moment, none of which inline styles
- * can express. Colours come from the theme variables in themes.css; the
- * hero sets data-theme="dark" on itself so every token inside it
- * resolves to its on-dark value regardless of the user's chosen theme.
+ * can express. Colours come from the theme variables in themes.css. The
+ * hero FOLLOWS the active theme (2026-09-27; it used to force
+ * data-theme="dark" on itself): everything on it uses the --hero-* and
+ * --path-* tokens, which each theme defines — navy in dark, a light
+ * brand-washed panel in light.
  */
 
 .db {
-  --db-navy: #0b1b3a;
-  --db-navy-2: #10264f;
-  --db-cyan: #6fe8ff;
-  --db-blue: #2e8cf0;
   padding: 28px 32px 56px;
   max-width: 1200px;
   margin: 0 auto;
@@ -39,11 +37,10 @@
   position: relative;
   overflow: hidden;
   border-radius: 20px;
-  color: var(--ink900);
-  background:
-    radial-gradient(120% 140% at 100% 0%, var(--db-navy-2) 0%, var(--db-navy) 58%);
-  border: 1px solid rgba(111, 232, 255, 0.10);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 20px 40px -24px rgba(11, 27, 58, 0.55);
+  color: var(--hero-ink);
+  background: var(--hero-bg);
+  border: 1px solid var(--hero-border);
+  box-shadow: var(--hero-shadow);
   padding: 32px 36px 22px;
 }
 
@@ -54,8 +51,8 @@
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(111, 232, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(111, 232, 255, 0.06) 1px, transparent 1px);
+    linear-gradient(var(--hero-wash) 1px, transparent 1px),
+    linear-gradient(90deg, var(--hero-wash) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: linear-gradient(180deg, transparent 0%, #000 55%);
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 55%);
@@ -74,7 +71,7 @@
 
 .db-greeting {
   font-size: 15px;
-  color: var(--ink500);
+  color: var(--hero-mut);
   margin: 0 0 6px;
 }
 
@@ -82,13 +79,13 @@
   font-size: clamp(40px, 6vw, 64px);
   line-height: 0.95;
   font-weight: 700;
-  color: #fff;
+  color: var(--hero-strong);
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
 
 .db-day-of {
-  color: var(--ink500);
+  color: var(--hero-mut);
   font-weight: 500;
 }
 
@@ -97,15 +94,15 @@
   max-width: 58ch;
   font-size: 15px;
   line-height: 1.55;
-  color: var(--ink700);
+  color: var(--hero-ink);
 }
 
-.db-summary strong { color: #fff; font-weight: 600; }
+.db-summary strong { color: var(--hero-strong); font-weight: 600; }
 
 .db-cycle-meta {
   text-align: right;
   font-size: 13px;
-  color: var(--ink500);
+  color: var(--hero-mut);
   line-height: 1.6;
 }
 
@@ -113,7 +110,7 @@
   display: block;
   font-size: 18px;
   font-weight: 650;
-  color: #fff;
+  color: var(--hero-strong);
   /* UI face, not display: Bricolage's Q has a detached tail that made
      "Q3 2026" read as an underlined "O3 2026" (2026-09-24). */
   font-family: var(--font-sans);
@@ -142,7 +139,7 @@
   height: 11px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  box-shadow: 0 0 0 2px var(--db-navy);
+  box-shadow: 0 0 0 2px var(--hero-solid);
 }
 
 .db-waypoint {
@@ -152,8 +149,8 @@
   cursor: default;
 }
 
-.db-buoy-start { background: var(--db-cyan); }
-.db-buoy-end { background: var(--db-navy); box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.8); }
+.db-buoy-start { background: var(--path-a); }
+.db-buoy-end { background: var(--hero-solid); box-shadow: 0 0 0 2px color-mix(in srgb, var(--hero-ink) 55%, transparent); }
 
 .db-course { position: relative; }
 
@@ -173,7 +170,7 @@
   transform: translateX(-50%);
   font-size: 11.5px;
   font-weight: 600;
-  color: #fff;
+  color: var(--hero-strong);
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
@@ -198,7 +195,7 @@
   gap: 6px 18px;
   margin-top: 10px;
   font-size: 12px;
-  color: var(--ink500);
+  color: var(--hero-mut);
 }
 
 .db-course-legend span {

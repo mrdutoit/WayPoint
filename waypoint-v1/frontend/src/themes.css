@@ -25,6 +25,9 @@
  *           --ink600 --ink700 --ink800 --ink900
  *           --success --success-bg --warn --warn-bg --danger --danger-bg
  *           --panel --line
+ *           --hero-bg --hero-wash --hero-solid --hero-card --hero-border
+ *           --hero-shadow --hero-ink --hero-strong --hero-mut --hero-accent
+ *           --path-a --path-b --path-c   (signature panel, 2026-09-27)
  */
 
 [data-theme="light"] {
@@ -37,6 +40,23 @@
   --danger: #dc2626; --danger-bg: #fef2f2;
   --panel: #ffffff; --line: #e2e8f0;
   --app-bg: #f8fafc;
+
+  /* Signature ("hero") panel — follows the theme (2026-09-27). Light: a
+     light panel with a faint brand wash and a hairline border. The journey
+     gradient's light end is deepened so every stop holds 3:1 against the
+     panel (#0891b2 3.3:1 on the darkest wash), and ends in indigo so no
+     stop matches a status colour (On Track is brand600 #1a5fd0). */
+  --hero-bg: radial-gradient(120% 140% at 100% 0%, #e9f2fe 0%, #f8fbff 60%);
+  --hero-wash: rgba(26, 95, 208, 0.07);
+  --hero-solid: #f8fbff;
+  --hero-card: #ffffff;
+  --hero-border: #d6e4f6;
+  --hero-shadow: 0 16px 32px -26px rgba(18, 63, 158, 0.35);
+  --hero-ink: #334155;
+  --hero-strong: #0b1b3a;
+  --hero-mut: #64748b;
+  --hero-accent: #1a5fd0;
+  --path-a: #0891b2; --path-b: #0284c7; --path-c: #4338ca;
 }
 
 [data-theme="dark"] {
@@ -59,6 +79,22 @@
   --danger: #f87171; --danger-bg: #2a1212;
   --panel: #111827; --line: #1e293b;
   --app-bg: #0b1220;
+
+  /* Signature ("hero") panel — the original navy, unchanged (2026-09-27):
+     the logo tile's navy with the wordmark's cyan-to-blue as the journey
+     gradient (--path-b is the old two-stop gradient's midpoint, so the
+     three-stop version renders identically). */
+  --hero-bg: radial-gradient(120% 140% at 100% 0%, #10264f 0%, #0b1b3a 58%);
+  --hero-wash: rgba(111, 232, 255, 0.06);
+  --hero-solid: #0b1b3a;
+  --hero-card: rgba(16, 38, 79, 0.92);
+  --hero-border: rgba(111, 232, 255, 0.10);
+  --hero-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 20px 40px -24px rgba(11, 27, 58, 0.55);
+  --hero-ink: #e2e8f0;
+  --hero-strong: #ffffff;
+  --hero-mut: #94a3b8;
+  --hero-accent: #6fe8ff;
+  --path-a: #6fe8ff; --path-b: #4ebaf7; --path-c: #2e8cf0;
 }
 
 body {

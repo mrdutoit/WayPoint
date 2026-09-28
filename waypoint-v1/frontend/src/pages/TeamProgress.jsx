@@ -86,7 +86,7 @@ export default function TeamProgress() {
 
     body = (
       <>
-        <section className="db-hero" data-theme="dark">
+        <section className="db-hero">
           <h2 className="rp-hero-title">The team&apos;s passage so far</h2>
           <p className="rp-hero-note">
             {people.length} direct report{people.length === 1 ? '' : 's'}, {(data.checkIns ?? []).length} {(data.checkIns?.length === 1 ? t('CheckIn') : tPlural('CheckIn')).toLowerCase()} this {t('Cycle').toLowerCase()}. Hover a lane for detail.

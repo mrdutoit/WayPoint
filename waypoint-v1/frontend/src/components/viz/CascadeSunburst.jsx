@@ -142,7 +142,7 @@ export default function CascadeSunburst({ objectives, onSelect }) {
 
         {/* faint ring guides, so empty stretches (unlinked, or nothing beneath) still read as rings */}
         {radii.map(([r0, r1], i) => (
-          <circle key={i} cx={C} cy={C} r={(r0 + r1) / 2} fill="none" stroke="rgba(148,163,184,0.10)" strokeWidth={r1 - r0} />
+          <circle key={i} cx={C} cy={C} r={(r0 + r1) / 2} fill="none" style={{ stroke: 'color-mix(in srgb, var(--hero-ink) 10%, transparent)' }} strokeWidth={r1 - r0} />
         ))}
 
         {slices.map((s) => {
@@ -180,7 +180,7 @@ export default function CascadeSunburst({ objectives, onSelect }) {
           );
         })}
 
-        <circle cx={C} cy={C} r={HOLE - 6} fill="rgba(11,27,58,0.9)" stroke="rgba(111,232,255,0.18)" />
+        <circle cx={C} cy={C} r={HOLE - 6} style={{ fill: 'color-mix(in srgb, var(--hero-solid) 92%, transparent)', stroke: 'var(--hero-border)' }} />
       </svg>
 
       <div className="vz-sun-centre" style={{ width: (HOLE - 8) * 2 * scale, height: (HOLE - 8) * 2 * scale }}>

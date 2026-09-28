@@ -150,10 +150,25 @@ waypoint-v1/
 - **Settings/admin pages** still render from `tokens.js` inline styles
   (`s.card`, `s.table`, `s.btnPrimary`, `s.sectionTitle`…), refreshed
   2026-09-25 to the same language — change the look there, not per page.
-- **Signature surface:** the navy chart panel (`.db-hero` in
-  `dashboard.css`) is used for the one "hero" visual per page — course
-  line, team lanes, the alignment canvas. Everything else sits on quiet
-  panels and rows. Keep it to one navy panel per page.
+- **Signature surface (rule, 2026-09-27):** one signature ("hero") panel
+  per page — `.db-hero` (Dashboard, Scorecard, Objective Detail, Key
+  Result Detail, Team Progress, both Alignment Map panels), plus the
+  sign-in panel (`.auth-art`) and the Reports hub previews
+  (`.rp-card-art`). **It follows the active theme; it is never forced
+  dark.** Everything on it is coloured from theme tokens defined in BOTH
+  theme blocks of `themes.css`: `--hero-bg`, `--hero-wash`, `--hero-solid`,
+  `--hero-card`, `--hero-border`, `--hero-shadow`, `--hero-ink`,
+  `--hero-strong`, `--hero-mut`, `--hero-accent`, and the journey gradient
+  `--path-a/-b/-c`. Dark = the original navy with the wordmark's
+  cyan→blue; light = a light panel with a faint brand wash and a hairline
+  border, gradient deepened to cyan→sky→indigo so every stop holds 3:1
+  against the panel and none matches a status colour. Translucent text
+  and lines are `color-mix(in srgb, var(--hero-ink) N%, transparent)`.
+  In SVG, set token colours through `style` (`stopColor`, `stroke`,
+  `fill`), not presentation attributes. Tooltips follow the page theme.
+  No hex values, `#fff` or `data-theme` overrides on anything inside a
+  hero — a regression test in `e2e/interactions.spec.js` fails if a hero
+  is forced dark again.
 - **Testing (2026-09-25):** three layers, all run by GitHub Actions on
   every push (`.github/workflows/ci.yml` at the repository root — outside
   `waypoint-v1/`): unit (`npm test`, vitest, mocked DB), integration

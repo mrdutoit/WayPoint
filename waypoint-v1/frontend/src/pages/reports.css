@@ -30,11 +30,11 @@
   font-family: var(--font-display);
   font-size: 20px;
   font-weight: 650;
-  color: #fff;
+  color: var(--hero-strong);
   margin: 0 0 4px;
   letter-spacing: -0.01em;
 }
-.rp-hero-note { font-size: 13px; color: var(--ink500); margin: 0 0 18px; }
+.rp-hero-note { font-size: 13px; color: var(--hero-mut); margin: 0 0 18px; }
 
 .rp-section { margin-top: 44px; }
 
@@ -101,7 +101,8 @@
 }
 .rp-card:hover { border-color: color-mix(in srgb, var(--brand500) 50%, var(--line)); box-shadow: 0 14px 30px -20px rgba(11, 27, 58, 0.5); }
 .rp-card-art {
-  background: radial-gradient(120% 140% at 100% 0%, #10264f 0%, #0b1b3a 60%);
+  background: var(--hero-bg);
+  border-bottom: 1px solid var(--hero-border);
   position: relative;
   overflow: hidden;
 }
@@ -118,6 +119,6 @@
   .rp-kr { grid-template-columns: 1fr auto; }
   .rp-kr .vz-pips, .rp-kr-when { display: none; }
 }
-.rp-lane-who { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-size: 13.5px; font-weight: 600; min-width: 0; }
+.rp-lane-who { display: flex; align-items: center; gap: 10px; color: var(--hero-strong); text-decoration: none; font-size: 13.5px; font-weight: 600; min-width: 0; }
 .rp-lane-who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rp-lane-who:hover span { text-decoration: underline; text-underline-offset: 3px; }

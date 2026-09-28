@@ -5,8 +5,7 @@ dates and re-verify against the actual repo/deployment before trusting
 anything here, especially if it's been a while. For the stable
 architecture description, see `reference.md` alongside this file.
 
-**Last updated:** 2026-09-25 (browser tests + CI, roll-up coverage,
-automatic recompute on rubric save). Originally reconstructed 2026-09-16 directly
+**Last updated:** 2026-09-27 (signature panels follow the theme). Originally reconstructed 2026-09-16 directly
 from the GitHub repo (`mrdutoit/WayPoint`, `waypoint-v1`) rather than from a
 session log — the previous version of this file said Stage 4 hadn't
 started, which the repo contradicted. This file was condensed on
@@ -623,6 +622,36 @@ Mark's items 4, 5 and 6 from the outstanding list.
   `recomputeTenantStatuses`). Closes the open item. Verified against real
   Postgres: rename On Track → Healthy, stored statuses follow, rename back.
 - `npm test` (458), integration (31), e2e (54) all pass.
+
+## 2026-09-27: signature panels follow the active theme
+
+Mark: every hero panel should follow the user's theme instead of being
+forced dark (the app-design-pass rule he asked to be applied).
+
+- **Inventory:** 9 `data-theme="dark"` overrides (Dashboard ×3, Scorecard,
+  Objective Detail, Key Result Detail, Team Progress, Alignment Map ×2)
+  plus two panels coloured by hand (sign-in `.auth-art`, Reports hub
+  `.rp-card-art`). Components drawn on them: CourseLine, Lanes,
+  CascadeSunburst, strategy-canvas cards, Coverage badge, hero buttons and
+  level tags, the report-preview SVGs and the sign-in course SVG.
+- **Hero tokens added to both themes** in `themes.css` (`--hero-*`,
+  `--path-a/-b/-c`; also `--hero-card` for canvas cards and `--hero-shadow`,
+  which the list needed). Dark keeps the navy exactly (`--path-b` is the old
+  two-stop gradient's midpoint, so it renders the same). Light: faint brand
+  wash, hairline border, gradient #0891b2 → #0284c7 → #4338ca — the
+  lightest stop holds 3.3:1 on the darkest part of the wash; none matches a
+  status colour (On Track is #1a5fd0).
+- **Every fixed colour on a panel descendant replaced with a token**; all
+  `data-theme="dark"` overrides removed; the Coverage badge's `onDark` prop
+  renamed `onHero`. Sunburst labels: white on the light theme's saturated
+  status fills, navy on the dark theme's tints (`--sun-label-ink`).
+  Tooltips keep following the page theme.
+- **Verified:** build; unit (458); browser suite (55 — one new regression
+  test, shown to fail against forced-dark heroes); every hero shot at 2x
+  in light and dark, at 390px, and with hover/focus states (course
+  waypoint, lane dot, sunburst slice, canvas card). Dark renders as before.
+- The installed app-design-pass skill still says heroes "stay dark in both
+  themes" — its design-language.md needs the updated rule.
 
 ## Backlog — considered against Perdoo/ClickUp, not yet scoped
 

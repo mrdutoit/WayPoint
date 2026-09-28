@@ -96,3 +96,20 @@ test('mobile navigation exists (2026-09-25: phones had no page links)', async ({
   await page.locator('.wp-nav-mobile').getByRole('link', { name: 'Reports' }).click();
   await expect(page).toHaveURL(/\/reports$/);
 });
+
+test('signature panels follow the active theme, not forced dark (2026-09-27)', async ({ page }) => {
+  await signInAs(page, 'Employee'); // fixtures' /me returns theme: 'light'
+  for (const path of ['/', '/reports/alignment-map']) {
+    await page.goto(path);
+    const heroes = page.locator('.db-hero');
+    await expect(heroes.first()).toBeVisible();
+    const panels = await heroes.evaluateAll((els) => els.map((el) => ({
+      forced: el.closest('[data-theme="dark"]') !== null,
+      bg: getComputedStyle(el).backgroundImage,
+    })));
+    for (const p of panels) {
+      expect(p.forced).toBe(false);
+      expect(p.bg).toContain('rgb(233, 242, 254)'); // light --hero-bg wash (#e9f2fe), not the navy
+    }
+  }
+});
